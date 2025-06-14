@@ -20,9 +20,9 @@ export async function POST(request: NextRequest) {
     const conversationMessage: ConversationMessage = {
       role: message.role,
       content: message.content,
-      timestamp: message.timestamp || Date.now(),
+      timestamp: message.timestamp ?? Date.now(),
       model: message.model,
-      messageId: message.messageId || `${message.role}-${Date.now()}`,
+      messageId: message.messageId ?? `${message.role}-${Date.now()}`,
     };
 
     // Cache the message
@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
     if (message.model || userId || sessionId) {
       await conversationCache.updateMetadata(threadId, {
         model: message.model,
-        userId: userId || undefined,
-        sessionId: sessionId || undefined,
+        userId: userId ?? undefined,
+        sessionId: sessionId ?? undefined,
       });
     }
 

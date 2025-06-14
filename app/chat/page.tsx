@@ -1,5 +1,5 @@
-import { ChatArea } from "@/components/chat/chat-area";
+import { ChatContainer } from "@/components/chat/chat-container";
 
 export default function ChatIndexPage() {
-  return <ChatArea />;
+  return <ChatContainer />;
 }

@@ -115,7 +115,6 @@ export const createThread = mutation({
   args: {
     title: v.string(),
     model: v.string(),
-    systemPrompt: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -129,7 +128,6 @@ export const createThread = mutation({
       title: args.title,
       userId: identity.subject,
       model: args.model,
-      systemPrompt: args.systemPrompt,
       isAnonymous: false,
       createdAt: now,
       updatedAt: now,
@@ -146,7 +144,6 @@ export const createAnonymousThread = mutation({
     model: v.string(),
     sessionId: v.string(),
     ipHash: v.optional(v.string()),
-    systemPrompt: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -157,7 +154,6 @@ export const createAnonymousThread = mutation({
       ...(args.ipHash ? { ipHash: args.ipHash } : {}),
       isAnonymous: true,
       model: args.model,
-      systemPrompt: args.systemPrompt,
       createdAt: now,
       updatedAt: now,
     });
@@ -173,7 +169,6 @@ export const updateThread = mutation({
     sessionId: v.optional(v.string()), // For anonymous access
     title: v.optional(v.string()),
     model: v.optional(v.string()),
-    systemPrompt: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const thread = await ctx.db.get(args.threadId);
@@ -196,15 +191,12 @@ export const updateThread = mutation({
       updatedAt: number;
       title?: string;
       model?: string;
-      systemPrompt?: string;
     } = {
       updatedAt: Date.now(),
     };
 
     if (args.title !== undefined) updates.title = args.title;
     if (args.model !== undefined) updates.model = args.model;
-    if (args.systemPrompt !== undefined)
-      updates.systemPrompt = args.systemPrompt;
 
     await ctx.db.patch(args.threadId, updates);
   },

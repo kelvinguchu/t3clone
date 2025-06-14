@@ -1,4 +1,4 @@
-import { ChatArea } from "@/components/chat/chat-area";
+import { ChatContainer } from "@/components/chat/chat-container";
 
 interface ThreadPageProps {
   params: { threadId: string };
@@ -6,5 +6,5 @@ interface ThreadPageProps {
 
 export default async function ThreadPage({ params }: ThreadPageProps) {
   const { threadId } = await params;
-  return <ChatArea initialThreadId={threadId} />;
+  return <ChatContainer initialThreadId={threadId} />;
 }

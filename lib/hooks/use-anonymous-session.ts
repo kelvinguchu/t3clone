@@ -113,43 +113,26 @@ export function useAnonymousSession(): UseAnonymousSessionReturn {
   // Initialize session for anonymous users
   const initializeSession = useCallback(async () => {
     if (isAuthenticated || sessionInitialized.current) {
-      console.log("🔄 Session Hook: Skipping initialization", {
-        isAuthenticated,
-        alreadyInitialized: sessionInitialized.current,
-      });
       setIsLoading(false);
       return;
     }
 
     try {
       setIsLoading(true);
-      console.log("🔄 Session Hook: Starting session initialization");
 
       // Try to get existing session from localStorage first
       const storedSessionId = getStoredSessionId();
-      console.log("🔄 Session Hook: Found stored session ID:", storedSessionId);
 
       const session = await fetchSession(storedSessionId || undefined);
-      console.log("🔄 Session Hook: Fetched session from server:", {
-        sessionId: session.sessionId,
-        messageCount: session.messageCount,
-        remainingMessages: session.remainingMessages,
-      });
 
       // Store session ID if it's new
       if (session.sessionId !== storedSessionId) {
-        console.log("🔄 Session Hook: Storing new session ID in localStorage");
         storeSessionId(session.sessionId);
       }
 
       setSessionData(session);
       sessionInitialized.current = true;
-      console.log("✅ Session Hook: Session initialization complete");
-    } catch (error) {
-      console.error(
-        "❌ Session Hook: Failed to initialize anonymous session:",
-        error,
-      );
+    } catch {
       setSessionData(null);
     } finally {
       setIsLoading(false);
@@ -159,29 +142,13 @@ export function useAnonymousSession(): UseAnonymousSessionReturn {
   // Refresh session data from server
   const refreshSession = useCallback(async () => {
     if (isAuthenticated || !sessionData) {
-      console.log("🔄 Session Hook: Skipping refresh", {
-        isAuthenticated,
-        hasSessionData: !!sessionData,
-      });
       return;
     }
 
     try {
-      console.log(
-        "🔄 Session Hook: Refreshing session data for:",
-        sessionData.sessionId,
-      );
       const refreshedSession = await fetchSession(sessionData.sessionId);
-      console.log("✅ Session Hook: Refreshed session data:", {
-        oldCount: sessionData.messageCount,
-        newCount: refreshedSession.messageCount,
-        oldRemaining: sessionData.remainingMessages,
-        newRemaining: refreshedSession.remainingMessages,
-      });
       setSessionData(refreshedSession);
-    } catch (error) {
-      console.error("❌ Session Hook: Failed to refresh session:", error);
-
+    } catch {
       // If session is invalid, clear it
       setSessionData(null);
       removeStoredSessionId();
@@ -258,7 +225,9 @@ export function useAnonymousSession(): UseAnonymousSessionReturn {
       if (sessionData && !migrated) {
         // Migrate threads then clear session
         claimThreads({ sessionId: sessionData.sessionId })
-          .catch((e) => console.error("Failed to claim threads", e))
+          .catch(() => {
+            // Failed to claim threads
+          })
           .finally(() => {
             clearSession();
             setMigrated(true);

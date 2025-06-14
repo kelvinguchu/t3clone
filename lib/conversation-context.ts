@@ -5,10 +5,12 @@ const CHARS_PER_TOKEN = 4;
 const DEFAULT_CONTEXT_WINDOW = 8000; // tokens
 const MAX_MESSAGES_PER_CONTEXT = 100;
 
+// Re-export conversationCache for convenience
+export { conversationCache };
+
 export interface ContextOptions {
   maxTokens?: number;
   maxMessages?: number;
-  includeSystemPrompt?: boolean;
   prioritizeRecent?: boolean;
   model?: string;
 }
@@ -38,9 +40,7 @@ export async function getConversationContext(
   const {
     maxTokens = DEFAULT_CONTEXT_WINDOW,
     maxMessages = MAX_MESSAGES_PER_CONTEXT,
-    includeSystemPrompt = true,
     prioritizeRecent = true,
-    model,
   } = options;
 
   try {
@@ -48,14 +48,6 @@ export async function getConversationContext(
     if (!context) {
       return null;
     }
-
-    // Start with system message if requested
-    const systemMessage = includeSystemPrompt
-      ? {
-          role: "system" as const,
-          content: getSystemPrompt(model || context.model),
-        }
-      : null;
 
     // Get messages in the right order
     let messages = [...context.messages];
@@ -69,11 +61,6 @@ export async function getConversationContext(
       content: msg.content,
     }));
 
-    // Add system message at the beginning if included
-    if (systemMessage) {
-      formattedMessages.unshift(systemMessage);
-    }
-
     // Trim to fit token limit
     const trimmedMessages = trimToTokenLimit(formattedMessages, maxTokens);
     const estimatedTokens = estimateTokens(
@@ -85,7 +72,7 @@ export async function getConversationContext(
       metadata: {
         threadId,
         totalMessages: context.messageCount,
-        includedMessages: trimmedMessages.length - (systemMessage ? 1 : 0),
+        includedMessages: trimmedMessages.length,
         estimatedTokens,
         lastUpdated: context.lastUpdated,
         model: context.model,
@@ -178,34 +165,6 @@ function trimToTokenLimit(
 }
 
 /**
- * Get appropriate system prompt based on model
- */
-function getSystemPrompt(model: string): string {
-  const basePrompt = `You are a helpful AI assistant. You are knowledgeable, accurate, and aim to provide useful responses.`;
-
-  // Model-specific optimizations
-  switch (model) {
-    case "gpt-4":
-    case "gpt-4-turbo":
-      return `${basePrompt} You excel at complex reasoning and detailed analysis.`;
-
-    case "gpt-3.5-turbo":
-      return `${basePrompt} Provide clear, concise responses.`;
-
-    case "claude-3-opus":
-    case "claude-3-sonnet":
-      return `${basePrompt} You think carefully and provide well-reasoned responses.`;
-
-    case "gemini-pro":
-    case "gemini-2.0-flash":
-      return `${basePrompt} You can help with a wide variety of tasks and provide informative responses.`;
-
-    default:
-      return basePrompt;
-  }
-}
-
-/**
  * Batch get contexts for multiple threads (useful for related conversations)
  */
 export async function getBatchContext(
@@ -244,14 +203,9 @@ export async function getSmartContext(
 ): Promise<FormattedContext | null> {
   // Model-specific context window sizes (approximate)
   const modelLimits: Record<string, number> = {
-    "gpt-4": 8000,
-    "gpt-4-turbo": 32000,
-    "gpt-3.5-turbo": 4000,
-    "claude-3-opus": 200000,
-    "claude-3-sonnet": 200000,
-    "claude-3-haiku": 200000,
-    "gemini-pro": 32000,
+    "llama3-70b-8192": 8192,
     "gemini-2.0-flash": 32000,
+    "gpt-4.1-mini": 128000,
   };
 
   const maxTokens = modelLimits[model] || DEFAULT_CONTEXT_WINDOW;
@@ -260,7 +214,6 @@ export async function getSmartContext(
     maxTokens: Math.floor(maxTokens * 0.8), // Leave room for response
     model,
     prioritizeRecent: true,
-    includeSystemPrompt: true,
   });
 }
 

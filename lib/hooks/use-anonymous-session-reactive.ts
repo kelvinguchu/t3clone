@@ -97,60 +97,29 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
 
   const canSendMessage = remainingMessages > 0 && !sessionData?.isExpired;
 
-  console.log("🎯 Reactive Session Hook: State update", {
-    sessionId,
-    threadCount,
-    messageCount,
-    remainingMessages,
-    canSendMessage,
-    isAnonymous,
-  });
-
   // Initialize session for anonymous users
   const initializeSession = useCallback(async () => {
     if (isAuthenticated || sessionInitialized.current) {
-      console.log("🔄 Reactive Session Hook: Skipping initialization", {
-        isAuthenticated,
-        alreadyInitialized: sessionInitialized.current,
-      });
       setIsLoading(false);
       return;
     }
 
     try {
       setIsLoading(true);
-      console.log("🔄 Reactive Session Hook: Starting session initialization");
 
       // Try to get existing session from localStorage first
       const storedSessionId = getStoredSessionId();
-      console.log(
-        "🔄 Reactive Session Hook: Found stored session ID:",
-        storedSessionId,
-      );
 
       const session = await fetchSession(storedSessionId ?? undefined);
-      console.log("🔄 Reactive Session Hook: Fetched session from server:", {
-        sessionId: session.sessionId,
-        messageCount: session.messageCount,
-        remainingMessages: session.remainingMessages,
-      });
 
       // Store session ID if it's new
       if (session.sessionId !== storedSessionId) {
-        console.log(
-          "🔄 Reactive Session Hook: Storing new session ID in localStorage",
-        );
         storeSessionId(session.sessionId);
       }
 
       setSessionData(session);
       sessionInitialized.current = true;
-      console.log("✅ Reactive Session Hook: Session initialization complete");
-    } catch (error) {
-      console.error(
-        "❌ Reactive Session Hook: Failed to initialize anonymous session:",
-        error,
-      );
+    } catch {
       setSessionData(null);
     } finally {
       setIsLoading(false);
@@ -160,32 +129,13 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
   // Refresh session data from server
   const refreshSession = useCallback(async () => {
     if (isAuthenticated || !sessionData) {
-      console.log("🔄 Reactive Session Hook: Skipping refresh", {
-        isAuthenticated,
-        hasSessionData: !!sessionData,
-      });
       return;
     }
 
     try {
-      console.log(
-        "🔄 Reactive Session Hook: Refreshing session data for:",
-        sessionData.sessionId,
-      );
       const refreshedSession = await fetchSession(sessionData.sessionId);
-      console.log("✅ Reactive Session Hook: Refreshed session data:", {
-        oldCount: sessionData.messageCount,
-        newCount: refreshedSession.messageCount,
-        oldRemaining: sessionData.remainingMessages,
-        newRemaining: refreshedSession.remainingMessages,
-      });
       setSessionData(refreshedSession);
-    } catch (error) {
-      console.error(
-        "❌ Reactive Session Hook: Failed to refresh session:",
-        error,
-      );
-
+    } catch {
       // If session is invalid, clear it
       setSessionData(null);
       removeStoredSessionId();
@@ -203,8 +153,8 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
             method: "DELETE",
           },
         );
-      } catch (error) {
-        console.error("Failed to delete session from server:", error);
+      } catch {
+        // Failed to delete session from server
       }
     }
 
@@ -246,13 +196,12 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
         if (sid) {
           (async () => {
             try {
-              const res = await claimThreads({
+              await claimThreads({
                 sessionId: sid,
                 ...(sessionData?.ipHash ? { ipHash: sessionData.ipHash } : {}),
               });
-              console.log("✅ Claimed threads", res);
-            } catch (err) {
-              console.error("Failed to claim anon threads", err);
+            } catch {
+              // Failed to claim anon threads
             } finally {
               // Keep the anonymous sessionId in localStorage so that if the user
               // signs out within 24 h, we can continue tracking their remaining

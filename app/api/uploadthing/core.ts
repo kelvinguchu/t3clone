@@ -13,76 +13,99 @@ export const ourFileRouter = {
     image: {
       maxFileSize: "8MB",
       maxFileCount: 5,
+      acl: "public-read",
     },
     pdf: {
       maxFileSize: "16MB",
       maxFileCount: 3,
+      acl: "public-read",
     },
     text: {
       maxFileSize: "4MB",
       maxFileCount: 5,
+      acl: "public-read",
     },
     video: {
       maxFileSize: "64MB",
       maxFileCount: 2,
+      acl: "public-read",
     },
     audio: {
       maxFileSize: "32MB",
       maxFileCount: 3,
+      acl: "public-read",
     },
   })
     .middleware(async () => {
       // Get authenticated user from Clerk
       const user = await currentUser();
 
-      // Throw if user isn't signed in
+      // Allow anonymous uploads but track differently
       if (!user) {
-        throw new UploadThingError("You must be logged in to upload files");
+        // For anonymous users, we'll use a session-based approach
+        return {
+          userId: null,
+          userEmail: null,
+          isAnonymous: true,
+        };
       }
 
       // Return metadata to be used in onUploadComplete
       return {
         userId: user.id,
         userEmail: user.emailAddresses[0]?.emailAddress,
+        isAnonymous: false,
       };
     })
     .onUploadComplete(async ({ metadata, file }) => {
       // This code runs on your server after upload
-      console.log("Upload complete for userId:", metadata.userId);
-      console.log("File URL:", file.ufsUrl);
-      console.log("File details:", {
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        key: file.key,
-      });
+
+      let attachmentId: string | null = null;
 
       try {
         // Store file metadata in Convex as standalone attachment
         // This will be linked to a thread/message later when used in chat
-        await fetchMutation(api.attachments.createStandaloneAttachment, {
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type,
-          fileUrl: file.ufsUrl,
-          fileKey: file.key,
-          uploadedBy: metadata.userId,
-        });
-
-        console.log("File metadata stored in Convex successfully");
+        if (metadata.userId) {
+          // Authenticated user
+          attachmentId = await fetchMutation(
+            api.attachments.createStandaloneAttachment,
+            {
+              fileName: file.name,
+              fileSize: file.size,
+              fileType: file.type,
+              fileUrl: file.ufsUrl,
+              fileKey: file.key,
+              uploadedBy: metadata.userId,
+            },
+          );
+        } else {
+          // Anonymous user - create attachment without userId
+          attachmentId = await fetchMutation(
+            api.attachments.createStandaloneAttachment,
+            {
+              fileName: file.name,
+              fileSize: file.size,
+              fileType: file.type,
+              fileUrl: file.ufsUrl,
+              fileKey: file.key,
+              // Don't include uploadedBy for anonymous users
+            },
+          );
+        }
       } catch (error) {
-        console.error("Failed to store file metadata in Convex:", error);
+        console.error("Failed to create Convex attachment:", error);
         // Don't throw here to avoid breaking the upload flow
         // The file is already uploaded to UploadThing
       }
 
-      // Return data to be sent to the client
+      // Return data to be sent to the client, including the Convex attachment ID
       return {
         uploadedBy: metadata.userId,
         fileUrl: file.ufsUrl,
         fileName: file.name,
         fileSize: file.size,
         fileType: file.type,
+        attachmentId, // Include the Convex attachment ID
       };
     }),
 
@@ -105,11 +128,7 @@ export const ourFileRouter = {
       return { userId: user.id };
     })
     .onUploadComplete(async ({ metadata, file }) => {
-      console.log(
-        "Profile picture upload complete for userId:",
-        metadata.userId,
-      );
-      console.log("File URL:", file.ufsUrl);
+      // This code runs on your server after upload
 
       return { uploadedBy: metadata.userId, profilePicture: file.ufsUrl };
     }),

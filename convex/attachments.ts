@@ -8,7 +8,7 @@ export const createStandaloneAttachment = mutation({
     fileType: v.string(),
     fileUrl: v.string(),
     fileKey: v.string(),
-    uploadedBy: v.string(),
+    uploadedBy: v.optional(v.string()), // Make optional for anonymous uploads
   },
   handler: async (ctx, args) => {
     // Create attachment record without threadId (will be linked later when used in chat)

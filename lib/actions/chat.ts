@@ -19,7 +19,6 @@ export async function createThread(title?: string, model?: ModelId) {
     const threadId = await fetchMutation(api.threads.createThread, {
       title: title ?? "New Chat",
       model: model ?? "gemini-2.0-flash",
-      systemPrompt: undefined,
     });
 
     revalidatePath("/chat");

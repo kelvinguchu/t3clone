@@ -2,6 +2,12 @@ import { groq } from "@ai-sdk/groq";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
 import type { LanguageModelV1 } from "ai";
+import {
+  createSessionTool,
+  googleSearchTool,
+  getPageContentTool,
+  askForConfirmationTool,
+} from "./tools/browser-tool";
 
 // Create Google provider with custom API key
 const google = createGoogleGenerativeAI({
@@ -18,7 +24,7 @@ export const AI_MODELS = {
     description: "Fast and efficient model by Meta via Groq",
     maxTokens: 8192,
     costPer1kTokens: { input: 0.05, output: 0.08 },
-    capabilities: ["text", "chat"],
+    capabilities: ["text", "chat", "tools"],
     icon: "/brand-icons/llama.svg",
     theme: "orange",
   },
@@ -26,12 +32,12 @@ export const AI_MODELS = {
   // Google Gemini models
   "gemini-2.0-flash": {
     provider: "google",
-    model: google("gemini-2.0-flash-exp"),
+    model: google("gemini-2.0-flash-001"),
     displayName: "Gemini 2.0 Flash",
     description: "Google's latest multimodal model",
     maxTokens: 1000000,
     costPer1kTokens: { input: 0.075, output: 0.3 },
-    capabilities: ["text", "chat", "vision", "multimodal"],
+    capabilities: ["text", "chat", "vision", "multimodal", "tools"],
     icon: "/brand-icons/gemini.svg",
     theme: "blue",
   },
@@ -44,7 +50,7 @@ export const AI_MODELS = {
     description: "Efficient & intelligent responses",
     maxTokens: 128000,
     costPer1kTokens: { input: 0.15, output: 0.6 },
-    capabilities: ["text", "chat", "vision"],
+    capabilities: ["text", "chat", "vision", "tools"],
     icon: "/brand-icons/openai.svg",
     theme: "green",
   },
@@ -110,6 +116,44 @@ export function getModelInfo(modelId: ModelId) {
     theme: config.theme,
     description: config.description,
     capabilities: config.capabilities,
+  };
+}
+
+// Get available tools for a model
+export function getModelTools(modelId: ModelId) {
+  const config = AI_MODELS[modelId];
+  if (!config) {
+    throw new Error(`Model ${modelId} not found`);
+  }
+
+  // Only return tools for models that support tool calling
+  const providerConfig = PROVIDER_CONFIGS[config.provider];
+  if (!providerConfig.supportsToolCalls) {
+    return undefined;
+  }
+
+  // Diagnostic logging – helps verify why tools may not be returned
+  console.log("[getModelTools] diagnostics", {
+    modelId,
+    provider: config.provider,
+    supportsToolCalls: providerConfig.supportsToolCalls,
+    browserbaseApiKeyPresent: !!process.env.BROWSERBASE_API_KEY,
+    browserbaseProjectIdPresent: !!process.env.BROWSERBASE_PROJECT_ID,
+  });
+
+  // Check if Browserbase is configured
+  const hasBrowserbaseConfig =
+    process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID;
+
+  if (!hasBrowserbaseConfig) {
+    return undefined;
+  }
+
+  return {
+    webBrowser: createSessionTool,
+    googleSearch: googleSearchTool,
+    getPageContent: getPageContentTool,
+    askForConfirmation: askForConfirmationTool,
   };
 }
 

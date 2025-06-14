@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 
 // Get all messages for a thread (supports both authenticated and anonymous access)
 export const getThreadMessages = query({
@@ -36,6 +36,67 @@ export const getThreadMessages = query({
       .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
       .order("asc")
       .collect();
+  },
+});
+
+// Get all messages for a thread with their attachments (supports both authenticated and anonymous access)
+export const getThreadMessagesWithAttachments = query({
+  args: {
+    threadId: v.id("threads"),
+    sessionId: v.optional(v.string()), // For anonymous access
+  },
+  handler: async (ctx, args) => {
+    // First check if user has access to this thread
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread) {
+      throw new Error("Thread not found");
+    }
+
+    const identity = await ctx.auth.getUserIdentity();
+
+    // Check access permissions
+    if (thread.isAnonymous && args.sessionId) {
+      // Anonymous thread access - check session ID
+      if (thread.sessionId !== args.sessionId) {
+        throw new Error("Unauthorized");
+      }
+    } else if (thread.userId) {
+      // Authenticated user thread - check user ownership or if it's public
+      if (thread.userId !== identity?.subject && !thread.isPublic) {
+        throw new Error("Unauthorized");
+      }
+    } else {
+      throw new Error("Invalid thread access");
+    }
+
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+      .order("asc")
+      .collect();
+
+    // Fetch attachments for each message
+    const messagesWithAttachments = await Promise.all(
+      messages.map(async (message) => {
+        const attachments = await ctx.db
+          .query("attachments")
+          .withIndex("by_message", (q) => q.eq("messageId", message._id))
+          .collect();
+
+        return {
+          ...message,
+          attachments: attachments.map((att) => ({
+            id: att._id,
+            name: att.fileName,
+            contentType: att.mimeType,
+            url: att.fileUrl,
+            size: att.fileSize,
+          })),
+        };
+      }),
+    );
+
+    return messagesWithAttachments;
   },
 });
 
@@ -131,13 +192,6 @@ export const addMessage = mutation({
     }
 
     // Check authorization
-    console.log("[addMessage] Auth check", {
-      isAnonymous: thread.isAnonymous,
-      threadUserId: thread.userId,
-      identity: identity?.subject,
-      sessionIdArg: args.sessionId,
-      threadSessionId: thread.sessionId,
-    });
     if (thread.isAnonymous) {
       // Still anonymous after potential promotion – must match session
       if (!args.sessionId || thread.sessionId !== args.sessionId) {
@@ -218,13 +272,6 @@ export const updateMessage = mutation({
     }
 
     // Check authorization
-    console.log("[updateMessage] Auth check", {
-      isAnonymous: thread.isAnonymous,
-      threadUserId: thread.userId,
-      identity: identity?.subject,
-      sessionIdArg: args.sessionId,
-      threadSessionId: thread.sessionId,
-    });
     if (thread.isAnonymous) {
       if (!args.sessionId || thread.sessionId !== args.sessionId) {
         throw new Error("Unauthorized");
@@ -511,5 +558,36 @@ export const createAnonymousMessage = mutation({
     });
 
     return messageId;
+  },
+});
+
+// -------------------------------------------------------------------
+// INTERNAL: create a placeholder assistant message marked as streaming
+// -------------------------------------------------------------------
+
+export const createStreamingAssistant = internalMutation({
+  args: {
+    threadId: v.id("threads"),
+    model: v.string(),
+  },
+  handler: async (ctx, { threadId, model }) => {
+    const existingMessages = await ctx.db
+      .query("messages")
+      .withIndex("by_thread", (q) => q.eq("threadId", threadId))
+      .collect();
+
+    const maxOrder = Math.max(0, ...existingMessages.map((m) => m.order));
+    const now = Date.now();
+
+    return ctx.db.insert("messages", {
+      threadId,
+      role: "assistant",
+      content: "", // will be filled during streaming
+      order: maxOrder + 1,
+      model,
+      isStreaming: true,
+      createdAt: now,
+      updatedAt: now,
+    });
   },
 });

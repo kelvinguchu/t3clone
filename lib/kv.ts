@@ -45,7 +45,16 @@ export const searchCache = {
   async getResults(query: string) {
     const key = `search:${Buffer.from(query).toString("base64")}`;
     const cached = await kv.get(key);
-    return cached ? JSON.parse(cached as string) : null;
+    if (!cached) return null;
+
+    if (typeof cached === "string") {
+      try {
+        return JSON.parse(cached);
+      } catch {
+        return null;
+      }
+    }
+    return cached; // Return object directly
   },
 };
 
@@ -85,7 +94,16 @@ export const sessionCache = {
   async get(sessionId: string, key: string) {
     const fullKey = `session:${sessionId}:${key}`;
     const cached = await kv.get(fullKey);
-    return cached ? JSON.parse(cached as string) : null;
+    if (!cached) return null;
+
+    if (typeof cached === "string") {
+      try {
+        return JSON.parse(cached);
+      } catch {
+        return cached; // Return as-is if not valid JSON
+      }
+    }
+    return cached; // Return object directly
   },
 
   async del(sessionId: string, key: string) {
@@ -128,7 +146,25 @@ export const conversationCache = {
   async getContext(threadId: string): Promise<ConversationContext | null> {
     const key = `conversation:${threadId}`;
     const cached = await kv.get(key);
-    return cached ? JSON.parse(cached as string) : null;
+    if (!cached) return null;
+
+    // Handle both string and object responses from KV
+    if (typeof cached === "string") {
+      try {
+        return JSON.parse(cached);
+      } catch (error) {
+        console.error(
+          `Failed to parse conversation context for ${threadId}:`,
+          error,
+        );
+        return null;
+      }
+    } else if (typeof cached === "object") {
+      // KV returned an object directly
+      return cached as ConversationContext;
+    }
+
+    return null;
   },
 
   // Add a single message to existing conversation cache
@@ -260,7 +296,17 @@ export const conversationCache = {
       for (const key of keys) {
         const context = await kv.get(key);
         if (context) {
-          const parsed = JSON.parse(context as string) as ConversationContext;
+          let parsed: ConversationContext;
+          if (typeof context === "string") {
+            try {
+              parsed = JSON.parse(context);
+            } catch {
+              continue; // Skip invalid entries
+            }
+          } else {
+            parsed = context as ConversationContext;
+          }
+
           if (parsed.lastUpdated < cutoffTime) {
             keysToDelete.push(key);
           }
