@@ -19,6 +19,16 @@ async function getDebugUrl(id: string) {
 }
 
 async function createSession() {
+  console.log("[createSession] Starting session creation...");
+  console.log(
+    "[createSession] API Key present:",
+    !!process.env.BROWSERBASE_API_KEY,
+  );
+  console.log(
+    "[createSession] Project ID present:",
+    !!process.env.BROWSERBASE_PROJECT_ID,
+  );
+
   const response = await fetch(`https://www.browserbase.com/v1/sessions`, {
     method: "POST",
     headers: {
@@ -30,24 +40,121 @@ async function createSession() {
       keepAlive: true,
     }),
   });
+
+  console.log("[createSession] Response status:", response.status);
+  console.log(
+    "[createSession] Response headers:",
+    Object.fromEntries(response.headers.entries()),
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("[createSession] API Error:", {
+      status: response.status,
+      statusText: response.statusText,
+      body: errorText,
+    });
+    throw new Error(
+      `Browserbase API error: ${response.status} ${response.statusText} - ${errorText}`,
+    );
+  }
+
   const data = await response.json();
+  console.log("[createSession] Session created successfully:", {
+    id: data.id,
+    hasDebugUrl: !!data.debugUrl,
+  });
   return { id: data.id, debugUrl: data.debugUrl };
+}
+
+export const activeSessions = new Set<string>();
+
+interface ActiveSession {
+  id: string;
+  connectUrl: string;
+}
+
+let currentSession: ActiveSession | null = null;
+
+export async function stopSession(sessionId: string) {
+  try {
+    await fetch(`https://www.browserbase.com/v1/sessions/${sessionId}`, {
+      method: "POST",
+      headers: {
+        "x-bb-api-key": process.env.BROWSERBASE_API_KEY!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        status: "REQUEST_RELEASE",
+        projectId: process.env.BROWSERBASE_PROJECT_ID,
+      }),
+    });
+  } catch (err) {
+    console.warn("[browser-tool] Failed to stop session", err);
+  }
+  if (currentSession?.id === sessionId) {
+    currentSession = null;
+  }
 }
 
 // Create Session Tool
 export const createSessionTool = tool({
-  description: "Create a new browser session",
+  description:
+    "Create a new browser session (internal). The returned sessionId and debugUrl are meant for subsequent tool calls ONLY and must NOT be revealed to the end user.",
   parameters: z.object({}),
   execute: async () => {
-    const session = await createSession();
-    const debugUrl = await getDebugUrl(session.id);
-    return {
-      sessionId: session.id,
-      debugUrl: debugUrl.debuggerFullscreenUrl,
-      toolName: "Creating a new session",
-    };
+    try {
+      console.log("[createSessionTool] Executing session creation...");
+      const session = await createSession();
+      activeSessions.add(session.id);
+      const debugUrl = await getDebugUrl(session.id);
+      console.log("[createSessionTool] Session created successfully:", {
+        sessionId: session.id,
+        hasDebugUrl: !!debugUrl.debuggerFullscreenUrl,
+      });
+      return {
+        toolName: "Browser session ready",
+        success: true,
+      };
+    } catch (error) {
+      console.error("[createSessionTool] Failed to create session:", error);
+      return {
+        sessionId: null,
+        debugUrl: null,
+        toolName: "Failed to create session",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   },
 });
+
+// After activeSessions set
+async function ensureActiveSession(): Promise<ActiveSession> {
+  if (currentSession) return currentSession;
+
+  const session = await createSession();
+  const debugInfo = await getDebugUrl(session.id);
+  const connectUrl: string = debugInfo.wsUrl;
+
+  currentSession = { id: session.id, connectUrl };
+  activeSessions.add(session.id);
+  return currentSession;
+}
+
+async function connectBrowser(retries = 5) {
+  const { chromium } = await import("playwright-core");
+  const { connectUrl } = await ensureActiveSession();
+  let lastError: unknown;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await chromium.connectOverCDP(connectUrl);
+    } catch (err) {
+      lastError = err;
+      await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+    }
+  }
+  throw lastError;
+}
 
 // Google Search Tool
 export const googleSearchTool = tool({
@@ -75,14 +182,11 @@ export const googleSearchTool = tool({
         "(Optional) The ID of the model currently being used in the conversation. If omitted, a default model will be used.",
       ),
   }),
-  execute: async ({ query, sessionId, modelId }) => {
+  execute: async ({ query, modelId }) => {
     try {
-      const { chromium } = await import("playwright-core");
       const { generateText } = await import("ai");
 
-      const browser = await chromium.connectOverCDP(
-        `wss://connect.browserbase.com?apiKey=${process.env.BROWSERBASE_API_KEY}&sessionId=${sessionId}`,
-      );
+      const browser = await connectBrowser();
       const defaultContext = browser.contexts()[0];
       const page = defaultContext.pages()[0];
 
@@ -91,9 +195,15 @@ export const googleSearchTool = tool({
       );
       await page.waitForTimeout(500);
       await page.keyboard.press("Enter");
-      await page.waitForLoadState("load", { timeout: 10000 });
+      await page.waitForLoadState("load", { timeout: 8000 });
 
-      await page.waitForSelector(".g");
+      try {
+        await page.waitForSelector(".g", { timeout: 8000 });
+      } catch {
+        console.warn(
+          "[googleSearchTool] .g selector did not appear – continuing with fallback scraping",
+        );
+      }
 
       const results = await page.evaluate(() => {
         const items = document.querySelectorAll(".g");
@@ -119,6 +229,8 @@ export const googleSearchTool = tool({
         prompt: `Evaluate the following web page content: ${text}`,
       });
 
+      await browser.close();
+
       return {
         toolName: "Searching Google",
         content: response.text,
@@ -135,6 +247,77 @@ export const googleSearchTool = tool({
   },
 });
 
+// DuckDuckGo Search Tool
+export const duckDuckGoSearchTool = tool({
+  description: "Search DuckDuckGo for a query",
+  parameters: z.object({
+    toolName: z.string().describe("What the tool is doing"),
+    query: z.string().describe("The exact search query provided by the user."),
+    modelId: z.optional(z.string()),
+  }),
+  execute: async ({ query, modelId }) => {
+    try {
+      const { generateText } = await import("ai");
+
+      const browser = await connectBrowser();
+      const defaultContext = browser.contexts()[0];
+      const page = defaultContext.pages()[0];
+
+      await page.goto(
+        `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
+        {
+          waitUntil: "load",
+          timeout: 10000,
+        },
+      );
+
+      await page.waitForSelector("a.result__a", { timeout: 7000 });
+
+      const results = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll("a.result__a"))
+          .slice(0, 10)
+          .map((a) => {
+            const title = (a as HTMLElement).innerText;
+            const url = (a as HTMLAnchorElement).href;
+            const source = new URL(url).hostname.replace("www.", "");
+            const parent = a.closest(".result");
+            const snippet =
+              (parent?.querySelector(".result__snippet") as HTMLElement | null)
+                ?.innerText || "";
+            return { title, source, url, snippet };
+          });
+      });
+
+      const text = results
+        .map((r) => `${r.title}\nSource: ${r.source}\n${r.snippet}`)
+        .join("\n\n");
+
+      const evaluationModelId: ModelId = (modelId as ModelId) || "gpt-4.1-mini";
+      const model = getModel(evaluationModelId);
+
+      const summary = await generateText({
+        model,
+        prompt: `Summarise the following DuckDuckGo search results into concise bullet points. Each bullet: headline, one-sentence synopsis, source domain.\n\n${text}`,
+      });
+
+      await browser.close();
+
+      return {
+        toolName: "DuckDuckGo Search",
+        content: summary.text,
+        dataCollected: true,
+      };
+    } catch (error) {
+      console.error("Error in duckDuckGoSearchTool", error);
+      return {
+        toolName: "DuckDuckGo Search",
+        content: `Error: ${error}`,
+        dataCollected: false,
+      };
+    }
+  },
+});
+
 // Get Page Content Tool
 export const getPageContentTool = tool({
   description: "Get the content of a page using Playwright",
@@ -142,7 +325,7 @@ export const getPageContentTool = tool({
     toolName: z.string().describe("What the tool is doing"),
     url: z.string().describe("The url to get the content of"),
     sessionId: z
-      .string()
+      .optional(z.string())
       .describe(
         "The session ID to use for the search. If there is no session ID, create a new session with createSession Tool.",
       ),
@@ -159,14 +342,15 @@ export const getPageContentTool = tool({
   }),
   execute: async ({ url, sessionId, modelId }) => {
     try {
-      const { chromium } = await import("playwright-core");
       const { generateText } = await import("ai");
       const { Readability } = await import("@mozilla/readability");
       const { JSDOM } = await import("jsdom");
 
-      const browser = await chromium.connectOverCDP(
-        `wss://connect.browserbase.com?apiKey=${process.env.BROWSERBASE_API_KEY}&sessionId=${sessionId}`,
-      );
+      if (!sessionId) {
+        sessionId = Array.from(activeSessions).pop() as string;
+      }
+
+      const browser = await connectBrowser();
       const defaultContext = browser.contexts()[0];
       const page = defaultContext.pages()[0];
 
@@ -184,30 +368,23 @@ export const getPageContentTool = tool({
 
       const response = await generateText({
         model,
-        prompt: `Evaluate the following web page content: ${text}`,
+        prompt: `Summarise the following article in 3-4 concise bullet points suitable for a news briefing. Article text:\n\n${text}`,
       });
 
+      await browser.close();
+
       return {
-        toolName: "Getting page content",
+        toolName: "Getting Page Content",
         content: response.text,
+        dataCollected: true,
       };
     } catch (error) {
       console.error("Error in getPageContent:", error);
       return {
-        toolName: "Getting page content",
-        content: `Error fetching page content: ${error}`,
+        toolName: "Getting Page Content",
+        content: `Error getting page content: ${error}`,
+        dataCollected: false,
       };
     }
   },
 });
-
-// Ask for Confirmation Tool
-export const askForConfirmationTool = tool({
-  description: "Ask the user for confirmation.",
-  parameters: z.object({
-    message: z.string().describe("The message to ask for confirmation."),
-  }),
-});
-
-// Main browser tool (for backward compatibility)
-export const browserTool = createSessionTool;

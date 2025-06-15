@@ -197,10 +197,21 @@ const ChatArea = memo(function ChatArea({
     );
   }, [hookLoading, effectiveMessages]);
 
-  // Track web browsing state - detect when AI is using browser tools (disabled for now)
-  const [isBrowsing] = useState(false);
+  // Detect web-browsing phase: when a generation is in-progress, the last assistant
+  // message exists but is still empty (Gemini/LLM has not emitted any tokens yet).
+  // This happens while the model is busy executing tool calls (e.g. Browserbase).
+  const lastAssistantMessage = useMemo(() => {
+    for (let i = effectiveMessages.length - 1; i >= 0; i--) {
+      if (effectiveMessages[i].role === "assistant")
+        return effectiveMessages[i];
+    }
+    return null;
+  }, [effectiveMessages]);
 
-  // Browser tool detection skipped since tool invocation data is not available in Convex messages
+  const isBrowsing = useMemo(() => {
+    if (!isLoading || !lastAssistantMessage) return false;
+    return (lastAssistantMessage.content ?? "").trim().length === 0;
+  }, [isLoading, lastAssistantMessage]);
 
   console.log("[ChatArea] MESSAGES_STATE - Current messages state", {
     messagesCount: effectiveMessages.length,

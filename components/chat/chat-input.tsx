@@ -625,117 +625,121 @@ const ChatInput = memo(function ChatInput({
             </div>
           </div>
 
-          {/* Model Selector and Status Row */}
-          <div className="flex items-center justify-between mt-2 px-1">
-            <Select
-              value={selectedModel}
-              onValueChange={onModelChange}
-              disabled={isLoading}
-            >
-              <SelectTrigger className="group w-auto min-w-48 border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-md text-xs text-purple-700 dark:text-purple-200 hover:bg-purple-50 dark:hover:bg-purple-700 hover:border-purple-400 dark:hover:border-purple-500 rounded-xl h-8 shadow-lg shadow-purple-500/10 transition-all duration-300 hover:shadow-purple-500/20 hover:scale-[1.02]">
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <img
-                      src={currentModelInfo.icon}
-                      alt={currentModelInfo.name}
-                      className="h-3.5 w-3.5 transition-transform duration-300 group-hover:scale-110"
-                    />
-                    <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-400/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          {/* Model Selector and Status Row – hidden while generating/uploading */}
+          {!isLoading && !isUploading && (
+            <div className="flex items-center justify-between mt-2 px-1">
+              <Select
+                value={selectedModel}
+                onValueChange={onModelChange}
+                disabled={isLoading}
+              >
+                <SelectTrigger className="group w-auto min-w-48 border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-md text-xs text-purple-700 dark:text-purple-200 hover:bg-purple-50 dark:hover:bg-purple-700 hover:border-purple-400 dark:hover:border-purple-500 rounded-xl h-8 shadow-lg shadow-purple-500/10 transition-all duration-300 hover:shadow-purple-500/20 hover:scale-[1.02]">
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <img
+                        src={currentModelInfo.icon}
+                        alt={currentModelInfo.name}
+                        className="h-3.5 w-3.5 transition-transform duration-300 group-hover:scale-110"
+                      />
+                      <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-400/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    </div>
+                    <span className="font-semibold tracking-wide">
+                      {currentModelInfo.name}
+                    </span>
                   </div>
-                  <span className="font-semibold tracking-wide">
-                    {currentModelInfo.name}
-                  </span>
-                </div>
-              </SelectTrigger>
-              <SelectContent className="border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-xl shadow-2xl shadow-purple-500/25 rounded-xl p-1">
-                {availableModels.map((modelId) => {
-                  const modelInfo = getModelInfo(modelId);
-                  return (
-                    <SelectItem
-                      key={modelId}
-                      value={modelId}
-                      className={`rounded-lg hover:bg-purple-50 dark:hover:bg-purple-700 transition-all duration-200 hover:scale-[1.02] focus:bg-gradient-to-r ${
-                        modelInfo.theme === "blue"
-                          ? "focus:from-blue-500/10 focus:to-blue-600/10"
-                          : modelInfo.theme === "green"
-                            ? "focus:from-green-500/10 focus:to-green-600/10"
-                            : "focus:from-orange-500/10 focus:to-orange-600/10"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 py-1">
-                        <div className="relative">
-                          <img
-                            src={modelInfo.icon}
-                            alt={modelInfo.name}
-                            className="h-4 w-4"
-                          />
-                          <div
-                            className={`absolute -inset-1 rounded-full blur-sm opacity-60 ${
-                              modelInfo.theme === "blue"
-                                ? "bg-blue-400/20"
-                                : modelInfo.theme === "green"
-                                  ? "bg-green-400/20"
-                                  : "bg-orange-400/20"
-                            }`}
-                          ></div>
+                </SelectTrigger>
+                <SelectContent className="border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-xl shadow-2xl shadow-purple-500/25 rounded-xl p-1">
+                  {availableModels.map((modelId) => {
+                    const modelInfo = getModelInfo(modelId);
+                    return (
+                      <SelectItem
+                        key={modelId}
+                        value={modelId}
+                        className={`rounded-lg hover:bg-purple-50 dark:hover:bg-purple-700 transition-all duration-200 hover:scale-[1.02] focus:bg-gradient-to-r ${
+                          modelInfo.theme === "blue"
+                            ? "focus:from-blue-500/10 focus:to-blue-600/10"
+                            : modelInfo.theme === "green"
+                              ? "focus:from-green-500/10 focus:to-green-600/10"
+                              : "focus:from-orange-500/10 focus:to-orange-600/10"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 py-1">
+                          <div className="relative">
+                            <img
+                              src={modelInfo.icon}
+                              alt={modelInfo.name}
+                              className="h-4 w-4"
+                            />
+                            <div
+                              className={`absolute -inset-1 rounded-full blur-sm opacity-60 ${
+                                modelInfo.theme === "blue"
+                                  ? "bg-blue-400/20"
+                                  : modelInfo.theme === "green"
+                                    ? "bg-green-400/20"
+                                    : "bg-orange-400/20"
+                              }`}
+                            ></div>
+                          </div>
+                          <div className="flex-1">
+                            <span className="font-medium">
+                              {modelInfo.name}
+                            </span>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {modelInfo.description}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <span className="font-medium">{modelInfo.name}</span>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {modelInfo.description}
-                          </p>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
 
-            <div className="flex items-center gap-2 text-xs text-purple-600/60 dark:text-purple-400/60">
-              {/* Web Browsing Status Indicator */}
-              {enableWebBrowsing && (
-                <div className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400">
-                  <span className="flex items-center gap-1 font-medium">
-                    <Globe className="h-3 w-3 animate-pulse" />
-                    Web browsing active
+              <div className="flex items-center gap-2 text-xs text-purple-600/60 dark:text-purple-400/60">
+                {/* Web Browsing Status Indicator */}
+                {enableWebBrowsing && (
+                  <div className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400">
+                    <span className="flex items-center gap-1 font-medium">
+                      <Globe className="h-3 w-3 animate-pulse" />
+                      Web browsing active
+                    </span>
+                  </div>
+                )}
+
+                {/* Anonymous User Message Counter */}
+                {isAnonymous && isLoaded && (
+                  <div
+                    className={`px-2 py-1 rounded-lg backdrop-blur-md border transition-all duration-200 ${
+                      warningLevel?.color === "red"
+                        ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-600 text-red-700 dark:text-red-400"
+                        : warningLevel?.color === "orange"
+                          ? "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-600 text-orange-700 dark:text-orange-400"
+                          : warningLevel?.color === "yellow"
+                            ? "bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-600 text-yellow-700 dark:text-yellow-400"
+                            : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-600 text-green-700 dark:text-green-400"
+                    }`}
+                  >
+                    <span className="font-medium">
+                      {remainingMessages}/10 messages
+                    </span>
+                  </div>
+                )}
+
+                <div className="px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-800 backdrop-blur-md border border-purple-200 dark:border-purple-600">
+                  <span className="flex items-center gap-1">
+                    <kbd className="px-1 py-0.5 rounded text-[10px] bg-purple-100 dark:bg-purple-700 text-purple-700 dark:text-purple-200">
+                      ↵
+                    </kbd>
+                    {isLoading
+                      ? "generating..."
+                      : isUploading
+                        ? "uploading..."
+                        : "to send"}
                   </span>
                 </div>
-              )}
-
-              {/* Anonymous User Message Counter */}
-              {isAnonymous && isLoaded && (
-                <div
-                  className={`px-2 py-1 rounded-lg backdrop-blur-md border transition-all duration-200 ${
-                    warningLevel?.color === "red"
-                      ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-600 text-red-700 dark:text-red-400"
-                      : warningLevel?.color === "orange"
-                        ? "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-600 text-orange-700 dark:text-orange-400"
-                        : warningLevel?.color === "yellow"
-                          ? "bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-600 text-yellow-700 dark:text-yellow-400"
-                          : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-600 text-green-700 dark:text-green-400"
-                  }`}
-                >
-                  <span className="font-medium">
-                    {remainingMessages}/10 messages
-                  </span>
-                </div>
-              )}
-
-              <div className="px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-800 backdrop-blur-md border border-purple-200 dark:border-purple-600">
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1 py-0.5 rounded text-[10px] bg-purple-100 dark:bg-purple-700 text-purple-700 dark:text-purple-200">
-                    ↵
-                  </kbd>
-                  {isLoading
-                    ? "generating..."
-                    : isUploading
-                      ? "uploading..."
-                      : "to send"}
-                </span>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </>

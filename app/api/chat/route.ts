@@ -25,6 +25,7 @@ import {
 import { getSmartContext, conversationCache } from "@/lib/conversation-context";
 import { streamCache } from "@/lib/kv";
 import type { ConversationMessage } from "@/lib/kv";
+import { activeSessions, stopSession } from "@/lib/tools/browser-tool";
 
 // Allow streaming responses up to 60 seconds
 export const maxDuration = 60;
@@ -1071,6 +1072,8 @@ export async function POST(req: NextRequest) {
     let streamBuffer = "";
     let lastTokenTime = Date.now();
     let tokenIndex = 0;
+    let isToolExecuting = false;
+    let streamFinished = false;
 
     const streamTextConfig = {
       model,
@@ -1083,6 +1086,31 @@ export async function POST(req: NextRequest) {
       ...(tools && { maxSteps: 5 }),
       // Enable tool call streaming for better UX (match working example)
       ...(tools && { experimental_toolCallStreaming: true }),
+
+      // ----------------------------------------------------------------
+      // Track tool execution to prevent timeout during legitimate tool calls
+      // ----------------------------------------------------------------
+      onChunk: async (chunk: {
+        chunk: { type: string; toolName?: string };
+      }) => {
+        if (chunk.chunk.type === "tool-call") {
+          console.log(
+            `[${requestId}] CHAT_API - Tool call started:`,
+            chunk.chunk.toolName,
+          );
+          isToolExecuting = true;
+          lastTokenTime = Date.now(); // Reset timeout during tool calls
+        } else if (chunk.chunk.type === "tool-result") {
+          console.log(
+            `[${requestId}] CHAT_API - Tool call completed:`,
+            chunk.chunk.toolName,
+          );
+          isToolExecuting = false;
+          lastTokenTime = Date.now(); // Reset timeout after tool completion
+        } else if (chunk.chunk.type === "text-delta") {
+          lastTokenTime = Date.now(); // Reset timeout on text tokens
+        }
+      },
 
       // ----------------------------------------------------------------
       // Patch assistant content & checkpoint every ~128 tokens
@@ -1235,6 +1263,26 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        // ------------------------------------------------------------------
+        // Browserbase session cleanup – stop any sessions opened during run
+        // ------------------------------------------------------------------
+        try {
+          if (activeSessions.size > 0) {
+            console.log(
+              `[${requestId}] CHAT_API - Cleaning up ${activeSessions.size} Browserbase session(s)`,
+            );
+            for (const id of Array.from(activeSessions)) {
+              await stopSession(id);
+              activeSessions.delete(id);
+            }
+          }
+        } catch (err) {
+          console.warn(
+            `[${requestId}] CHAT_API - Error while stopping Browserbase sessions:`,
+            err,
+          );
+        }
+
         // Track usage for authenticated users
         if (userId && usage) {
           try {
@@ -1291,11 +1339,31 @@ export async function POST(req: NextRequest) {
 
     const backgroundStream = async () => {
       const TIMEOUT_MS = 60000; // 1 minute without any token
+      const TOOL_TIMEOUT_MS = 90000; // 90 seconds when tools are executing
       try {
         const timeoutWatcher = () =>
           new Promise((_, reject) => {
             const check = () => {
-              if (Date.now() - lastTokenTime > TIMEOUT_MS) {
+              if (streamFinished) return; // stop checks once stream is done
+              const currentTimeout = isToolExecuting
+                ? TOOL_TIMEOUT_MS
+                : TIMEOUT_MS;
+              const timeSinceLastToken = Date.now() - lastTokenTime;
+
+              console.log(`[${requestId}] CHAT_API - Timeout check:`, {
+                timeSinceLastToken,
+                currentTimeout,
+                isToolExecuting,
+                willTimeout: timeSinceLastToken > currentTimeout,
+              });
+
+              if (timeSinceLastToken > currentTimeout) {
+                const timeoutType = isToolExecuting
+                  ? "Tool execution timeout"
+                  : "LLM timeout";
+                console.log(
+                  `[${requestId}] CHAT_API - ${timeoutType} triggered after ${timeSinceLastToken}ms`,
+                );
                 reject(new Error("LLM timeout"));
               } else {
                 setTimeout(check, 5000);
@@ -1388,6 +1456,7 @@ export async function POST(req: NextRequest) {
                 );
               }
             }
+            streamFinished = true; // mark done when consume exits
           } catch (err) {
             console.error(`[${requestId}] CHAT_API - consume() error:`, err);
             throw err;

@@ -2,12 +2,7 @@ import { groq } from "@ai-sdk/groq";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
 import type { LanguageModelV1 } from "ai";
-import {
-  createSessionTool,
-  googleSearchTool,
-  getPageContentTool,
-  askForConfirmationTool,
-} from "./tools/browser-tool";
+import { getPageContentTool, duckDuckGoSearchTool } from "./tools/browser-tool";
 
 // Create Google provider with custom API key
 const google = createGoogleGenerativeAI({
@@ -150,10 +145,8 @@ export function getModelTools(modelId: ModelId) {
   }
 
   return {
-    webBrowser: createSessionTool,
-    googleSearch: googleSearchTool,
+    duckDuckGoSearch: duckDuckGoSearchTool,
     getPageContent: getPageContentTool,
-    askForConfirmation: askForConfirmationTool,
   };
 }
 

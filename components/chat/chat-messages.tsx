@@ -73,7 +73,22 @@ export function ChatMessages({
     <div className="flex flex-col min-h-full">
       <div className="flex-1"></div>
       <div className="w-full max-w-4xl mx-auto space-y-4 p-6">
+        {/* Render conversation messages */}
         {messages.map((msg, index) => {
+          // -------------------------------------------------------------
+          // Skip rendering the placeholder assistant message that is
+          // still empty while the LLM is busy with tool-calls (browsing).
+          // We will instead show a dedicated indicator further below.
+          // -------------------------------------------------------------
+          if (
+            msg.role === "assistant" &&
+            (msg.content ?? "").trim().length === 0 &&
+            isLoading &&
+            index === messages.length - 1
+          ) {
+            return null;
+          }
+
           if (msg.role === "user") {
             return (
               <div key={index} className="flex justify-end mb-4">
@@ -122,6 +137,8 @@ export function ChatMessages({
             return false;
           })();
 
+          const isCurrentStreaming = isLoading && index === messages.length - 1;
+
           return (
             <div key={index} className="flex justify-start mb-6">
               <div className="w-full max-w-4xl mx-auto">
@@ -142,97 +159,111 @@ export function ChatMessages({
                     maxHeight={300}
                   />
                 )}
-                <div className="flex items-center gap-4 mt-2 text-gray-500 dark:text-gray-400 text-sm">
-                  <button
-                    onClick={handleCopy}
-                    aria-label="Copy response"
-                    className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                  >
-                    {copiedIndex === index ? (
-                      <span className="text-green-500 text-[12px] select-none">
-                        Copied
-                      </span>
-                    ) : (
-                      <AiOutlineCopy className="h-5 w-5" />
-                    )}
-                  </button>
-                  <button
-                    onClick={handleRetry}
-                    aria-label="Retry"
-                    className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                  >
-                    <FiRefreshCw className="h-5 w-5" />
-                  </button>
-                  {/* Only show branch button for the latest assistant message */}
-                  {msg.id && isLatestAssistantMessage && (
-                    <Popover
-                      open={branchPopover === index}
-                      onOpenChange={(o) => setBranchPopover(o ? index : null)}
+                {/* Action buttons (copy / retry / branch) – only once streaming is finished */}
+                {!isCurrentStreaming && (
+                  <div className="flex items-center gap-4 mt-2 text-gray-500 dark:text-gray-400 text-sm">
+                    <button
+                      onClick={handleCopy}
+                      aria-label="Copy response"
+                      className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
                     >
-                      <PopoverTrigger asChild>
-                        <button
-                          aria-label="Branch conversation"
-                          className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                        >
-                          <GitBranch className="h-5 w-5" />
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-60 p-4 space-y-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-purple-200 dark:border-purple-700 shadow-xl shadow-purple-500/10 dark:shadow-purple-900/20">
-                        <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wide select-none">
-                          Choose model to branch with
-                        </p>
-                        <div className="space-y-1.5">
-                          {getAvailableModels().map((mId) => {
-                            const info = getModelInfo(mId);
-                            return (
-                              <button
-                                key={mId}
-                                onClick={() => {
-                                  // Implement branch logic
-                                }}
-                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/30 text-sm text-left transition-all duration-200 border border-transparent hover:border-purple-200 dark:hover:border-purple-700 group"
-                              >
-                                <img
-                                  src={info.icon}
-                                  alt={info.name}
-                                  className="h-5 w-5 rounded-sm"
-                                />
-                                <span className="flex-1 font-medium text-gray-700 dark:text-gray-200 group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors">
-                                  {info.name}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                  <span className="ml-auto text-xs text-gray-400 select-none uppercase tracking-wide">
-                    {msg.model ?? "Model"}
-                  </span>
-                </div>
+                      {copiedIndex === index ? (
+                        <span className="text-green-500 text-[12px] select-none">
+                          Copied
+                        </span>
+                      ) : (
+                        <AiOutlineCopy className="h-5 w-5" />
+                      )}
+                    </button>
+                    <button
+                      onClick={handleRetry}
+                      aria-label="Retry"
+                      className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                    >
+                      <FiRefreshCw className="h-5 w-5" />
+                    </button>
+                    {/* Only show branch button for the latest assistant message */}
+                    {msg.id && isLatestAssistantMessage && (
+                      <Popover
+                        open={branchPopover === index}
+                        onOpenChange={(o) => setBranchPopover(o ? index : null)}
+                      >
+                        <PopoverTrigger asChild>
+                          <button
+                            aria-label="Branch conversation"
+                            className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                          >
+                            <GitBranch className="h-5 w-5" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-60 p-4 space-y-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-purple-200 dark:border-purple-700 shadow-xl shadow-purple-500/10 dark:shadow-purple-900/20">
+                          <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wide select-none">
+                            Choose model to branch with
+                          </p>
+                          <div className="space-y-1.5">
+                            {getAvailableModels().map((mId) => {
+                              const info = getModelInfo(mId);
+                              return (
+                                <button
+                                  key={mId}
+                                  onClick={() => {
+                                    // Implement branch logic
+                                  }}
+                                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/30 text-sm text-left transition-all duration-200 border border-transparent hover:border-purple-200 dark:hover:border-purple-700 group"
+                                >
+                                  <img
+                                    src={info.icon}
+                                    alt={info.name}
+                                    className="h-5 w-5 rounded-sm"
+                                  />
+                                  <span className="flex-1 font-medium text-gray-700 dark:text-gray-200 group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors">
+                                    {info.name}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                    <span className="ml-auto text-xs text-gray-400 select-none uppercase tracking-wide">
+                      {msg.model ?? "Model"}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           );
         })}
 
-        {/* Loading indicator */}
-        {isLoading && (
-          <div className="flex justify-start mb-4">
-            <div className="max-w-[70%] p-4 rounded-2xl bg-white dark:bg-gray-800 mr-4 border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-2">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200"></div>
+        {/* Web-browsing & waiting indicators */}
+        {isBrowsing && <WebBrowsingIndicator />}
+
+        {(() => {
+          // Show the classic typing dots only while waiting for the first
+          // tokens – i.e. loading, *not* browsing, and no assistant text yet.
+          const lastAssistant = [...messages]
+            .reverse()
+            .find((m) => m.role === "assistant");
+          const hasAssistantContent = lastAssistant
+            ? (lastAssistant.content ?? "").trim().length > 0
+            : false;
+          const showDots = isLoading && !isBrowsing && !hasAssistantContent;
+          if (!showDots) return null;
+          return (
+            <div className="flex justify-start mb-4">
+              <div className="max-w-[70%] p-4 rounded-2xl bg-white dark:bg-gray-800 mr-4 border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center space-x-2">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100" />
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200" />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Web browsing indicator */}
-        {isBrowsing && <WebBrowsingIndicator />}
+          );
+        })()}
       </div>
     </div>
   );

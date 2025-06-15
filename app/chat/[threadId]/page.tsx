@@ -1,10 +1,10 @@
 import { ChatContainer } from "@/components/chat/chat-container";
 
-interface ThreadPageProps {
-  params: { threadId: string };
-}
-
-export default async function ThreadPage({ params }: ThreadPageProps) {
+export default async function ThreadPage({
+  params,
+}: Readonly<{
+  params: Promise<{ threadId: string }>;
+}>) {
   const { threadId } = await params;
   return <ChatContainer initialThreadId={threadId} />;
 }
