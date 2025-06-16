@@ -2,7 +2,11 @@ import { groq } from "@ai-sdk/groq";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
 import type { LanguageModelV1 } from "ai";
-import { getPageContentTool, duckDuckGoSearchTool } from "./tools/browser-tool";
+import {
+  getPageContentTool,
+  duckDuckGoSearchTool,
+  createSessionTool,
+} from "./tools/browser-tool";
 
 // Create Google provider with custom API key
 const google = createGoogleGenerativeAI({
@@ -145,6 +149,7 @@ export function getModelTools(modelId: ModelId) {
   }
 
   return {
+    createSession: createSessionTool,
     duckDuckGoSearch: duckDuckGoSearchTool,
     getPageContent: getPageContentTool,
   };
@@ -181,6 +186,9 @@ export const PROVIDER_CONFIGS = {
     supportsStreaming: true,
     supportsToolCalls: true,
     maxRetries: 3,
+    // Groq streaming optimizations to prevent hangs
+    streamingBufferSize: 1, // Force smaller buffer chunks
+    flushOnEveryToken: true, // Ensure tokens are flushed immediately
   },
   google: {
     // Google-specific settings

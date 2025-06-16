@@ -35,6 +35,9 @@ const nextConfig: NextConfig = {
         // JSDOM and related packages
         jsdom: "commonjs jsdom",
         "@mozilla/readability": "commonjs @mozilla/readability",
+        // Resumable streams and Redis (server-only)
+        "resumable-stream": "commonjs resumable-stream",
+        redis: "commonjs redis",
         // Other potentially problematic packages
         "node-gyp-build": "commonjs node-gyp-build",
         bufferutil: "commonjs bufferutil",

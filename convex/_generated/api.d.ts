@@ -11,6 +11,7 @@
 import type * as attachments from "../attachments.js";
 import type * as messages from "../messages.js";
 import type * as sessionStats from "../sessionStats.js";
+import type * as streams from "../streams.js";
 import type * as threads from "../threads.js";
 import type * as users from "../users.js";
 
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   attachments: typeof attachments;
   messages: typeof messages;
   sessionStats: typeof sessionStats;
+  streams: typeof streams;
   threads: typeof threads;
   users: typeof users;
 }>;

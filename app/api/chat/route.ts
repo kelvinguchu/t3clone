@@ -3,10 +3,13 @@ import {
   convertToCoreMessages,
   type CoreMessage,
   type Message,
+  createDataStream,
 } from "ai";
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { auth } from "@clerk/nextjs/server";
+import { after } from "next/server";
+import { createResumableStreamContext } from "resumable-stream";
 
 import { fetchMutation } from "convex/nextjs";
 import { api } from "@/convex/_generated/api";
@@ -18,17 +21,19 @@ import {
   type ModelId,
 } from "@/lib/ai-providers";
 import { Id } from "@/convex/_generated/dataModel";
-import {
-  getOrCreateAnonymousSession,
-  getAnonymousSession,
-} from "@/lib/utils/session";
-import { getSmartContext, conversationCache } from "@/lib/conversation-context";
-import { streamCache } from "@/lib/kv";
-import type { ConversationMessage } from "@/lib/kv";
+import { getOrCreateAnonymousSession } from "@/lib/utils/session";
+import { conversationCache } from "@/lib/conversation-context";
 import { activeSessions, stopSession } from "@/lib/tools/browser-tool";
 
-// Allow streaming responses up to 60 seconds
-export const maxDuration = 60;
+// Performance optimizations for streaming chat API
+export const dynamic = "force-dynamic"; // Always dynamic for real-time chat
+export const runtime = "nodejs"; // Use Node.js runtime for AI SDK and Redis operations
+export const maxDuration = 60; // Allow streaming responses up to 60 seconds
+
+// Create resumable stream context for handling disconnections
+const streamContext = createResumableStreamContext({
+  waitUntil: after,
+});
 
 // Helper function to fetch attachments from Convex and convert messages to multimodal format
 async function processMultimodalMessages(
@@ -366,6 +371,72 @@ async function getConvexFetchOptions() {
   return { userId: clerk.userId, fetchOptions: token ? { token } : undefined };
 }
 
+// GET handler for resuming streams
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const chatId = searchParams.get("chatId");
+
+  if (!chatId) {
+    return new Response("chatId is required", { status: 400 });
+  }
+
+  try {
+    // Load stream IDs for this chat
+    const { fetchQuery } = await import("convex/nextjs");
+    const streamIds = await fetchQuery(api.streams.loadStreams, { chatId });
+
+    if (!streamIds.length) {
+      return new Response("No streams found", { status: 404 });
+    }
+
+    const recentStreamId = streamIds[0]; // Most recent stream
+
+    if (!recentStreamId) {
+      return new Response("No recent stream found", { status: 404 });
+    }
+
+    // Create empty data stream as fallback
+    const emptyDataStream = createDataStream({
+      execute: () => {},
+    });
+
+    // Try to resume the stream
+    const stream = await streamContext.resumableStream(
+      recentStreamId,
+      () => emptyDataStream,
+    );
+
+    if (stream) {
+      return new Response(stream, { status: 200 });
+    }
+
+    // If stream is completed, return the most recent message
+    const messages = await fetchQuery(api.streams.getMessagesByChatId, {
+      id: chatId,
+    });
+    const mostRecentMessage = messages[messages.length - 1];
+
+    if (!mostRecentMessage || mostRecentMessage.role !== "assistant") {
+      return new Response(emptyDataStream, { status: 200 });
+    }
+
+    // Create a stream with the completed message
+    const streamWithMessage = createDataStream({
+      execute: (buffer) => {
+        buffer.writeData({
+          type: "append-message",
+          message: JSON.stringify(mostRecentMessage),
+        });
+      },
+    });
+
+    return new Response(streamWithMessage, { status: 200 });
+  } catch (error) {
+    console.error("Error resuming stream:", error);
+    return new Response("Internal server error", { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   console.log(`[${requestId}] CHAT_API - Request received`, {
@@ -392,6 +463,13 @@ export async function POST(req: NextRequest) {
       hasAttachmentIds: !!body.attachmentIds,
       attachmentIdsLength: body.attachmentIds?.length || 0,
       userId: userId || "anonymous",
+      bodyKeys: Object.keys(body),
+      enableWebBrowsingDirect: body.enableWebBrowsing,
+      optionsObject: body.options,
+      fullBodyPreview: {
+        ...body,
+        messages: `[${body.messages?.length || 0} messages]`,
+      },
     });
 
     const {
@@ -401,8 +479,30 @@ export async function POST(req: NextRequest) {
       temperature = 0.7,
       maxTokens = 2000,
       attachmentIds,
-      enableWebBrowsing,
+      enableWebBrowsing: directEnableWebBrowsing,
+      // Extract from options object (sent by chat-input.tsx)
+      options,
     } = body;
+
+    // Get enableWebBrowsing from either direct property or options object
+    const enableWebBrowsing =
+      directEnableWebBrowsing ?? options?.enableWebBrowsing ?? false;
+
+    // Validate required fields
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      console.error(`[${requestId}] CHAT_API - Invalid messages:`, {
+        messages,
+        isArray: Array.isArray(messages),
+        length: messages?.length,
+      });
+      return new Response(
+        JSON.stringify({
+          error: "Invalid request: messages array is required",
+          code: "INVALID_MESSAGES",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
 
     // Allow header override (client may send X-Thread-Id)
     const threadIdHeader =
@@ -439,18 +539,16 @@ export async function POST(req: NextRequest) {
     );
 
     // ----------------------------------------------------
-    // Extract anonymous session ID from headers/cookies so we can still
-    // reference legacy anonymous threads *after* the user signs in.
-    // This runs for BOTH authenticated and anonymous requests.
+    // IMMEDIATE STREAMING OPTIMIZATION:
+    // Extract session info quickly, but defer all heavy operations
+    // to background processing in onFinish callback
     // ----------------------------------------------------
     let sessionId: string | null = null;
-    let remainingMessages = 0;
+    let remainingMessages = 10; // Default for new users
 
     const headerSessionId =
       req.headers.get("x-session-id") ?? req.headers.get("X-Session-ID");
-
     const cookieSessionId = (await cookies()).get("anon_session_id")?.value;
-
     sessionId = headerSessionId ?? cookieSessionId ?? null;
 
     console.log(`[${requestId}] CHAT_API - Session ID resolution:`, {
@@ -460,90 +558,15 @@ export async function POST(req: NextRequest) {
       isAuthenticated: !!userId,
     });
 
-    // Handle anonymous users -------------------------------------------------
-    if (!userId) {
-      console.log(`[${requestId}] CHAT_API - Handling anonymous user`);
-
-      // Validate session if provided
-      if (sessionId) {
-        console.log(
-          `[${requestId}] CHAT_API - Validating existing session:`,
-          sessionId,
-        );
-        const existing = await getAnonymousSession(sessionId);
-        if (!existing) {
-          console.log(`[${requestId}] CHAT_API - Session not found, resetting`);
-          sessionId = null;
-        } else {
-          console.log(`[${requestId}] CHAT_API - Session validated:`, {
-            remainingMessages: existing.remainingMessages,
-          });
-        }
-      }
-
-      // If no valid client session, create / reuse based on IP + UA
-      if (!sessionId) {
-        console.log(`[${requestId}] CHAT_API - Creating new session`);
-        const preferredId = cookieSessionId ?? undefined;
-
-        if (preferredId) {
-          console.log(
-            `[${requestId}] CHAT_API - Checking preferred session ID:`,
-            preferredId,
-          );
-          const existing = await getAnonymousSession(preferredId);
-          if (existing) {
-            console.log(
-              `[${requestId}] CHAT_API - Using existing preferred session`,
-            );
-            sessionId = existing.sessionId;
-          }
-        }
-
-        if (!sessionId) {
-          console.log(
-            `[${requestId}] CHAT_API - Creating completely new session`,
-          );
-          const userAgent = req.headers.get("user-agent") ?? "";
-          const ip =
-            req.headers.get("x-forwarded-for") ??
-            req.headers.get("x-real-ip") ??
-            "unknown";
-          const ipHash = btoa(ip).slice(0, 16); // Simple hash for privacy
-
-          const sessionData = await getOrCreateAnonymousSession(
-            userAgent,
-            ipHash,
-          );
-          sessionId = sessionData.sessionId;
-          console.log(
-            `[${requestId}] CHAT_API - New session created:`,
-            sessionId,
-          );
-        }
-      }
-
-      // ---------------------------------------------
-      // Rate-limit check using Convex session stats
-      // This keeps server-side logic in sync with the
-      // stats used by the client UI.
-      // ---------------------------------------------
+    // QUICK rate limit check for anonymous users (non-blocking)
+    if (!userId && sessionId) {
       try {
-        console.log(
-          `[${requestId}] CHAT_API - Checking rate limits for session:`,
-          sessionId,
-        );
-        // Dynamically import fetchQuery to avoid circular deps
+        console.log(`[${requestId}] CHAT_API - Quick rate limit check`);
         const { fetchQuery } = await import("convex/nextjs");
-
         const sessionStats = await fetchQuery(
           api.sessionStats.getAnonymousSessionStats,
-          { sessionId: sessionId! },
+          { sessionId },
         );
-
-        console.log(`[${requestId}] CHAT_API - Session stats:`, {
-          remainingMessages: sessionStats.remainingMessages,
-        });
 
         if (sessionStats.remainingMessages <= 0) {
           console.log(`[${requestId}] CHAT_API - Rate limit exceeded`);
@@ -555,740 +578,407 @@ export async function POST(req: NextRequest) {
             { status: 429, headers: { "Content-Type": "application/json" } },
           );
         }
-
-        // Reserve one message slot for this request so that extremely fast
-        // consecutive requests can't race the limit. We don't need to make an
-        // extra write because the user message will be persisted in Convex
-        // right after this check.
         remainingMessages = Math.max(0, sessionStats.remainingMessages - 1);
-        console.log(
-          `[${requestId}] CHAT_API - Reserved message slot, remaining:`,
-          remainingMessages,
-        );
       } catch (error) {
-        console.error(
-          `[${requestId}] CHAT_API - Error checking Convex session stats:`,
+        console.warn(
+          `[${requestId}] CHAT_API - Rate limit check failed, proceeding:`,
           error,
         );
-        // In case of failure, fall back to previous KV-based logic to avoid
-        // blocking the user unnecessarily.
-        const fallbackSession = await getAnonymousSession(sessionId!);
-        if (!fallbackSession || fallbackSession.remainingMessages <= 0) {
-          console.log(`[${requestId}] CHAT_API - Fallback rate limit exceeded`);
-          return new Response(
-            JSON.stringify({
-              error: "Message limit exceeded. Please sign up to continue.",
-              code: "RATE_LIMITED",
-            }),
-            { status: 429, headers: { "Content-Type": "application/json" } },
-          );
-        }
-        remainingMessages = Math.max(0, fallbackSession.remainingMessages - 1);
-        console.log(
-          `[${requestId}] CHAT_API - Fallback remaining messages:`,
-          remainingMessages,
-        );
+        // Continue with default limits if check fails
       }
     }
 
-    let finalThreadId = threadId;
-
-    // Create thread if it doesn't exist (for new conversations)
-    if (!finalThreadId && messages.length > 0) {
-      console.log(`[${requestId}] CHAT_API - Creating new thread`);
-      const lastMessage = messages[messages.length - 1];
-
-      // Smart title: strip markdown/code fences and limit length
-      const raw = lastMessage.content
-        .replace(/```[\s\S]*?```/g, "") // remove code fences
-        .replace(/`([^`]*)`/g, "$1") // inline code
-        .replace(/\n+/g, " ")
-        .trim();
-
-      const smartTitle = raw.split(" ").slice(0, 12).join(" ");
-      console.log(
-        `[${requestId}] CHAT_API - Generated smart title:`,
-        smartTitle,
-      );
-
-      if (userId) {
-        console.log(`[${requestId}] CHAT_API - Creating authenticated thread`);
-        // Authenticated user - create thread in Convex
-        finalThreadId = await fetchMutation(
-          api.threads.createThread,
-          {
-            title: smartTitle || "New Chat",
-            model: modelId,
-          },
-          fetchOptions,
-        );
-        console.log(
-          `[${requestId}] CHAT_API - Authenticated thread created:`,
-          finalThreadId,
-        );
-      } else {
-        console.log(`[${requestId}] CHAT_API - Creating anonymous thread`);
-        // Anonymous user - create anonymous thread
-        finalThreadId = await fetchMutation(api.threads.createAnonymousThread, {
-          sessionId: sessionId!,
-          title: smartTitle || "New Chat",
-          model: modelId,
-        });
-        console.log(
-          `[${requestId}] CHAT_API - Anonymous thread created:`,
-          finalThreadId,
-        );
-      }
-    }
-
-    // Add user message to database if we have a thread
-    if (finalThreadId && messages.length > 0) {
-      console.log(`[${requestId}] CHAT_API - Adding user message to database`);
-      const lastMessage = messages[messages.length - 1];
-
-      if (lastMessage.role === "user") {
-        let messageId: string | undefined;
-
-        if (userId) {
-          console.log(
-            `[${requestId}] CHAT_API - Adding authenticated user message`,
-          );
-          messageId = await fetchMutation(
-            api.messages.addMessage,
-            {
-              threadId: finalThreadId as Id<"threads">,
-              content: lastMessage.content,
-              role: "user",
-            },
-            fetchOptions,
-          );
-          console.log(
-            `[${requestId}] CHAT_API - Authenticated message added:`,
-            messageId,
-          );
-        } else {
-          console.log(
-            `[${requestId}] CHAT_API - Adding anonymous user message`,
-          );
-          messageId = await fetchMutation(api.messages.createAnonymousMessage, {
-            threadId: finalThreadId as Id<"threads">,
-            sessionId: sessionId!,
-            content: lastMessage.content,
-            role: "user",
-            ...(sessionId ? { sessionId } : {}),
-          });
-          console.log(
-            `[${requestId}] CHAT_API - Anonymous message added:`,
-            messageId,
-          );
-        }
-
-        // Link attachments to the message and thread if we have attachment IDs
-        if (attachmentIds && attachmentIds.length > 0 && messageId) {
-          console.log(
-            `[${requestId}] CHAT_API - Linking attachments to message:`,
-            {
-              attachmentIds,
-              messageId,
-              threadId: finalThreadId,
-            },
-          );
-
-          try {
-            for (const attachmentId of attachmentIds) {
-              console.log(
-                `[${requestId}] CHAT_API - Linking attachment:`,
-                attachmentId,
-              );
-              await fetchMutation(
-                api.attachments.linkAttachmentToThread,
-                {
-                  attachmentId: attachmentId as Id<"attachments">,
-                  threadId: finalThreadId as Id<"threads">,
-                  messageId: messageId as Id<"messages">,
-                },
-                fetchOptions,
-              );
-              console.log(
-                `[${requestId}] CHAT_API - Attachment linked successfully:`,
-                attachmentId,
-              );
-            }
-          } catch (error) {
-            console.error(
-              `[${requestId}] CHAT_API - Error linking attachments:`,
-              error,
-            );
-            // Don't fail the request if attachment linking fails
-          }
-        }
-
-        // Cache the user message for conversation context
-        const conversationMessage: ConversationMessage = {
-          role: "user",
-          content: lastMessage.content,
-          timestamp: Date.now(),
-          model: modelId,
-          messageId: `user-${Date.now()}`,
-        };
-
-        try {
-          console.log(`[${requestId}] CHAT_API - Caching user message`);
-          await conversationCache.appendMessage(
-            finalThreadId,
-            conversationMessage,
-          );
-          console.log(
-            `[${requestId}] CHAT_API - User message cached successfully`,
-          );
-        } catch (error) {
-          console.error(
-            `[${requestId}] CHAT_API - Error caching user message:`,
-            error,
-          );
-          // Don't fail the request if caching fails
-        }
-      }
-    }
-
-    // Note: Message count is already incremented above for anonymous users
-
-    // ============================================================================
-    // INJECT CONVERSATION CONTEXT FROM KV CACHE
-    // ============================================================================
-    let contextualMessages: CoreMessage[] = [];
-
-    console.log(`[${requestId}] CHAT_API - Loading conversation context`);
-    if (finalThreadId) {
-      try {
-        console.log(
-          `[${requestId}] CHAT_API - Getting smart context for thread:`,
-          finalThreadId,
-        );
-        const conversationContext = await getSmartContext(
-          finalThreadId,
-          modelId,
-        );
-
-        if (conversationContext && conversationContext.messages.length > 0) {
-          console.log(
-            `[${requestId}] CHAT_API - Using cached conversation context:`,
-            conversationContext.messages.length,
-          );
-          // Use the cached conversation context instead of just the client messages
-          contextualMessages = conversationContext.messages.map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          }));
-        } else {
-          console.log(
-            `[${requestId}] CHAT_API - No cached context, loading from database`,
-          );
-          // Fallback: Load from database and populate cache
-          try {
-            const { fetchQuery } = await import("convex/nextjs");
-
-            const dbMessages = await fetchQuery(
-              api.messages.getThreadMessages,
-              {
-                threadId: finalThreadId as Id<"threads">,
-                ...(sessionId && !userId ? { sessionId } : {}),
-              },
-              fetchOptions,
-            );
-
-            console.log(
-              `[${requestId}] CHAT_API - Database messages loaded:`,
-              dbMessages?.length || 0,
-            );
-
-            if (dbMessages && dbMessages.length > 0) {
-              console.log(
-                `[${requestId}] CHAT_API - Populating cache with database messages`,
-              );
-              // Populate cache with database messages
-              for (const dbMsg of dbMessages) {
-                const conversationMessage: ConversationMessage = {
-                  role: dbMsg.role,
-                  content: dbMsg.content,
-                  timestamp: dbMsg.createdAt,
-                  model: (dbMsg as { model?: string }).model || modelId,
-                  messageId:
-                    (dbMsg as { _id?: string })._id ||
-                    `${dbMsg.role}-${dbMsg.createdAt}`,
-                };
-
-                try {
-                  await conversationCache.appendMessage(
-                    finalThreadId,
-                    conversationMessage,
-                  );
-                } catch (error) {
-                  console.error(
-                    `[${requestId}] CHAT_API - Error caching individual message:`,
-                    error,
-                  );
-                  // Continue if individual message caching fails
-                }
-              }
-
-              // Now try to get the context again
-              console.log(
-                `[${requestId}] CHAT_API - Attempting to get populated context`,
-              );
-              const populatedContext = await getSmartContext(
-                finalThreadId,
-                modelId,
-              );
-              if (populatedContext && populatedContext.messages.length > 0) {
-                console.log(
-                  `[${requestId}] CHAT_API - Using populated context:`,
-                  populatedContext.messages.length,
-                );
-                contextualMessages = populatedContext.messages.map((msg) => ({
-                  role: msg.role,
-                  content: msg.content,
-                }));
-              } else {
-                console.log(
-                  `[${requestId}] CHAT_API - Still no context, using database messages directly`,
-                );
-                // Still no context, use database messages directly
-                contextualMessages = dbMessages.map((msg) => ({
-                  role: msg.role,
-                  content: msg.content,
-                }));
-              }
-            } else {
-              console.log(
-                `[${requestId}] CHAT_API - No database messages, processing multimodal messages`,
-              );
-              contextualMessages = await processMultimodalMessages(
-                messages,
-                attachmentIds,
-                fetchOptions,
-              );
-            }
-          } catch (error) {
-            console.error(
-              `[${requestId}] CHAT_API - Error loading from database:`,
-              error,
-            );
-            contextualMessages = await processMultimodalMessages(
-              messages,
-              attachmentIds,
-              fetchOptions,
-            );
-          }
-        }
-      } catch (error) {
-        console.error(
-          `[${requestId}] CHAT_API - Error loading conversation context:`,
-          error,
-        );
-        // Fallback to client messages if context loading fails
-        contextualMessages = await processMultimodalMessages(
-          messages,
-          attachmentIds,
-          fetchOptions,
-        );
-      }
-    } else {
-      console.log(
-        `[${requestId}] CHAT_API - No thread ID, using client messages`,
-      );
-      // No thread ID means new conversation, use client messages
-      contextualMessages = await processMultimodalMessages(
-        messages,
-        attachmentIds,
-        fetchOptions,
-      );
-    }
-
-    // --------------------------------------------------------------------
-    // Always ensure the *current* client messages (the ones just posted)
-    // are present in the final prompt *with* their multimodal attachments.
-    // Cached context does not store attachment information, so we run
-    // processMultimodalMessages on the raw client messages again and merge
-    // the result – deduplicating by role+content to avoid doubles.
-    // --------------------------------------------------------------------
-
-    const currentMessagesProcessed = await processMultimodalMessages(
+    // Process multimodal messages if needed
+    console.log(`[${requestId}] CHAT_API - Processing multimodal messages`);
+    const messagesForAI = await processMultimodalMessages(
       messages,
       attachmentIds,
       fetchOptions,
     );
 
-    // Create a simple helper to compare messages (stringify content for deep equality)
-    const serialize = (m: CoreMessage) =>
-      `${m.role}:${JSON.stringify(m.content)}`;
-
-    const contextualSerialized = new Set(contextualMessages.map(serialize));
-
-    for (const m of currentMessagesProcessed) {
-      if (!contextualSerialized.has(serialize(m))) {
-        contextualMessages.push(m);
-      }
-    }
-
-    const finalMessages: CoreMessage[] = [...contextualMessages];
-
-    // ---------------------------------------------------------------
-    // Remove messages that have NO meaningful parts. This situation
-    // can happen when a draft assistant placeholder (content: "") or
-    // an empty user-message slipped into the context. Gemini rejects
-    // requests whose `contents[i].parts` array is empty, returning
-    // "contents.parts must not be empty". We keep only messages that
-    // have at least one non-empty text part or any non-text part.
-    // ---------------------------------------------------------------
-
-    const hasUsefulParts = (m: CoreMessage): boolean => {
-      if (typeof m.content === "string") {
-        return m.content.trim().length > 0;
-      }
-      return m.content.some((part) => {
-        if (part.type === "text") {
-          return (part.text ?? "").trim().length > 0;
-        }
-        // Any file/image/tool part is useful
-        return true;
-      });
-    };
-
-    const filteredMessages = finalMessages.filter(hasUsefulParts);
-
-    console.log(`[${requestId}] CHAT_API - Final messages prepared:`, {
-      totalMessages: filteredMessages.length,
-      contextualMessagesCount: contextualMessages.length,
-      firstMessageRole: filteredMessages[0]?.role,
-      hasSystemMessage: filteredMessages.some((m) => m.role === "system"),
-      messageRoles: filteredMessages.map((m) => m.role),
-      webBrowsingEnabled: enableWebBrowsing,
-    });
-
-    // Use the filtered list from here on
-    // eslint-disable-next-line prefer-const
-    let messagesForAI = filteredMessages;
-
-    // Add system message for web browsing when enabled
-    if (enableWebBrowsing && getModelTools(modelId)) {
-      const webBrowsingSystemMessage: CoreMessage = {
-        role: "system",
-        content:
-          "You are a web browsing assistant. You MUST use the available browser tools to search for information and browse websites. When a user asks any question that could benefit from current information or web content, you MUST:\n\n1. First create a browser session using the webBrowser tool\n2. Then use googleSearch to search for relevant information, OR use getPageContent to read specific URLs\n3. Always provide the sessionId and debuggerFullscreenUrl from the session creation to subsequent tools\n\nNEVER respond with 'I cannot browse the internet' - you have full web browsing capabilities through these tools. Always use them when appropriate.",
-      };
-
-      // Insert system message at the beginning if no system message exists
-      const hasSystemMessage = messagesForAI.some((m) => m.role === "system");
-      if (!hasSystemMessage) {
-        messagesForAI.unshift(webBrowsingSystemMessage);
-      } else {
-        // If system message exists, append web browsing instruction to it
-        const systemMessageIndex = messagesForAI.findIndex(
-          (m) => m.role === "system",
-        );
-        if (systemMessageIndex !== -1) {
-          const existingContent = messagesForAI[systemMessageIndex].content;
-          messagesForAI[systemMessageIndex].content =
-            typeof existingContent === "string"
-              ? `${existingContent}\n\n${webBrowsingSystemMessage.content}`
-              : webBrowsingSystemMessage.content;
-        }
-      }
-    }
-
-    // Get tools for this model if web browsing is enabled
-    console.log(
-      `[${requestId}] CHAT_API - Web browsing enabled:`,
-      enableWebBrowsing,
-    );
-
+    // Get tools if web browsing is enabled
     const tools = enableWebBrowsing ? getModelTools(modelId) : undefined;
-    console.log(
-      `[${requestId}] CHAT_API - Available tools:`,
-      tools ? Object.keys(tools) : "none",
-    );
-
-    // Configure tool choice - when web browsing is enabled, prefer tool usage
     const toolChoice =
       enableWebBrowsing && tools ? ("auto" as const) : undefined;
-    console.log(`[${requestId}] CHAT_API - Tool choice:`, toolChoice);
 
-    // ------------------------------------------------------------------
-    // Create draft assistant message so that UI can display it immediately
-    // and be updated as tokens arrive (supports refresh-resume).
-    // ------------------------------------------------------------------
-
-    let assistantDraftId: Id<"messages"> | undefined;
-
-    try {
-      assistantDraftId = await fetchMutation(
-        api.messages.addMessage,
-        {
-          threadId: finalThreadId as Id<"threads">,
-          role: "assistant",
-          content: "", // placeholder
-          model: modelId,
-        },
-        fetchOptions,
-      );
-      console.log(
-        `[${requestId}] CHAT_API - Draft assistant message created:`,
-        assistantDraftId,
-      );
-      // Mark the placeholder as streaming so UI can show in-progress state
-      if (assistantDraftId) {
-        try {
-          await fetchMutation(
-            api.messages.setMessageStreamingStatus,
-            {
-              messageId: assistantDraftId,
-              isStreaming: true,
-              streamId: undefined,
-              ...(sessionId && !userId ? { sessionId } : {}),
-            },
-            fetchOptions,
-          );
-        } catch (err) {
-          console.error(
-            `[${requestId}] CHAT_API - Failed to set streaming status:`,
-            err,
-          );
-        }
-      }
-    } catch (err) {
-      console.error(
-        `[${requestId}] CHAT_API - Failed creating draft assistant message:`,
-        err,
-      );
-    }
-
-    // Stream the AI response
-    console.log(
-      `[${requestId}] CHAT_API - Starting streamText with model:`,
+    console.log(`[${requestId}] CHAT_API - Tool configuration:`, {
+      enableWebBrowsing,
+      directEnableWebBrowsing,
+      optionsEnableWebBrowsing: options?.enableWebBrowsing,
+      hasTools: !!tools,
+      toolNames: tools ? Object.keys(tools) : [],
+      toolChoice,
       modelId,
-    );
+      hasBrowserbaseApiKey: !!process.env.BROWSERBASE_API_KEY,
+      hasBrowserbaseProjectId: !!process.env.BROWSERBASE_PROJECT_ID,
+      requestBodyKeys: Object.keys(body),
+    });
 
-    let streamBuffer = "";
-    let lastTokenTime = Date.now();
-    let tokenIndex = 0;
-    let isToolExecuting = false;
-    let streamFinished = false;
+    console.log(`[${requestId}] CHAT_API - Starting IMMEDIATE streamText`);
 
-    const streamTextConfig = {
+    // ------------------------------------------------------------------
+    // IMMEDIATE STREAMING: Start AI response immediately
+    // All database operations moved to onFinish for background processing
+    // ------------------------------------------------------------------
+    const result = streamText({
       model,
       messages: messagesForAI,
       temperature,
       maxTokens: Math.min(maxTokens, modelConfig.maxTokens),
       ...(tools && { tools }),
       ...(toolChoice && { toolChoice }),
-      // Enable multi-step tool execution when tools are available
       ...(tools && { maxSteps: 5 }),
-      // Enable tool call streaming for better UX (match working example)
       ...(tools && { experimental_toolCallStreaming: true }),
 
-      // ----------------------------------------------------------------
-      // Track tool execution to prevent timeout during legitimate tool calls
-      // ----------------------------------------------------------------
-      onChunk: async (chunk: {
-        chunk: { type: string; toolName?: string };
-      }) => {
-        if (chunk.chunk.type === "tool-call") {
-          console.log(
-            `[${requestId}] CHAT_API - Tool call started:`,
-            chunk.chunk.toolName,
-          );
-          isToolExecuting = true;
-          lastTokenTime = Date.now(); // Reset timeout during tool calls
-        } else if (chunk.chunk.type === "tool-result") {
-          console.log(
-            `[${requestId}] CHAT_API - Tool call completed:`,
-            chunk.chunk.toolName,
-          );
-          isToolExecuting = false;
-          lastTokenTime = Date.now(); // Reset timeout after tool completion
-        } else if (chunk.chunk.type === "text-delta") {
-          lastTokenTime = Date.now(); // Reset timeout on text tokens
-        }
-      },
-
-      // ----------------------------------------------------------------
-      // Patch assistant content & checkpoint every ~128 tokens
-      // ----------------------------------------------------------------
-      onToken: async (token: string) => {
-        const index = tokenIndex++;
-        lastTokenTime = Date.now();
-
-        console.log(
-          `[${requestId}] CHAT_API - onToken received: '${token.replace(/\n/g, "\\n").slice(0, 20)}...' (index ${index})`,
-        );
-
-        if (!assistantDraftId) return;
-
-        streamBuffer += token;
-
-        // Patch on first token and then every 16 tokens
-        if (index === 0 || index % 16 === 0) {
-          try {
-            await fetchMutation(
-              api.messages.updateMessage,
-              {
-                messageId: assistantDraftId,
-                content: streamBuffer,
-                isStreaming: true,
-              },
-              fetchOptions,
-            );
-
-            console.log(
-              `[${requestId}] CHAT_API - Patched assistant draft with ${streamBuffer.length} chars at token index ${index}`,
-            );
-
-            if (index % 128 === 0) {
-              await streamCache.setCheckpoint(finalThreadId!, index);
-            }
-          } catch (err) {
-            console.error(
-              `[${requestId}] CHAT_API - Error patching streaming message:`,
-              err,
-            );
-          }
-        }
-      },
-    };
-
-    const result = streamText({
-      ...streamTextConfig,
-      onFinish: async ({ text, usage, finishReason }) => {
-        console.log(
-          `[${requestId}] CHAT_API - onFinish called, final text length ${text.length}`,
-        );
-        // first execute incremental final patch
-        if (assistantDraftId) {
-          try {
-            await fetchMutation(
-              api.messages.updateMessage,
-              {
-                messageId: assistantDraftId,
-                content: text,
-                isStreaming: false,
-                tokenCount: usage?.totalTokens,
-                finishReason,
-              },
-              fetchOptions,
-            );
-          } catch (err) {
-            console.error(
-              `[${requestId}] CHAT_API - Error finalising assistant draft:`,
-              err,
-            );
-          }
-        }
-
-        console.log(`[${requestId}] CHAT_API - streamText onFinish called:`, {
-          textLength: text.length,
+      // BACKGROUND PROCESSING: All heavy operations moved here
+      async onFinish({ response, usage, finishReason }) {
+        console.log(`[${requestId}] CHAT_API - Background processing started`, {
+          responseMessagesCount: response.messages.length,
           usage,
           finishReason,
+          responseMessages: response.messages.map((msg) => ({
+            role: msg.role,
+            contentType: typeof msg.content,
+            contentLength:
+              typeof msg.content === "string"
+                ? msg.content.length
+                : Array.isArray(msg.content)
+                  ? msg.content.length
+                  : 0,
+          })),
         });
 
-        // Save assistant response to database when no draft was created (fallback)
-        if (!assistantDraftId && finalThreadId) {
+        // Background: Handle session management for anonymous users
+        let finalThreadId = threadId;
+        let finalSessionId = sessionId;
+
+        if (!userId) {
           try {
-            console.log(
-              `[${requestId}] CHAT_API - Saving assistant response to database`,
-            );
-            if (userId) {
-              await fetchMutation(
-                api.messages.addMessage,
-                {
-                  threadId: finalThreadId as Id<"threads">,
-                  content: text,
-                  role: "assistant",
-                  model: modelId,
-                  tokenCount: usage?.totalTokens,
-                  finishReason,
-                },
-                fetchOptions,
-              );
-              console.log(
-                `[${requestId}] CHAT_API - Authenticated assistant message saved`,
-              );
-            } else {
-              await fetchMutation(api.messages.createAnonymousMessage, {
-                threadId: finalThreadId as Id<"threads">,
-                sessionId: sessionId!,
-                content: text,
-                role: "assistant",
-                model: modelId,
-                ...(sessionId ? { sessionId } : {}),
-              });
-              console.log(
-                `[${requestId}] CHAT_API - Anonymous assistant message saved`,
-              );
-            }
+            // Create/validate session in background
+            if (!finalSessionId) {
+              const userAgent = req.headers.get("user-agent") ?? "";
+              const ip =
+                req.headers.get("x-forwarded-for") ??
+                req.headers.get("x-real-ip") ??
+                "unknown";
+              const ipHash = btoa(ip).slice(0, 16);
 
-            // Cache the assistant response for conversation context
-            const assistantMessage: ConversationMessage = {
-              role: "assistant",
-              content: text,
-              timestamp: Date.now(),
-              model: modelId,
-              messageId: `assistant-${Date.now()}`,
-            };
-
-            try {
+              const sessionData = await getOrCreateAnonymousSession(
+                userAgent,
+                ipHash,
+              );
+              finalSessionId = sessionData.sessionId;
               console.log(
-                `[${requestId}] CHAT_API - Caching assistant message`,
+                `[${requestId}] CHAT_API - Background session created:`,
+                finalSessionId,
               );
-              await conversationCache.appendMessage(
-                finalThreadId,
-                assistantMessage,
-              );
-              console.log(
-                `[${requestId}] CHAT_API - Assistant message cached successfully`,
-              );
-            } catch (error) {
-              console.error(
-                `[${requestId}] CHAT_API - Error caching assistant message:`,
-                error,
-              );
-              // Don't fail the request if caching fails
             }
           } catch (error) {
             console.error(
-              `[${requestId}] CHAT_API - Error saving assistant message:`,
+              `[${requestId}] CHAT_API - Background session creation failed:`,
               error,
             );
-            // Error saving assistant message - continue
           }
         }
 
-        // ------------------------------------------------------------------
-        // Browserbase session cleanup – stop any sessions opened during run
-        // ------------------------------------------------------------------
-        try {
-          if (activeSessions.size > 0) {
-            console.log(
-              `[${requestId}] CHAT_API - Cleaning up ${activeSessions.size} Browserbase session(s)`,
-            );
-            for (const id of Array.from(activeSessions)) {
-              await stopSession(id);
-              activeSessions.delete(id);
+        // Background: Create thread if needed
+        if (!finalThreadId) {
+          try {
+            const lastMessage = messages[messages.length - 1];
+            const smartTitle =
+              typeof lastMessage?.content === "string"
+                ? lastMessage.content.slice(0, 50) +
+                  (lastMessage.content.length > 50 ? "..." : "")
+                : "New Chat";
+
+            if (userId) {
+              finalThreadId = await fetchMutation(
+                api.threads.createThread,
+                {
+                  title: smartTitle,
+                  model: modelId,
+                },
+                fetchOptions,
+              );
+            } else {
+              finalThreadId = await fetchMutation(
+                api.threads.createAnonymousThread,
+                {
+                  sessionId: finalSessionId!,
+                  title: smartTitle,
+                  model: modelId,
+                },
+              );
             }
+            console.log(
+              `[${requestId}] CHAT_API - Background thread created:`,
+              finalThreadId,
+            );
+          } catch (error) {
+            console.error(
+              `[${requestId}] CHAT_API - Background thread creation failed:`,
+              error,
+            );
           }
-        } catch (err) {
-          console.warn(
-            `[${requestId}] CHAT_API - Error while stopping Browserbase sessions:`,
-            err,
-          );
         }
 
-        // Track usage for authenticated users
+        // Background: Save messages to database
+        if (finalThreadId) {
+          try {
+            // Save user message
+            const lastMessage = messages[messages.length - 1];
+            if (lastMessage?.role === "user") {
+              let messageId: string | undefined;
+
+              if (userId) {
+                messageId = await fetchMutation(
+                  api.messages.addMessage,
+                  {
+                    threadId: finalThreadId as Id<"threads">,
+                    content: lastMessage.content,
+                    role: "user",
+                  },
+                  fetchOptions,
+                );
+              } else {
+                messageId = await fetchMutation(
+                  api.messages.createAnonymousMessage,
+                  {
+                    threadId: finalThreadId as Id<"threads">,
+                    sessionId: finalSessionId!,
+                    content: lastMessage.content,
+                    role: "user",
+                  },
+                );
+              }
+
+              // Link attachments if present
+              if (attachmentIds && attachmentIds.length > 0 && messageId) {
+                for (const attachmentId of attachmentIds) {
+                  try {
+                    await fetchMutation(
+                      api.attachments.linkAttachmentToThread,
+                      {
+                        attachmentId: attachmentId as Id<"attachments">,
+                        threadId: finalThreadId as Id<"threads">,
+                        messageId: messageId as Id<"messages">,
+                      },
+                      fetchOptions,
+                    );
+                  } catch (error) {
+                    console.error(
+                      `[${requestId}] CHAT_API - Background attachment linking failed:`,
+                      error,
+                    );
+                  }
+                }
+              }
+            }
+
+            // Detect tool usage from response messages
+            const toolsUsedInResponse: string[] = [];
+            let hasAnyToolCalls = false;
+
+            // Analyze response messages to detect tool usage
+            for (const msg of response.messages) {
+              if (msg.role === "assistant" && Array.isArray(msg.content)) {
+                for (const part of msg.content) {
+                  if (part.type === "tool-call") {
+                    const toolCall = part as {
+                      type: "tool-call";
+                      toolName: string;
+                    };
+                    if (!toolsUsedInResponse.includes(toolCall.toolName)) {
+                      toolsUsedInResponse.push(toolCall.toolName);
+                    }
+                    hasAnyToolCalls = true;
+                  }
+                }
+              }
+            }
+
+            console.log(`[${requestId}] CHAT_API - Tool usage detected:`, {
+              toolsUsed: toolsUsedInResponse,
+              hasToolCalls: hasAnyToolCalls,
+              enableWebBrowsing,
+            });
+
+            // Save AI response messages (response.messages already contains only NEW messages)
+            console.log(
+              `[${requestId}] CHAT_API - Processing AI response messages:`,
+              {
+                responseMessagesCount: response.messages.length,
+                responseMessages: response.messages.map((msg) => ({
+                  role: msg.role,
+                  contentType: typeof msg.content,
+                  hasContent: !!msg.content,
+                  contentPreview:
+                    typeof msg.content === "string"
+                      ? msg.content.substring(0, 100) + "..."
+                      : "[structured content]",
+                })),
+              },
+            );
+
+            for (const message of response.messages) {
+              // Skip tool messages - they are internal to AI SDK and not supported by Convex schema
+              if (message.role === "tool") {
+                console.log(
+                  `[${requestId}] CHAT_API - Skipping tool message (not supported by Convex schema)`,
+                );
+                continue;
+              }
+
+              // Type assertion after filtering out tool messages
+              const typedMessage = message as {
+                role: "assistant" | "system" | "user";
+                content:
+                  | string
+                  | Array<{ type: string; [key: string]: unknown }>;
+              };
+
+              if (
+                typedMessage.role === "assistant" ||
+                typedMessage.role === "system"
+              ) {
+                // Extract text content from assistant/system messages
+                let textContent = "";
+                if (typeof typedMessage.content === "string") {
+                  textContent = typedMessage.content;
+                } else if (Array.isArray(typedMessage.content)) {
+                  // Extract text from content parts, skip tool-call parts
+                  const textParts = typedMessage.content
+                    .filter((part) => part.type === "text")
+                    .map((part) => (part as unknown as { text: string }).text);
+                  textContent = textParts.join("");
+                }
+
+                // Skip assistant messages that are empty or only contain tool calls
+                if (
+                  typedMessage.role === "assistant" &&
+                  (!textContent ||
+                    textContent.trim() === "" ||
+                    textContent.includes("[Tool Call:"))
+                ) {
+                  console.log(
+                    `[${requestId}] CHAT_API - Skipping assistant tool call message:`,
+                    { contentPreview: textContent.substring(0, 100) },
+                  );
+                  continue;
+                }
+
+                // Save the message to Convex with tool usage information
+                if (userId) {
+                  await fetchMutation(
+                    api.messages.addMessage,
+                    {
+                      threadId: finalThreadId as Id<"threads">,
+                      content: textContent,
+                      role: typedMessage.role as
+                        | "user"
+                        | "assistant"
+                        | "system",
+                      model:
+                        typedMessage.role === "assistant" ? modelId : undefined,
+                      tokenCount:
+                        typedMessage.role === "assistant"
+                          ? usage?.totalTokens
+                          : undefined,
+                      finishReason:
+                        typedMessage.role === "assistant"
+                          ? finishReason
+                          : undefined,
+                      // Add tool usage information for assistant messages
+                      toolsUsed:
+                        typedMessage.role === "assistant" &&
+                        toolsUsedInResponse.length > 0
+                          ? toolsUsedInResponse
+                          : undefined,
+                      hasToolCalls:
+                        typedMessage.role === "assistant"
+                          ? hasAnyToolCalls
+                          : undefined,
+                    },
+                    fetchOptions,
+                  );
+                } else {
+                  await fetchMutation(api.messages.createAnonymousMessage, {
+                    threadId: finalThreadId as Id<"threads">,
+                    sessionId: finalSessionId!,
+                    content: textContent,
+                    role: typedMessage.role as "user" | "assistant" | "system",
+                    model:
+                      typedMessage.role === "assistant" ? modelId : undefined,
+                    // Add tool usage information for assistant messages
+                    toolsUsed:
+                      typedMessage.role === "assistant" &&
+                      toolsUsedInResponse.length > 0
+                        ? toolsUsedInResponse
+                        : undefined,
+                    hasToolCalls:
+                      typedMessage.role === "assistant"
+                        ? hasAnyToolCalls
+                        : undefined,
+                  });
+                }
+
+                console.log(
+                  `[${requestId}] CHAT_API - Saved ${typedMessage.role} message:`,
+                  {
+                    contentLength: textContent.length,
+                    contentPreview: textContent.substring(0, 100) + "...",
+                    tokenCount: usage?.totalTokens || 0,
+                    toolsUsed:
+                      typedMessage.role === "assistant"
+                        ? toolsUsedInResponse
+                        : undefined,
+                    hasToolCalls:
+                      typedMessage.role === "assistant"
+                        ? hasAnyToolCalls
+                        : undefined,
+                  },
+                );
+              }
+            }
+            console.log(
+              `[${requestId}] CHAT_API - Background message saving completed`,
+            );
+          } catch (error) {
+            console.error(
+              `[${requestId}] CHAT_API - Background message saving failed:`,
+              error,
+            );
+          }
+        }
+
+        // Background: Cache conversation context
+        if (finalThreadId) {
+          try {
+            const conversationMessage = {
+              role: "user" as const,
+              content: messages[messages.length - 1]?.content || "",
+              timestamp: Date.now(),
+              model: modelId,
+              messageId: `user-${Date.now()}`,
+            };
+            await conversationCache.appendMessage(
+              finalThreadId,
+              conversationMessage,
+            );
+            console.log(
+              `[${requestId}] CHAT_API - Background caching completed`,
+            );
+          } catch (error) {
+            console.error(
+              `[${requestId}] CHAT_API - Background caching failed:`,
+              error,
+            );
+          }
+        }
+
+        // Background: Track usage for authenticated users
         if (userId && usage) {
           try {
-            console.log(
-              `[${requestId}] CHAT_API - Tracking usage for authenticated user`,
-            );
             const inputTokens = usage.promptTokens || 0;
             const outputTokens = usage.completionTokens || 0;
             const inputCost =
@@ -1307,277 +997,99 @@ export async function POST(req: NextRequest) {
               },
               fetchOptions,
             );
-            console.log(`[${requestId}] CHAT_API - Usage tracked successfully`);
+            console.log(
+              `[${requestId}] CHAT_API - Background usage tracking completed`,
+            );
           } catch (error) {
             console.error(
-              `[${requestId}] CHAT_API - Error tracking usage:`,
+              `[${requestId}] CHAT_API - Background usage tracking failed:`,
               error,
             );
-            // Error tracking usage - continue
           }
         }
-      },
-      onError: (error) => {
-        console.error(
-          `[${requestId}] CHAT_API - streamText onError called:`,
-          error,
+
+        // Background: Cleanup browser sessions
+        try {
+          if (activeSessions.size > 0) {
+            for (const id of Array.from(activeSessions)) {
+              await stopSession(id);
+              activeSessions.delete(id);
+            }
+          }
+        } catch (error) {
+          console.warn(
+            `[${requestId}] CHAT_API - Background session cleanup failed:`,
+            error,
+          );
+        }
+
+        console.log(
+          `[${requestId}] CHAT_API - All background processing completed`,
         );
-        // Stream error occurred - handled by client
+      },
+
+      onError: (error) => {
+        console.error(`[${requestId}] CHAT_API - streamText onError:`, error);
       },
     });
 
     console.log(
-      `[${requestId}] CHAT_API - streamText result created, preparing response`,
+      `[${requestId}] CHAT_API - Returning stream response for provider:`,
+      modelConfig.provider,
     );
 
-    // ---------------------------------------------------------------------
-    // NEW: Run streaming in the background and immediately return a JSON
-    // response so that the HTTP request is not tied to the lifetime of the
-    // generation task. This allows the browser to refresh (destroying the
-    // original connection) without killing the model generation.
-    // ---------------------------------------------------------------------
+    // Use different streaming approach based on provider
+    // Groq works better with toTextStreamResponse() due to buffering issues
+    if (modelConfig.provider === "groq") {
+      console.log(`[${requestId}] CHAT_API - Using text stream for Groq`);
+      return result.toTextStreamResponse({
+        headers: {
+          // Essential headers for Groq streaming
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Connection: "keep-alive",
+          "Transfer-Encoding": "chunked",
+          "X-Accel-Buffering": "no",
+          "Content-Encoding": "none",
 
-    const backgroundStream = async () => {
-      const TIMEOUT_MS = 60000; // 1 minute without any token
-      const TOOL_TIMEOUT_MS = 90000; // 90 seconds when tools are executing
-      try {
-        const timeoutWatcher = () =>
-          new Promise((_, reject) => {
-            const check = () => {
-              if (streamFinished) return; // stop checks once stream is done
-              const currentTimeout = isToolExecuting
-                ? TOOL_TIMEOUT_MS
-                : TIMEOUT_MS;
-              const timeSinceLastToken = Date.now() - lastTokenTime;
-
-              console.log(`[${requestId}] CHAT_API - Timeout check:`, {
-                timeSinceLastToken,
-                currentTimeout,
-                isToolExecuting,
-                willTimeout: timeSinceLastToken > currentTimeout,
-              });
-
-              if (timeSinceLastToken > currentTimeout) {
-                const timeoutType = isToolExecuting
-                  ? "Tool execution timeout"
-                  : "LLM timeout";
-                console.log(
-                  `[${requestId}] CHAT_API - ${timeoutType} triggered after ${timeSinceLastToken}ms`,
-                );
-                reject(new Error("LLM timeout"));
-              } else {
-                setTimeout(check, 5000);
-              }
-            };
-            setTimeout(check, 5000);
-          });
-
-        const consume = async () => {
-          try {
-            const maybeIterable = result as unknown as {
-              [Symbol.asyncIterator]?: () => AsyncIterator<unknown>;
-              text?: () => Promise<string>;
-              // TEXT_STREAM & FULL_STREAM SUPPORT ----------------------------
-              textStream?: AsyncIterable<unknown> | ReadableStream;
-              fullStream?: AsyncIterable<unknown> | ReadableStream;
-            };
-
-            if (typeof maybeIterable[Symbol.asyncIterator] === "function") {
-              // Drain the async iterator to ensure onToken/onFinish are fired.
-              for await (const _chunk of maybeIterable as AsyncIterable<unknown>) {
-                void _chunk; // discard – onToken already handles content
-              }
-            } else if (typeof maybeIterable.textStream === "object") {
-              //   ai-sdk >=4 returns { textStream, fullStream } – prefer textStream.
-              const stream = maybeIterable.textStream as
-                | AsyncIterable<unknown>
-                | ReadableStream;
-              const potentialIterable = stream as unknown as {
-                [Symbol.asyncIterator]?: () => AsyncIterator<unknown>;
-              };
-              if (
-                typeof potentialIterable[Symbol.asyncIterator] === "function"
-              ) {
-                for await (const _chunk of stream as AsyncIterable<unknown>) {
-                  void _chunk;
-                }
-              } else if (
-                typeof (stream as ReadableStream).getReader === "function"
-              ) {
-                const reader = (stream as ReadableStream).getReader();
-                // eslint-disable-next-line no-constant-condition
-                while (true) {
-                  const { done } = await reader.read();
-                  if (done) break;
-                }
-              }
-            } else if (typeof maybeIterable.fullStream === "object") {
-              // Fallback to fullStream when textStream is not present.
-              const stream = maybeIterable.fullStream as
-                | AsyncIterable<unknown>
-                | ReadableStream;
-              const potentialIterable = stream as unknown as {
-                [Symbol.asyncIterator]?: () => AsyncIterator<unknown>;
-              };
-              if (
-                typeof potentialIterable[Symbol.asyncIterator] === "function"
-              ) {
-                for await (const _chunk of stream as AsyncIterable<unknown>) {
-                  void _chunk;
-                }
-              } else if (
-                typeof (stream as ReadableStream).getReader === "function"
-              ) {
-                const reader = (stream as ReadableStream).getReader();
-                // eslint-disable-next-line no-constant-condition
-                while (true) {
-                  const { done } = await reader.read();
-                  if (done) break;
-                }
-              }
-            } else if (typeof maybeIterable.text === "function") {
-              // Fallback: await full text (may produce no tokens for non-streaming models).
-              await maybeIterable.text();
-            } else {
-              // Last resort: try toReadableStream()
-              const readable = (
-                result as unknown as { toReadableStream?: () => ReadableStream }
-              ).toReadableStream?.();
-              if (readable) {
-                const reader = readable.getReader();
-                // eslint-disable-next-line no-constant-condition
-                while (true) {
-                  const { done } = await reader.read();
-                  if (done) break;
-                }
-              } else {
-                console.warn(
-                  `[${requestId}] CHAT_API - Unknown streamText result type; cannot consume`,
-                );
-              }
-            }
-            streamFinished = true; // mark done when consume exits
-          } catch (err) {
-            console.error(`[${requestId}] CHAT_API - consume() error:`, err);
-            throw err;
-          }
-        };
-
-        await Promise.race([consume(), timeoutWatcher()]);
-      } catch (err) {
-        console.error(
-          `[${requestId}] CHAT_API - Background streamText error:`,
-          err,
-        );
-        // Mark the draft message as errored so UI can react
-        if (assistantDraftId) {
-          try {
-            await fetchMutation(
-              api.messages.updateMessage,
-              {
-                messageId: assistantDraftId,
-                content:
-                  "⚠️ Model did not respond in time. Please try again or pick a different model.",
-                isStreaming: false,
-                finishReason: "error",
-              },
-              fetchOptions,
-            );
-          } catch (patchErr) {
-            console.error(
-              `[${requestId}] CHAT_API - Failed to mark timeout message:`,
-              patchErr,
-            );
-          }
-        }
-      }
-    };
-
-    // Fire-and-forget – do **not** await so that the HTTP handler can finish.
-    void backgroundStream();
-
-    // Prepare headers (rate-limit + thread info)
-    const responseHeaders = new Headers();
-    if (!userId) {
-      responseHeaders.set(
-        "X-RateLimit-Remaining",
-        remainingMessages.toString(),
-      );
-      responseHeaders.set("X-RateLimit-Limit", "10");
-    }
-    if (finalThreadId) {
-      responseHeaders.set("X-Thread-Id", finalThreadId);
+          // Rate limiting headers for anonymous users
+          ...(!userId && {
+            "X-RateLimit-Remaining": remainingMessages.toString(),
+            "X-RateLimit-Limit": "10",
+          }),
+        },
+      });
     }
 
+    // Use data stream for other providers (Gemini, OpenAI)
+    return result.toDataStreamResponse({
+      headers: {
+        // Performance headers for immediate streaming
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Connection: "keep-alive",
+        "Transfer-Encoding": "chunked",
+        "X-Accel-Buffering": "no", // Disable proxy buffering
+        "Content-Encoding": "none", // Prevent compression issues
+
+        // Rate limiting headers for anonymous users
+        ...(!userId && {
+          "X-RateLimit-Remaining": remainingMessages.toString(),
+          "X-RateLimit-Limit": "10",
+        }),
+      },
+    });
+  } catch (error) {
+    console.error(`[${requestId}] CHAT_API - Request failed:`, error);
     return new Response(
       JSON.stringify({
-        ok: true,
-        threadId: finalThreadId,
-        assistantMessageId: assistantDraftId,
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : "Unknown error",
       }),
       {
-        status: 202,
-        headers: {
-          "Content-Type": "application/json",
-          ...Object.fromEntries(responseHeaders.entries()),
-        },
+        status: 500,
+        headers: { "Content-Type": "application/json" },
       },
-    );
-
-    // ---------------------------------------------------------------------
-    // The legacy data-stream response below is now unreachable because we
-    // returned early. It is intentionally left in place (behind this return)
-    // to minimise diff size and can be removed in a future cleanup.
-    // ---------------------------------------------------------------------
-  } catch (error) {
-    console.error(
-      `[${requestId}] CHAT_API - Top-level error in chat API:`,
-      error,
-    );
-
-    // Handle specific error types
-    if (error instanceof Error) {
-      if (error.message.includes("Missing required environment variables")) {
-        console.error(
-          `[${requestId}] CHAT_API - Configuration error:`,
-          error.message,
-        );
-        return new Response(
-          JSON.stringify({
-            error: "AI service configuration error",
-            type: "CONFIG_ERROR",
-          }),
-          { status: 500, headers: { "Content-Type": "application/json" } },
-        );
-      }
-
-      if (
-        error.message.includes("Model") &&
-        error.message.includes("not found")
-      ) {
-        console.error(
-          `[${requestId}] CHAT_API - Invalid model error:`,
-          error.message,
-        );
-        return new Response(
-          JSON.stringify({
-            error: "Invalid model selected",
-            type: "INVALID_MODEL",
-          }),
-          { status: 400, headers: { "Content-Type": "application/json" } },
-        );
-      }
-    }
-
-    console.error(
-      `[${requestId}] CHAT_API - Unknown error, returning generic error response`,
-    );
-    return new Response(
-      JSON.stringify({
-        error: "Failed to generate response. Please try again.",
-        type: "UNKNOWN_ERROR",
-      }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
 }

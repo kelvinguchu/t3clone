@@ -162,6 +162,9 @@ export const addMessage = mutation({
     model: v.optional(v.string()),
     tokenCount: v.optional(v.number()),
     finishReason: v.optional(v.string()),
+    // Tool usage tracking
+    toolsUsed: v.optional(v.array(v.string())),
+    hasToolCalls: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     // Check thread ownership/access
@@ -219,6 +222,8 @@ export const addMessage = mutation({
       model: args.model,
       tokenCount: args.tokenCount,
       finishReason: args.finishReason,
+      toolsUsed: args.toolsUsed,
+      hasToolCalls: args.hasToolCalls,
       createdAt: now,
       updatedAt: now,
     });
@@ -520,6 +525,9 @@ export const createAnonymousMessage = mutation({
     ),
     parentId: v.optional(v.id("messages")),
     model: v.optional(v.string()),
+    // Tool usage tracking
+    toolsUsed: v.optional(v.array(v.string())),
+    hasToolCalls: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     // Validate that this is indeed an anonymous thread
@@ -548,6 +556,8 @@ export const createAnonymousMessage = mutation({
       parentId: args.parentId,
       order: maxOrder + 1,
       model: args.model,
+      toolsUsed: args.toolsUsed,
+      hasToolCalls: args.hasToolCalls,
       createdAt: now,
       updatedAt: now,
     });
@@ -589,5 +599,80 @@ export const createStreamingAssistant = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+// Remove the last assistant message (for retry functionality)
+export const removeLastAssistantMessage = mutation({
+  args: {
+    threadId: v.id("threads"),
+    sessionId: v.optional(v.string()), // For anonymous access
+  },
+  handler: async (ctx, args) => {
+    // Check thread ownership/access
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread) {
+      throw new Error("Thread not found");
+    }
+
+    const identity = await ctx.auth.getUserIdentity();
+
+    // Seamless promotion of anonymous threads once the user authenticates
+    if (
+      thread.isAnonymous &&
+      identity &&
+      (!args.sessionId || thread.sessionId === args.sessionId)
+    ) {
+      await ctx.db.patch(args.threadId, {
+        isAnonymous: false,
+        userId: identity.subject,
+        updatedAt: Date.now(),
+      });
+      thread.isAnonymous = false;
+      thread.userId = identity.subject;
+    }
+
+    // Check authorization
+    if (thread.isAnonymous) {
+      if (!args.sessionId || thread.sessionId !== args.sessionId) {
+        throw new Error("Unauthorized");
+      }
+    } else if (!identity || thread.userId !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
+    // Find the last assistant message
+    const lastAssistantMessage = await ctx.db
+      .query("messages")
+      .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+      .filter((q) => q.eq(q.field("role"), "assistant"))
+      .order("desc")
+      .first();
+
+    if (!lastAssistantMessage) {
+      throw new Error("No assistant message to remove");
+    }
+
+    // Delete the message and any associated attachments
+    await ctx.db.delete(lastAssistantMessage._id);
+
+    // Also delete any attachments for this message
+    const attachments = await ctx.db
+      .query("attachments")
+      .withIndex("by_message", (q) =>
+        q.eq("messageId", lastAssistantMessage._id),
+      )
+      .collect();
+
+    for (const attachment of attachments) {
+      await ctx.db.delete(attachment._id);
+    }
+
+    // Update thread's updatedAt timestamp
+    await ctx.db.patch(args.threadId, {
+      updatedAt: Date.now(),
+    });
+
+    return lastAssistantMessage._id;
   },
 });

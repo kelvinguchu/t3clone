@@ -3,7 +3,7 @@ import { ChatHeader } from "@/components/chat/chat-header";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import type { ReactNode } from "react";
 
-export default function ChatLayout({ children }: { children: ReactNode }) {
+export default function ChatLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <SidebarProvider>
       <ChatSidebar />

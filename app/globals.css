@@ -24,6 +24,16 @@
   --color-primary-foreground: #ffffff;
   --color-ring: var(--color-purple-600);
   
+  /* Liquid Glass Effect Variables */
+  --liquid-glass-shadow: rgba(94, 23, 235, 0.4);
+  --liquid-glass-inner-glow: rgba(185, 164, 248, 0.8);
+  --liquid-glass-tint: rgba(125, 62, 236, 0.15);
+  --liquid-glass-backdrop: rgba(94, 23, 235, 0.08);
+  --liquid-glass-text: var(--color-purple-100);
+  --liquid-glass-text-dark: var(--color-purple-200);
+  --liquid-glass-icon: var(--color-purple-200);
+  --liquid-glass-icon-dark: var(--color-purple-300);
+  
   /* Fonts */
   --font-sans: var(--font-noto-sans-mono);
   --font-mono: var(--font-noto-sans-mono);

@@ -178,7 +178,8 @@ export function Markdown({ content }: Readonly<MarkdownProps>) {
             // Typography
             p: {
               props: {
-                className: "mb-4 leading-7 text-gray-900 dark:text-gray-100",
+                className:
+                  "mb-4 leading-7 text-purple-950 dark:text-purple-100",
               },
             },
 
@@ -186,37 +187,37 @@ export function Markdown({ content }: Readonly<MarkdownProps>) {
             h1: {
               props: {
                 className:
-                  "text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100 mt-8 mb-4 first:mt-0 border-b border-gray-200 dark:border-gray-700 pb-2",
+                  "text-3xl font-bold tracking-tight text-purple-950 dark:text-purple-100 mt-8 mb-4 first:mt-0 border-b border-gray-200 dark:border-gray-700 pb-2",
               },
             },
             h2: {
               props: {
                 className:
-                  "text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100 mt-8 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2",
+                  "text-2xl font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-8 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2",
               },
             },
             h3: {
               props: {
                 className:
-                  "text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100 mt-6 mb-3",
+                  "text-xl font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-6 mb-3",
               },
             },
             h4: {
               props: {
                 className:
-                  "text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100 mt-6 mb-3",
+                  "text-lg font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-6 mb-3",
               },
             },
             h5: {
               props: {
                 className:
-                  "text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100 mt-4 mb-2",
+                  "text-base font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-4 mb-2",
               },
             },
             h6: {
               props: {
                 className:
-                  "text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-100 mt-4 mb-2",
+                  "text-sm font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-4 mb-2",
               },
             },
 
@@ -224,18 +225,18 @@ export function Markdown({ content }: Readonly<MarkdownProps>) {
             ul: {
               props: {
                 className:
-                  "mb-4 pl-6 space-y-2 list-disc marker:text-gray-400 dark:marker:text-gray-500",
+                  "mb-4 pl-6 space-y-2 list-disc marker:text-purple-400 dark:marker:text-purple-500",
               },
             },
             ol: {
               props: {
                 className:
-                  "mb-4 pl-6 space-y-2 list-decimal marker:text-gray-400 dark:marker:text-gray-500",
+                  "mb-4 pl-6 space-y-2 list-decimal marker:text-purple-400 dark:marker:text-purple-500",
               },
             },
             li: {
               props: {
-                className: "leading-7 text-gray-900 dark:text-gray-100",
+                className: "leading-7 text-purple-950 dark:text-purple-100",
               },
             },
 
@@ -243,7 +244,7 @@ export function Markdown({ content }: Readonly<MarkdownProps>) {
             blockquote: {
               props: {
                 className:
-                  "border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-2 my-4 bg-blue-50 dark:bg-blue-950/30 italic text-gray-700 dark:text-gray-300",
+                  "border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-2 my-4 bg-blue-50 dark:bg-blue-950/30 italic text-purple-900 dark:text-purple-200",
               },
             },
 
@@ -281,13 +282,13 @@ export function Markdown({ content }: Readonly<MarkdownProps>) {
             th: {
               props: {
                 className:
-                  "px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700",
+                  "px-4 py-3 text-left text-xs font-medium text-purple-900 dark:text-purple-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700",
               },
             },
             td: {
               props: {
                 className:
-                  "px-4 py-3 text-sm text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700",
+                  "px-4 py-3 text-sm text-purple-950 dark:text-purple-100 border-b border-gray-200 dark:border-gray-700",
               },
             },
 
@@ -302,12 +303,12 @@ export function Markdown({ content }: Readonly<MarkdownProps>) {
             // Strong and emphasis
             strong: {
               props: {
-                className: "font-semibold text-gray-900 dark:text-gray-100",
+                className: "font-semibold text-purple-950 dark:text-purple-100",
               },
             },
             em: {
               props: {
-                className: "italic text-gray-900 dark:text-gray-100",
+                className: "italic text-purple-950 dark:text-purple-100",
               },
             },
 

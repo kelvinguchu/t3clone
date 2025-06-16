@@ -1,11 +1,20 @@
 import type { Metadata } from "next";
-import { Noto_Sans_Mono } from "next/font/google";
-
+import Script from "next/script";
+import { Noto_Sans_Mono, Rubik} from "next/font/google";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ClerkProvider } from "@clerk/nextjs";
 import { FilePreviewProvider } from "@/lib/contexts/file-preview-context";
+import { AnonymousSessionProvider } from "@/lib/contexts/anonymous-session-context";
 
+const rubik = Rubik({
+  variable: "--font-rubik",
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
+  display: "swap",
+});
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const notoSansMono = Noto_Sans_Mono({
   variable: "--font-noto-sans-mono",
   subsets: ["latin"],
@@ -28,12 +37,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <Script src="https://unpkg.com/react-scan/dist/auto.global.js" />
+      </head>
       <body
-        className={`${notoSansMono.className} font-mono antialiased bg-purple-100 dark:bg-purple-900`}
+        className={`${rubik.className} font-mono antialiased bg-purple-100 dark:bg-purple-900`}
       >
         <ClerkProvider dynamic>
           <ConvexClientProvider>
-            <FilePreviewProvider>{children}</FilePreviewProvider>
+            <FilePreviewProvider>
+              <AnonymousSessionProvider>{children}</AnonymousSessionProvider>
+            </FilePreviewProvider>
           </ConvexClientProvider>
         </ClerkProvider>
       </body>

@@ -41,6 +41,21 @@ export default defineSchema({
     .index("by_updated", ["updatedAt"])
     .index("by_ip_hash", ["ipHash"]),
 
+  // Stream tracking for resumable streams
+  streams: defineTable({
+    chatId: v.string(), // Thread ID as string
+    streamId: v.string(), // Unique stream ID
+    status: v.union(
+      v.literal("active"),
+      v.literal("completed"),
+      v.literal("error"),
+    ),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_chat", ["chatId", "createdAt"])
+    .index("by_stream", ["streamId"]),
+
   // Individual messages within threads
   messages: defineTable({
     threadId: v.id("threads"),
@@ -61,6 +76,10 @@ export default defineSchema({
     model: v.optional(v.string()),
     tokenCount: v.optional(v.number()),
     finishReason: v.optional(v.string()),
+
+    // Tool usage tracking
+    toolsUsed: v.optional(v.array(v.string())), // Array of tool names that were called (e.g., ["duckDuckGoSearch", "webBrowse"])
+    hasToolCalls: v.optional(v.boolean()), // Quick flag to indicate if any tools were used
 
     // Duplication flag (true if message was cloned during branching)
     cloned: v.optional(v.boolean()),

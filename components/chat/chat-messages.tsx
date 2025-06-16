@@ -10,12 +10,20 @@ import {
 } from "@/components/ui/popover";
 import { getAvailableModels, getModelInfo } from "@/lib/ai-providers";
 import { ChatMessageAttachments } from "./chat-message-attachments";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { useRouter } from "next/navigation";
+import { useAnonymousSession } from "@/lib/contexts/anonymous-session-context";
+import type { Id } from "@/convex/_generated/dataModel";
 
 type DisplayMessage = {
   role: "user" | "assistant" | "system";
   content: string;
   id?: string;
   model?: string;
+  // Tool usage tracking from database
+  toolsUsed?: string[];
+  hasToolCalls?: boolean;
   attachments?: Array<{
     id: string;
     name: string;
@@ -35,24 +43,38 @@ type DisplayMessage = {
 export interface ChatMessagesProps {
   messages: DisplayMessage[];
   isLoading: boolean;
-  isBrowsing?: boolean;
+  loadingStatusText?: string | null;
+  threadId?: string | null;
+  // AI SDK reload function for retry functionality
+  reload?: () => Promise<string | undefined>;
 }
 
-// Web Browsing Indicator Component
-function WebBrowsingIndicator() {
+// Compact Loading Indicator Component
+function CompactLoadingIndicator({ text }: { text: string }) {
+  const isBrowsing = text === "Browsing...";
+
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg mb-4">
-      <div className="relative">
-        <Globe className="h-4 w-4 text-green-600 animate-spin" />
-        <div className="absolute -top-1 -right-1 h-2 w-2 bg-green-500 rounded-full animate-pulse" />
-      </div>
-      <span className="text-sm text-green-700 font-medium">
-        AI is browsing the web...
-      </span>
-      <div className="flex gap-1 ml-auto">
-        <div className="h-1 w-1 bg-green-500 rounded-full animate-pulse" />
-        <div className="h-1 w-1 bg-green-500 rounded-full animate-pulse delay-75" />
-        <div className="h-1 w-1 bg-green-500 rounded-full animate-pulse delay-150" />
+    <div className="flex justify-start mb-4">
+      <div
+        className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-xs font-medium border shadow-sm max-w-fit ${
+          isBrowsing
+            ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-600"
+            : "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-600"
+        }`}
+      >
+        {isBrowsing ? (
+          <>
+            <Globe className="h-3 w-3 text-emerald-600 animate-spin" />
+            <span className="text-emerald-700 dark:text-emerald-300">
+              {text}
+            </span>
+          </>
+        ) : (
+          <>
+            <div className="h-3 w-3 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+            <span className="text-purple-700 dark:text-purple-300">{text}</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -61,7 +83,9 @@ function WebBrowsingIndicator() {
 export function ChatMessages({
   messages,
   isLoading,
-  isBrowsing = false,
+  loadingStatusText,
+  threadId,
+  reload,
 }: ChatMessagesProps) {
   // Track which assistant message was recently copied
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -69,10 +93,19 @@ export function ChatMessages({
   // Track which branch popover is open (by message index)
   const [branchPopover, setBranchPopover] = useState<number | null>(null);
 
+  // Router for navigation
+  const router = useRouter();
+
+  // Anonymous session for authorization
+  const { sessionId } = useAnonymousSession();
+
+  // Branch thread mutation
+  const branchThread = useMutation(api.threads.branchThread);
+
   return (
+    // Root grows to fill its parent but no artificial spacer – avoids layout shift
     <div className="flex flex-col min-h-full">
-      <div className="flex-1"></div>
-      <div className="w-full max-w-4xl mx-auto space-y-4 p-6">
+      <div className="w-full max-w-4xl mx-auto space-y-4 p-6 flex-1 flex flex-col justify-end">
         {/* Render conversation messages */}
         {messages.map((msg, index) => {
           // -------------------------------------------------------------
@@ -120,9 +153,16 @@ export function ChatMessages({
             setCopiedIndex(index);
             setTimeout(() => setCopiedIndex(null), 2000);
           };
-          const handleRetry = () => {
-            if (messages[index - 1]?.role === "user") {
-              // Implement retry logic
+
+          const handleRetry = async () => {
+            // Use AI SDK's reload function for proper retry functionality
+            if (reload && messages[index - 1]?.role === "user") {
+              try {
+                await reload();
+              } catch (error) {
+                console.error("Failed to retry message:", error);
+                // Could add toast notification here
+              }
             }
           };
 
@@ -206,10 +246,34 @@ export function ChatMessages({
                               return (
                                 <button
                                   key={mId}
-                                  onClick={() => {
-                                    // Implement branch logic
+                                  onClick={async () => {
+                                    if (!threadId || !msg.id) return;
+
+                                    try {
+                                      // Call the branchThread mutation
+                                      const newThreadId = await branchThread({
+                                        sourceThreadId:
+                                          threadId as Id<"threads">,
+                                        branchFromMessageId:
+                                          msg.id as Id<"messages">,
+                                        model: mId,
+                                        ...(sessionId ? { sessionId } : {}),
+                                      });
+
+                                      // Navigate to the new branched thread
+                                      router.push(`/chat/${newThreadId}`);
+
+                                      // Close the popover
+                                      setBranchPopover(null);
+                                    } catch (error) {
+                                      console.error(
+                                        "Failed to branch thread:",
+                                        error,
+                                      );
+                                      // Could add toast notification here
+                                    }
                                   }}
-                                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/30 text-sm text-left transition-all duration-200 border border-transparent hover:border-purple-200 dark:hover:border-purple-700 group"
+                                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/30 text-sm text-left transition-all duration-200 border border-transparent hover:border-purple-200 dark:hover:border-purple-700 group cursor-pointer"
                                 >
                                   <img
                                     src={info.icon}
@@ -227,7 +291,13 @@ export function ChatMessages({
                       </Popover>
                     )}
                     <span className="ml-auto text-xs text-gray-400 select-none uppercase tracking-wide">
-                      {msg.model ?? "Model"}
+                      <div className="flex items-center gap-1">
+                        {/* Show tool usage icon if tools were used */}
+                        {msg.hasToolCalls && (
+                          <Globe className="h-3 w-3 text-emerald-500" />
+                        )}
+                        <span>{msg.model || "Model"}</span>
+                      </div>
                     </span>
                   </div>
                 )}
@@ -236,34 +306,10 @@ export function ChatMessages({
           );
         })}
 
-        {/* Web-browsing & waiting indicators */}
-        {isBrowsing && <WebBrowsingIndicator />}
-
-        {(() => {
-          // Show the classic typing dots only while waiting for the first
-          // tokens – i.e. loading, *not* browsing, and no assistant text yet.
-          const lastAssistant = [...messages]
-            .reverse()
-            .find((m) => m.role === "assistant");
-          const hasAssistantContent = lastAssistant
-            ? (lastAssistant.content ?? "").trim().length > 0
-            : false;
-          const showDots = isLoading && !isBrowsing && !hasAssistantContent;
-          if (!showDots) return null;
-          return (
-            <div className="flex justify-start mb-4">
-              <div className="max-w-[70%] p-4 rounded-2xl bg-white dark:bg-gray-800 mr-4 border border-gray-200 dark:border-gray-700">
-                <div className="flex items-center space-x-2">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-100" />
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce delay-200" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+        {/* ENHANCED LOADING INDICATORS: Compact and immediate feedback */}
+        {loadingStatusText && (
+          <CompactLoadingIndicator text={loadingStatusText} />
+        )}
       </div>
     </div>
   );

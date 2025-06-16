@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useQuery, useMutation } from "convex/react";
 import { api as convexApi } from "@/convex/_generated/api";
@@ -272,29 +272,49 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
     setMigrated(false);
   }, [sessionId]);
 
-  return {
-    // Session state
-    sessionData,
-    isAnonymous,
-    isAuthenticated,
-    isLoading,
+  const memoizedReturn = useMemo(
+    () => ({
+      // Session state
+      sessionData,
+      isAnonymous,
+      isAuthenticated,
+      isLoading,
 
-    // Rate limiting
-    canSendMessage,
-    remainingMessages,
-    messageCount,
+      // Rate limiting
+      canSendMessage,
+      remainingMessages,
+      messageCount,
 
-    // Actions
-    initializeSession,
-    refreshSession,
-    clearSession,
+      // Actions
+      initializeSession,
+      refreshSession,
+      clearSession,
 
-    // Utilities
-    formatRemainingTime: formatTimeRemaining,
-    checkCanSendMessage,
+      // Utilities
+      formatRemainingTime: formatTimeRemaining,
+      checkCanSendMessage,
 
-    // Convex integration
-    sessionId,
-    threadCount,
-  };
+      // Convex integration
+      sessionId,
+      threadCount,
+    }),
+    [
+      sessionData,
+      isAnonymous,
+      isAuthenticated,
+      isLoading,
+      canSendMessage,
+      remainingMessages,
+      messageCount,
+      initializeSession,
+      refreshSession,
+      clearSession,
+      formatTimeRemaining,
+      checkCanSendMessage,
+      sessionId,
+      threadCount,
+    ],
+  );
+
+  return memoizedReturn;
 }

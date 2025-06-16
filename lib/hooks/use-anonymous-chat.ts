@@ -3,8 +3,8 @@
 import { useState, useCallback } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useAnonymousSession } from "./use-anonymous-session";
-import { useAnonymousSessionReactive } from "./use-anonymous-session-reactive";
+import { useAnonymousSession as useAnonymousSessionKV } from "./use-anonymous-session";
+import { useAnonymousSession } from "@/lib/contexts/anonymous-session-context";
 import type { Id, Doc } from "@/convex/_generated/dataModel";
 
 // Hook return type
@@ -46,10 +46,10 @@ const WARNING_THRESHOLDS = {
 export function useAnonymousChat(): UseAnonymousChatReturn {
   // Base session hook (KV-backed) – still used for mutation helpers
   const { sessionData, isAnonymous, incrementMessageCount } =
-    useAnonymousSession();
+    useAnonymousSessionKV();
 
   // Reactive stats (Convex-backed) used for live UI updates
-  const reactiveSession = useAnonymousSessionReactive();
+  const reactiveSession = useAnonymousSession();
 
   const canSendMessage = reactiveSession.canSendMessage;
   const remainingMessages = reactiveSession.remainingMessages;

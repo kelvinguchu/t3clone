@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useAnonymousSessionReactive } from "@/lib/hooks/use-anonymous-session-reactive";
+import { useAnonymousSession } from "@/lib/contexts/anonymous-session-context";
 import { Sidebar } from "@/components/ui/sidebar";
 import type { Id, Doc } from "@/convex/_generated/dataModel";
 import { usePathname, useRouter } from "next/navigation";
@@ -18,7 +18,7 @@ export function ChatSidebar() {
     sessionData,
     sessionId,
     isLoading: anonSessionLoading,
-  } = useAnonymousSessionReactive();
+  } = useAnonymousSession();
   const [searchQuery, setSearchQuery] = useState("");
   console.log("[Sidebar] user:", user);
   console.log("[Sidebar] sessionId:", sessionId);

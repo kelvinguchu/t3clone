@@ -20,7 +20,6 @@ import {
   Clock,
   Globe,
 } from "lucide-react";
-import { useAnonymousSessionReactive } from "@/lib/hooks/use-anonymous-session-reactive";
 import { useUploadThing } from "@/lib/uploadthing";
 import { useFilePreview } from "@/lib/contexts/file-preview-context";
 import {
@@ -55,6 +54,13 @@ interface ChatInputProps {
     },
   ) => void;
   isLoading?: boolean;
+  // Session data passed from parent to avoid duplicate hook calls
+  sessionData?: {
+    isAnonymous: boolean;
+    canSendMessage: boolean;
+    remainingMessages: number;
+    messageCount: number;
+  };
 }
 
 const ChatInput = memo(function ChatInput({
@@ -63,13 +69,8 @@ const ChatInput = memo(function ChatInput({
   presetMessage = "",
   onSend,
   isLoading = false,
+  sessionData,
 }: Readonly<ChatInputProps>) {
-  console.log("[ChatInput] RENDER - Component rendered", {
-    messageLength: (presetMessage ?? "").length,
-    isLoading,
-    timestamp: new Date().toISOString(),
-  });
-
   const { isLoaded } = useUser();
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   // Store attachment IDs instead of full attachment objects for better integration with Convex
@@ -80,46 +81,79 @@ const ChatInput = memo(function ChatInput({
   const [enableWebBrowsing, setEnableWebBrowsing] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
+  // Only log on actual user interactions, not timer-based re-renders
+  // console.log("[ChatInput] RENDER - Component rendered", {
+  //   messageLength: (presetMessage ?? "").length,
+  //   isLoading,
+  //   enableWebBrowsing,
+  //   isMounted,
+  //   timestamp: new Date().toISOString(),
+  // });
+
   // Initialize web browsing state after component mounts (hydration-safe)
   useEffect(() => {
+    console.log("[ChatInput] WEB_BROWSING_MOUNT - useEffect triggered");
     setIsMounted(true);
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("enableWebBrowsing");
-      setEnableWebBrowsing(saved === "true");
+      const initialState = saved === "true";
+      setEnableWebBrowsing(initialState);
+      console.log("[ChatInput] WEB_BROWSING_INIT - Initial state loaded:", {
+        savedValue: saved,
+        initialState,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      console.log("[ChatInput] WEB_BROWSING_INIT - Window not available (SSR)");
     }
   }, []);
 
   // Persist web browsing state to localStorage
   useEffect(() => {
+    console.log(
+      "[ChatInput] WEB_BROWSING_PERSIST_EFFECT - useEffect triggered:",
+      {
+        isMounted,
+        enableWebBrowsing,
+        hasWindow: typeof window !== "undefined",
+      },
+    );
     if (isMounted && typeof window !== "undefined") {
       localStorage.setItem("enableWebBrowsing", enableWebBrowsing.toString());
+      console.log("[ChatInput] WEB_BROWSING_PERSIST - State persisted:", {
+        enableWebBrowsing,
+        timestamp: new Date().toISOString(),
+      });
     }
   }, [enableWebBrowsing, isMounted]);
 
   // Use centralized file preview context
   const { addFilePreview, removeFilePreview, fileData } = useFilePreview();
 
-  // Get current attachment previews from context
-  const attachmentPreviews = Array.from(fileData.values()).filter((file) =>
-    attachmentIds.includes(file.id),
-  );
+  // Get current attachment previews from context - memoized to prevent re-renders
+  const attachmentPreviews = useMemo(() => {
+    return Array.from(fileData.values()).filter((file) =>
+      attachmentIds.includes(file.id),
+    );
+  }, [fileData, attachmentIds]);
 
-  // Live anonymous session stats (Convex reactive) - memoized to prevent re-renders
-  const sessionStats = useAnonymousSessionReactive();
+  // Live anonymous session stats - passed from parent to avoid duplicate hook calls
   const { isAnonymous, canSendMessage, remainingMessages, messageCount } =
     useMemo(() => {
-      console.log("[ChatInput] SESSION_STATS - Memoizing session stats", {
-        isAnonymous: sessionStats.isAnonymous,
-        canSendMessage: sessionStats.canSendMessage,
-        remainingMessages: sessionStats.remainingMessages,
-        messageCount: sessionStats.messageCount,
-      });
-      return sessionStats;
+      const stats = {
+        isAnonymous: sessionData?.isAnonymous ?? false,
+        canSendMessage: sessionData?.canSendMessage ?? true,
+        remainingMessages: sessionData?.remainingMessages ?? 10,
+        messageCount: sessionData?.messageCount ?? 0,
+      };
+
+      // console.log("[ChatInput] SESSION_STATS - Memoizing session stats", stats);
+      return stats;
     }, [
-      sessionStats.isAnonymous,
-      sessionStats.canSendMessage,
-      sessionStats.remainingMessages,
-      sessionStats.messageCount,
+      sessionData?.isAnonymous,
+      sessionData?.canSendMessage,
+      sessionData?.remainingMessages,
+      sessionData?.messageCount,
     ]);
 
   // File upload hook
@@ -144,16 +178,22 @@ const ChatInput = memo(function ChatInput({
     [],
   );
 
-  // Cycling placeholder animation
+  // Local uncontrolled message state – isolated from parent re-renders
+  const [message, setMessage] = useState<string>(presetMessage || "");
+
+  // Cycling placeholder animation - only when input is empty
   useEffect(() => {
+    // Only animate when input is completely empty and no attachments
+    if (message.trim() || attachmentPreviews.length > 0) {
+      return; // No interval when user has content
+    }
+
     const interval = setInterval(() => {
       setPlaceholderIndex((prev) => (prev + 1) % placeholderTexts.length);
     }, 5000);
-    return () => clearInterval(interval);
-  }, [placeholderTexts.length]);
 
-  // Local uncontrolled message state – isolated from parent re-renders
-  const [message, setMessage] = useState<string>(presetMessage || "");
+    return () => clearInterval(interval);
+  }, [placeholderTexts.length, message, attachmentPreviews.length]);
 
   // Keep local state in sync when presetMessage changes
   useEffect(() => {
@@ -196,17 +236,27 @@ const ChatInput = memo(function ChatInput({
       return;
     }
 
-    console.log("[ChatInput] SEND_EXECUTING - Calling onSend with:", {
-      messagePreview: message.substring(0, 50) + "...",
-      enableWebBrowsing,
-      optionsObject: { enableWebBrowsing },
-    });
+    console.log(
+      "[ChatInput] WEB_BROWSING_SEND - Sending message with web browsing state:",
+      {
+        messagePreview: message.substring(0, 50) + "...",
+        enableWebBrowsing,
+        webBrowsingFromLocalStorage: localStorage.getItem("enableWebBrowsing"),
+        optionsObject: { enableWebBrowsing },
+        timestamp: new Date().toISOString(),
+      },
+    );
 
     onSend(
       message,
       attachmentIds.length > 0 ? attachmentIds : undefined,
       attachmentPreviews.length > 0 ? attachmentPreviews : undefined,
       { enableWebBrowsing },
+    );
+
+    console.log(
+      "[ChatInput] WEB_BROWSING_SENT - onSend called with enableWebBrowsing:",
+      enableWebBrowsing,
     );
 
     console.log("[ChatInput] SEND_COMPLETE - Clearing attachments");
@@ -514,7 +564,7 @@ const ChatInput = memo(function ChatInput({
             <div
               className={`flex items-center gap-2 p-3 rounded-xl bg-white dark:bg-purple-800 border-2 border-purple-300 dark:border-purple-600 shadow-lg shadow-purple-500/10 focus-within:border-purple-500 dark:focus-within:border-purple-400 focus-within:shadow-purple-500/20 transition-all duration-300 ${
                 !message.trim() && attachmentPreviews.length === 0
-                  ? "animate-pulse hover:shadow-purple-500/30"
+                  ? "hover:shadow-purple-500/30"
                   : ""
               } ${
                 isDisabled
@@ -542,7 +592,7 @@ const ChatInput = memo(function ChatInput({
                         : isRateLimited
                           ? "Message limit reached. Sign up to continue..."
                           : isLoading
-                            ? "AI is thinking..."
+                            ? "Generating..."
                             : isUploading
                               ? "Uploading files..."
                               : placeholderTexts[placeholderIndex]}
@@ -602,7 +652,18 @@ const ChatInput = memo(function ChatInput({
                       : "Enable web browsing - AI will search and browse websites when needed"
                   }
                   disabled={isDisabled}
-                  onClick={() => setEnableWebBrowsing(!enableWebBrowsing)}
+                  onClick={() => {
+                    const newState = !enableWebBrowsing;
+                    console.log(
+                      "[ChatInput] WEB_BROWSING_TOGGLE - Button clicked:",
+                      {
+                        previousState: enableWebBrowsing,
+                        newState,
+                        timestamp: new Date().toISOString(),
+                      },
+                    );
+                    setEnableWebBrowsing(newState);
+                  }}
                 >
                   <Globe
                     className={`h-3.5 w-3.5 ${enableWebBrowsing ? "animate-pulse" : ""}`}
@@ -625,121 +686,123 @@ const ChatInput = memo(function ChatInput({
             </div>
           </div>
 
-          {/* Model Selector and Status Row – hidden while generating/uploading */}
-          {!isLoading && !isUploading && (
-            <div className="flex items-center justify-between mt-2 px-1">
-              <Select
-                value={selectedModel}
-                onValueChange={onModelChange}
-                disabled={isLoading}
-              >
-                <SelectTrigger className="group w-auto min-w-48 border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-md text-xs text-purple-700 dark:text-purple-200 hover:bg-purple-50 dark:hover:bg-purple-700 hover:border-purple-400 dark:hover:border-purple-500 rounded-xl h-8 shadow-lg shadow-purple-500/10 transition-all duration-300 hover:shadow-purple-500/20 hover:scale-[1.02]">
-                  <div className="flex items-center gap-2">
-                    <div className="relative">
-                      <img
-                        src={currentModelInfo.icon}
-                        alt={currentModelInfo.name}
-                        className="h-3.5 w-3.5 transition-transform duration-300 group-hover:scale-110"
-                      />
-                      <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-400/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    </div>
-                    <span className="font-semibold tracking-wide">
-                      {currentModelInfo.name}
-                    </span>
+          {/* Model Selector and Status Row – always reserve space to prevent layout shift */}
+          <div
+            className="flex items-center justify-between mt-2 px-1"
+            style={{ minHeight: "32px" }}
+          >
+            {/* Model selector - always visible */}
+            <Select
+              value={selectedModel}
+              onValueChange={onModelChange}
+              disabled={isLoading}
+            >
+              <SelectTrigger className="group w-auto min-w-48 border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-md text-xs text-purple-700 dark:text-purple-200 hover:bg-purple-50 dark:hover:bg-purple-700 hover:border-purple-400 dark:hover:border-purple-500 rounded-xl h-8 shadow-lg shadow-purple-500/10 transition-all duration-300 hover:shadow-purple-500/20 hover:scale-[1.02]">
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <img
+                      src={currentModelInfo.icon}
+                      alt={currentModelInfo.name}
+                      className="h-3.5 w-3.5 transition-transform duration-300 group-hover:scale-110"
+                    />
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-400/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                   </div>
-                </SelectTrigger>
-                <SelectContent className="border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-xl shadow-2xl shadow-purple-500/25 rounded-xl p-1">
-                  {availableModels.map((modelId) => {
-                    const modelInfo = getModelInfo(modelId);
-                    return (
-                      <SelectItem
-                        key={modelId}
-                        value={modelId}
-                        className={`rounded-lg hover:bg-purple-50 dark:hover:bg-purple-700 transition-all duration-200 hover:scale-[1.02] focus:bg-gradient-to-r ${
-                          modelInfo.theme === "blue"
-                            ? "focus:from-blue-500/10 focus:to-blue-600/10"
-                            : modelInfo.theme === "green"
-                              ? "focus:from-green-500/10 focus:to-green-600/10"
-                              : "focus:from-orange-500/10 focus:to-orange-600/10"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 py-1">
-                          <div className="relative">
-                            <img
-                              src={modelInfo.icon}
-                              alt={modelInfo.name}
-                              className="h-4 w-4"
-                            />
-                            <div
-                              className={`absolute -inset-1 rounded-full blur-sm opacity-60 ${
-                                modelInfo.theme === "blue"
-                                  ? "bg-blue-400/20"
-                                  : modelInfo.theme === "green"
-                                    ? "bg-green-400/20"
-                                    : "bg-orange-400/20"
-                              }`}
-                            ></div>
-                          </div>
-                          <div className="flex-1">
-                            <span className="font-medium">
-                              {modelInfo.name}
-                            </span>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              {modelInfo.description}
-                            </p>
-                          </div>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-
-              <div className="flex items-center gap-2 text-xs text-purple-600/60 dark:text-purple-400/60">
-                {/* Web Browsing Status Indicator */}
-                {enableWebBrowsing && (
-                  <div className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400">
-                    <span className="flex items-center gap-1 font-medium">
-                      <Globe className="h-3 w-3 animate-pulse" />
-                      Web browsing active
-                    </span>
-                  </div>
-                )}
-
-                {/* Anonymous User Message Counter */}
-                {isAnonymous && isLoaded && (
-                  <div
-                    className={`px-2 py-1 rounded-lg backdrop-blur-md border transition-all duration-200 ${
-                      warningLevel?.color === "red"
-                        ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-600 text-red-700 dark:text-red-400"
-                        : warningLevel?.color === "orange"
-                          ? "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-600 text-orange-700 dark:text-orange-400"
-                          : warningLevel?.color === "yellow"
-                            ? "bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-600 text-yellow-700 dark:text-yellow-400"
-                            : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-600 text-green-700 dark:text-green-400"
-                    }`}
-                  >
-                    <span className="font-medium">
-                      {remainingMessages}/10 messages
-                    </span>
-                  </div>
-                )}
-
-                <div className="px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-800 backdrop-blur-md border border-purple-200 dark:border-purple-600">
-                  <span className="flex items-center gap-1">
-                    <kbd className="px-1 py-0.5 rounded text-[10px] bg-purple-100 dark:bg-purple-700 text-purple-700 dark:text-purple-200">
-                      ↵
-                    </kbd>
-                    {isLoading
-                      ? "generating..."
-                      : isUploading
-                        ? "uploading..."
-                        : "to send"}
+                  <span className="font-semibold tracking-wide">
+                    {currentModelInfo.name}
                   </span>
                 </div>
+              </SelectTrigger>
+              <SelectContent className="border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-xl shadow-2xl shadow-purple-500/25 rounded-xl p-1">
+                {availableModels.map((modelId) => {
+                  const modelInfo = getModelInfo(modelId);
+                  return (
+                    <SelectItem
+                      key={modelId}
+                      value={modelId}
+                      className={`rounded-lg hover:bg-purple-50 dark:hover:bg-purple-700 transition-all duration-200 hover:scale-[1.02] focus:bg-gradient-to-r ${
+                        modelInfo.theme === "blue"
+                          ? "focus:from-blue-500/10 focus:to-blue-600/10"
+                          : modelInfo.theme === "green"
+                            ? "focus:from-green-500/10 focus:to-green-600/10"
+                            : "focus:from-orange-500/10 focus:to-orange-600/10"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 py-1">
+                        <div className="relative">
+                          <img
+                            src={modelInfo.icon}
+                            alt={modelInfo.name}
+                            className="h-4 w-4"
+                          />
+                          <div
+                            className={`absolute -inset-1 rounded-full blur-sm opacity-60 ${
+                              modelInfo.theme === "blue"
+                                ? "bg-blue-400/20"
+                                : modelInfo.theme === "green"
+                                  ? "bg-green-400/20"
+                                  : "bg-orange-400/20"
+                            }`}
+                          ></div>
+                        </div>
+                        <div className="flex-1">
+                          <span className="font-medium">{modelInfo.name}</span>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {modelInfo.description}
+                          </p>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+
+            {/* Status indicators - conditionally visible */}
+            <div className="flex items-center gap-2 text-xs text-purple-600/60 dark:text-purple-400/60">
+              {/* Web Browsing Status Indicator */}
+              {enableWebBrowsing && (
+                <div className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400">
+                  <span className="flex items-center gap-1 font-medium">
+                    <Globe className="h-3 w-3 animate-pulse" />
+                    Web browsing active
+                  </span>
+                </div>
+              )}
+
+              {/* Anonymous User Message Counter - only show when not loading */}
+              {!isLoading && !isUploading && isAnonymous && isLoaded && (
+                <div
+                  className={`px-2 py-1 rounded-lg backdrop-blur-md border transition-all duration-200 ${
+                    warningLevel?.color === "red"
+                      ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-600 text-red-700 dark:text-red-400"
+                      : warningLevel?.color === "orange"
+                        ? "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-600 text-orange-700 dark:text-orange-400"
+                        : warningLevel?.color === "yellow"
+                          ? "bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-600 text-yellow-700 dark:text-yellow-400"
+                          : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-600 text-green-700 dark:text-green-400"
+                  }`}
+                >
+                  <span className="font-medium">
+                    {remainingMessages}/10 messages
+                  </span>
+                </div>
+              )}
+
+              {/* Send status indicator - always visible */}
+              <div className="px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-800 backdrop-blur-md border border-purple-200 dark:border-purple-600">
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1 py-0.5 rounded text-[10px] bg-purple-100 dark:bg-purple-700 text-purple-700 dark:text-purple-200">
+                    ↵
+                  </kbd>
+                  {isLoading
+                    ? "generating"
+                    : isUploading
+                      ? "uploading"
+                      : "to send"}
+                </span>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </>
