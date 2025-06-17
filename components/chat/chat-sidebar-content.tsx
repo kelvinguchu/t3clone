@@ -7,7 +7,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
-import { ScrollArea } from "@/components/ui/scroll-area";
+// import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -93,26 +93,26 @@ export function ChatSidebarContent({
     return (
       <SidebarMenuItem
         key={thread._id}
-        className="relative overflow-visible"
+        className="relative"
         onMouseEnter={() => setHoveredThread(String(thread._id))}
         onMouseLeave={() => setHoveredThread(null)}
       >
-        <Link href={threadUrl} prefetch={true} onClick={handleThreadClick}>
-          <SidebarMenuButton
-            isActive={isActive}
-            className={`w-full justify-start text-left p-2 transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer relative ${
-              isActive
-                ? "bg-purple-200 dark:bg-purple-800 text-purple-900 dark:text-purple-100 border-l-4 border-purple-600 dark:border-purple-400"
-                : "hover:bg-purple-50 dark:hover:bg-purple-900/50"
-            }`}
-            onMouseEnter={() => handleThreadHover(String(thread._id))}
-          >
-            <div className="flex items-center gap-3 w-full min-w-0">
-              {thread.parentThreadId && (
-                <GitBranch className="h-4 w-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <div
+        <div className="relative group w-full">
+          <Link href={threadUrl} prefetch={true} onClick={handleThreadClick}>
+            <SidebarMenuButton
+              isActive={isActive}
+              className={`h-8 text-sm w-full justify-start text-left p-2 pr-10 transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer ${
+                isActive
+                  ? "bg-purple-200 dark:bg-purple-800 text-purple-900 dark:text-purple-100 border-l-4 border-purple-600 dark:border-purple-400"
+                  : "hover:bg-purple-50 dark:hover:bg-purple-900/50"
+              }`}
+              onMouseEnter={() => handleThreadHover(String(thread._id))}
+            >
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {thread.parentThreadId && (
+                  <GitBranch className="h-3 w-3 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                )}
+                <span
                   className={`font-medium text-sm truncate ${
                     isActive
                       ? "text-purple-900 dark:text-purple-100 font-semibold"
@@ -120,55 +120,59 @@ export function ChatSidebarContent({
                   }`}
                 >
                   {cleanTitle}
-                </div>
+                </span>
               </div>
-            </div>
-          </SidebarMenuButton>
-        </Link>
+            </SidebarMenuButton>
+          </Link>
 
-        {/* Overlay action button positioned absolutely on the right */}
-        <div
-          className={`absolute right-1 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${
-            isHovered ? "opacity-100" : "opacity-0"
-          }`}
-          style={{ zIndex: 50 }}
-        >
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 w-5 p-0 bg-purple-600 hover:bg-purple-700 text-white rounded-md cursor-pointer shadow-sm border border-purple-300 dark:border-purple-700"
-                onClick={(e) => e.stopPropagation()}
+          {/* Action button positioned absolutely within the button area */}
+          <div
+            className={`absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center transition-opacity duration-200 ${
+              isHovered ? "opacity-100" : "opacity-0"
+            }`}
+            style={{ zIndex: 10 }}
+          >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 bg-purple-600 hover:bg-purple-700 text-white rounded-md cursor-pointer shadow-sm border border-purple-300 dark:border-purple-700 flex items-center justify-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreVertical className="h-3 w-3" />
+                  <span className="sr-only">Thread actions</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-48 bg-purple-50 dark:bg-purple-900 border border-purple-200 dark:border-purple-700 shadow-lg backdrop-blur-sm"
+                sideOffset={8}
               >
-                <MoreVertical className="h-3 w-3" />
-                <span className="sr-only">Thread actions</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem className="gap-2 cursor-pointer">
-                <PenSquare className="h-4 w-4" />
-                Rename
-              </DropdownMenuItem>
-              <DropdownMenuItem className="gap-2 cursor-pointer">
-                <ExternalLink className="h-4 w-4" />
-                Share
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="gap-2 text-destructive cursor-pointer">
-                <Trash2 className="h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuItem className="gap-2 cursor-pointer whitespace-nowrap text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800 focus:bg-purple-100 dark:focus:bg-purple-800">
+                  <PenSquare className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Rename</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2 cursor-pointer whitespace-nowrap text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800 focus:bg-purple-100 dark:focus:bg-purple-800">
+                  <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Share</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="gap-2 text-red-600 dark:text-red-400 cursor-pointer whitespace-nowrap hover:bg-red-50 dark:hover:bg-red-900/20 focus:bg-red-50 dark:focus:bg-red-900/20">
+                  <Trash2 className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Delete</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </SidebarMenuItem>
     );
   };
 
   return (
-    <SidebarContent className="px-4">
-      <ScrollArea className="flex-1">
+    <SidebarContent className="px-3">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {threadsLoading ? (
           // Show loading while data loads
           <div className="space-y-4">
@@ -292,34 +296,34 @@ export function ChatSidebarContent({
                     return (
                       <SidebarMenuItem
                         key={thread._id}
-                        className="relative overflow-visible"
+                        className="relative"
                         onMouseEnter={() =>
                           setHoveredThread(String(thread._id))
                         }
                         onMouseLeave={() => setHoveredThread(null)}
                       >
-                        <Link
-                          href={threadUrl}
-                          prefetch={true}
-                          onClick={handleThreadClick}
-                        >
-                          <SidebarMenuButton
-                            isActive={isActive}
-                            className={`w-full justify-start text-left p-2 transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer relative ${
-                              isActive
-                                ? "bg-purple-200 dark:bg-purple-800 text-purple-900 dark:text-purple-100 border-l-4 border-purple-600 dark:border-purple-400"
-                                : "hover:bg-purple-50 dark:hover:bg-purple-900/50"
-                            }`}
-                            onMouseEnter={() =>
-                              handleThreadHover(String(thread._id))
-                            }
+                        <div className="relative group w-full">
+                          <Link
+                            href={threadUrl}
+                            prefetch={true}
+                            onClick={handleThreadClick}
                           >
-                            <div className="flex items-center gap-3 w-full min-w-0">
-                              {thread.parentThreadId && (
-                                <GitBranch className="h-4 w-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div
+                            <SidebarMenuButton
+                              isActive={isActive}
+                              className={`h-8 text-sm w-full justify-start text-left p-2 pr-10 transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer ${
+                                isActive
+                                  ? "bg-purple-200 dark:bg-purple-800 text-purple-900 dark:text-purple-100 border-l-4 border-purple-600 dark:border-purple-400"
+                                  : "hover:bg-purple-50 dark:hover:bg-purple-900/50"
+                              }`}
+                              onMouseEnter={() =>
+                                handleThreadHover(String(thread._id))
+                              }
+                            >
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                {thread.parentThreadId && (
+                                  <GitBranch className="h-3 w-3 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                                )}
+                                <span
                                   className={`font-medium text-sm truncate ${
                                     isActive
                                       ? "text-purple-900 dark:text-purple-100 font-semibold"
@@ -327,49 +331,55 @@ export function ChatSidebarContent({
                                   }`}
                                 >
                                   {olderCleanTitle}
-                                </div>
+                                </span>
                               </div>
-                            </div>
-                          </SidebarMenuButton>
-                        </Link>
+                            </SidebarMenuButton>
+                          </Link>
 
-                        {/* Overlay action button positioned absolutely on the right */}
-                        <div
-                          className={`absolute right-1 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${
-                            hoveredThread === String(thread._id)
-                              ? "opacity-100"
-                              : "opacity-0"
-                          }`}
-                          style={{ zIndex: 50 }}
-                        >
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-5 w-5 p-0 bg-purple-600 hover:bg-purple-700 text-white rounded-md cursor-pointer shadow-sm border border-purple-300 dark:border-purple-700"
-                                onClick={(e) => e.stopPropagation()}
+                          {/* Action button positioned absolutely within the button area */}
+                          <div
+                            className={`absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center transition-opacity duration-200 ${
+                              hoveredThread === String(thread._id)
+                                ? "opacity-100"
+                                : "opacity-0"
+                            }`}
+                            style={{ zIndex: 10 }}
+                          >
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 bg-purple-600 hover:bg-purple-700 text-white rounded-md cursor-pointer shadow-sm border border-purple-300 dark:border-purple-700 flex items-center justify-center"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MoreVertical className="h-3 w-3" />
+                                  <span className="sr-only">
+                                    Thread actions
+                                  </span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="end"
+                                className="w-48 bg-purple-50 dark:bg-purple-900 border border-purple-200 dark:border-purple-700 shadow-lg backdrop-blur-sm"
+                                sideOffset={8}
                               >
-                                <MoreVertical className="h-3 w-3" />
-                                <span className="sr-only">Thread actions</span>
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
-                              <DropdownMenuItem className="gap-2 cursor-pointer">
-                                <PenSquare className="h-4 w-4" />
-                                Rename
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2 cursor-pointer">
-                                <ExternalLink className="h-4 w-4" />
-                                Share
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem className="gap-2 text-destructive cursor-pointer">
-                                <Trash2 className="h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                                <DropdownMenuItem className="gap-2 cursor-pointer whitespace-nowrap text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800 focus:bg-purple-100 dark:focus:bg-purple-800">
+                                  <PenSquare className="h-4 w-4 flex-shrink-0" />
+                                  <span className="truncate">Rename</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2 cursor-pointer whitespace-nowrap text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800 focus:bg-purple-100 dark:focus:bg-purple-800">
+                                  <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                                  <span className="truncate">Share</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="gap-2 text-red-600 dark:text-red-400 cursor-pointer whitespace-nowrap hover:bg-red-50 dark:hover:bg-red-900/20 focus:bg-red-50 dark:focus:bg-red-900/20">
+                                  <Trash2 className="h-4 w-4 flex-shrink-0" />
+                                  <span className="truncate">Delete</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
                       </SidebarMenuItem>
                     );
@@ -416,7 +426,7 @@ export function ChatSidebarContent({
               )}
           </div>
         )}
-      </ScrollArea>
+      </div>
     </SidebarContent>
   );
 }

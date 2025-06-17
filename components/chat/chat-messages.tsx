@@ -145,7 +145,7 @@ export function ChatMessages({
   return (
     // Root grows to fill its parent but no artificial spacer – avoids layout shift
     <div className="flex flex-col min-h-full">
-      <div className="w-full max-w-4xl mx-auto space-y-3 sm:space-y-4 p-3 sm:p-4 md:p-6 flex-1 flex flex-col justify-end">
+      <div className="w-full max-w-4xl mx-auto space-y-3 sm:space-y-4 p-3 sm:p-4 flex-1">
         {/* Render conversation messages */}
         {messages.map((msg, index) => {
           // -------------------------------------------------------------

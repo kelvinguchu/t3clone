@@ -50,7 +50,7 @@ export const FilePreview = memo(
     }
 
     return (
-      <div className="mx-auto w-[90%] px-3 py-2 border-x-2 border-purple-300 dark:border-purple-700 bg-gradient-to-r from-purple-50/90 to-blue-50/90 dark:from-purple-950/30 dark:to-blue-950/30">
+      <div className="mx-auto w-full sm:w-[95%] md:w-[90%] lg:w-[80%] px-3 py-2 border-x-2 border-purple-300 dark:border-purple-700 bg-gradient-to-r from-purple-50/90 to-blue-50/90 dark:from-purple-950/30 dark:to-blue-950/30">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-medium text-purple-700 dark:text-purple-300">
             {files.length} file{files.length > 1 ? "s" : ""} attached

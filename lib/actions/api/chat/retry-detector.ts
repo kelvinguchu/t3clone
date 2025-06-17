@@ -51,24 +51,41 @@ export async function detectRetryOperation(
       fetchOptions,
     );
 
-    // Simple check: if this exact user message already exists, don't save it again
-    const messageExists = existingMessages.some((msg) => {
-      return msg.role === "user" && msg.content === lastUserMessage!.content;
-    });
+    // FIXED: Check if this is the LAST user message that's being retried
+    // Only consider it a retry if the most recent user message matches exactly
+    const lastUserMessageInDB = existingMessages
+      .filter((msg) => msg.role === "user")
+      .pop(); // Get the most recent user message
 
-    if (messageExists) {
+    const isRetry =
+      lastUserMessageInDB &&
+      lastUserMessageInDB.content === lastUserMessage!.content;
+
+    if (isRetry) {
       console.log(
-        `${logPrefix} CHAT_API - User message already exists in database, skipping save`,
+        `${logPrefix} CHAT_API - Last user message matches, this is a retry operation`,
         {
           messageContent: lastUserMessage.content.substring(0, 100) + "...",
+          existingMessagesCount: existingMessages.length,
+          lastUserMessageInDB:
+            lastUserMessageInDB.content.substring(0, 100) + "...",
+        },
+      );
+    } else {
+      console.log(
+        `${logPrefix} CHAT_API - New user message, will save to database`,
+        {
+          newMessageContent: lastUserMessage.content.substring(0, 100) + "...",
+          lastDBUserMessage:
+            lastUserMessageInDB?.content.substring(0, 100) + "..." || "none",
           existingMessagesCount: existingMessages.length,
         },
       );
     }
 
     return {
-      isRetryOperation: messageExists,
-      shouldSaveUserMessage: !messageExists,
+      isRetryOperation: isRetry || false,
+      shouldSaveUserMessage: !isRetry,
     };
   } catch (error) {
     const errorMessage =

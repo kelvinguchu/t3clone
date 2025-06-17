@@ -52,6 +52,7 @@ import {
   getFloatingElementColors,
 } from "@/lib/actions/chat/chat-area/model-theme-manager";
 import { useModelStore } from "@/lib/stores/model-store";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type DisplayMessage = {
   role: "user" | "assistant" | "system";
@@ -122,6 +123,7 @@ const ChatArea = memo(function ChatArea({
   const router = useRouter();
   const { user } = useUser();
   const { open: sidebarOpen } = useSidebar();
+  const isMobile = useIsMobile();
 
   // Use Zustand store for model selection
   const { selectedModel, setSelectedModel } = useModelStore();
@@ -482,19 +484,7 @@ const ChatArea = memo(function ChatArea({
     useScrollManager({ displayMessages, isLoading });
 
   // Track chat input height for dynamic scroll button positioning
-  const [inputHeight, setInputHeight] = useState(140); // Default minimum height
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Detect mobile vs desktop for scroll button positioning
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
+  const [inputHeight, setInputHeight] = useState(140);
 
   // Cache assistant messages when streaming completes
   useAssistantMessageCaching({
@@ -519,6 +509,7 @@ const ChatArea = memo(function ChatArea({
       {/* Scrollable Messages Area - Account for fixed mobile header */}
       <div
         className="flex-1 overflow-y-auto min-h-0 pt-12 md:pt-0"
+        style={{ paddingBottom: `${Math.max(inputHeight * 0.2, 8)}px` }}
         ref={messagesContainerRef}
       >
         {hasMessages ? (
@@ -565,41 +556,41 @@ const ChatArea = memo(function ChatArea({
 
       {/* Fixed Chat Input at Bottom - Account for mobile positioning */}
       <div className="flex-shrink-0 pb-safe">
-        <div className="min-h-[140px] md:min-h-[140px] flex flex-col justify-end">
-          <ChatInput
-            presetMessage={prefillMessage}
-            onSend={handleSend}
-            isLoading={isLoading}
-            sessionData={{
-              isAnonymous,
-              canSendMessage,
-              remainingMessages,
-              messageCount,
-            }}
-            onHeightChange={setInputHeight}
-          />
-        </div>
+        <ChatInput
+          presetMessage={prefillMessage}
+          onSend={handleSend}
+          isLoading={isLoading}
+          sessionData={{
+            isAnonymous,
+            canSendMessage,
+            remainingMessages,
+            messageCount,
+          }}
+          onHeightChange={setInputHeight}
+        />
       </div>
 
-      {/* Scroll-to-bottom button - TRUE overlay positioned relative to entire ChatArea */}
+      {/* Scroll-to-bottom button - Positioned to center within chat input area */}
       <div
-        className={`absolute left-1/2 transform -translate-x-1/2 z-40 transition-all duration-300 ${
+        className={`fixed left-0 right-0 md:absolute md:left-0 md:right-0 z-55 transition-all duration-300 ${
           showScrollButton
             ? "opacity-100 translate-y-0"
             : "opacity-0 translate-y-2 pointer-events-none"
         }`}
         style={{
-          // Use fixed positioning on mobile to avoid dynamic height issues, dynamic on desktop
-          bottom: isMobile ? "200px" : `${inputHeight + 20}px`,
+          // Responsive spacing: closer on mobile (8px), more space on desktop (12px)
+          bottom: `${inputHeight + (isMobile ? 8 : 12)}px`,
         }}
       >
-        <LiquidGlassButton
-          onClick={scrollToBottom}
-          transparency={10}
-          noise={50}
-        >
-          Scroll to bottom
-        </LiquidGlassButton>
+        <div className="flex justify-center">
+          <LiquidGlassButton
+            onClick={scrollToBottom}
+            transparency={10}
+            noise={50}
+          >
+            Scroll to bottom
+          </LiquidGlassButton>
+        </div>
       </div>
     </div>
   );

@@ -6,7 +6,7 @@ export interface ScrollManagerState {
   isSmoothScrolling: boolean;
   showScrollButton: boolean;
   scrollToBottom: () => void;
-  messagesContainerRef: React.RefObject<HTMLDivElement>;
+  messagesContainerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export interface ScrollManagerParams {
@@ -54,7 +54,7 @@ export function useScrollManager(
     const handleScroll = () => {
       const { scrollTop, clientHeight, scrollHeight } = el;
       // Increase threshold to prevent flickering near bottom
-      const atBottom = scrollTop + clientHeight >= scrollHeight - 100; // 100px threshold
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 20; // 20px threshold for quicker detection
 
       // Debounce scroll detection to prevent rapid state changes
       clearTimeout(scrollTimeout);

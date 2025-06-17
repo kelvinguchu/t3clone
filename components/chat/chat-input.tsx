@@ -190,6 +190,65 @@ const ChatInput = memo(function ChatInput({
     }
   }, []);
 
+  // localStorage utilities for file attachments
+  const getDraftAttachments = useCallback(
+    (
+      key: string,
+    ): Array<{
+      id: string;
+      name: string;
+      contentType: string;
+      url: string;
+      size: number;
+    }> => {
+      if (typeof window === "undefined") return [];
+      try {
+        const saved = localStorage.getItem(`chat-attachments-${key}`);
+        return saved ? JSON.parse(saved) : [];
+      } catch {
+        return [];
+      }
+    },
+    [],
+  );
+
+  const saveDraftAttachments = useCallback(
+    (
+      key: string,
+      attachments: Array<{
+        id: string;
+        name: string;
+        contentType: string;
+        url: string;
+        size: number;
+      }>,
+    ) => {
+      if (typeof window === "undefined") return;
+      try {
+        if (attachments.length > 0) {
+          localStorage.setItem(
+            `chat-attachments-${key}`,
+            JSON.stringify(attachments),
+          );
+        } else {
+          localStorage.removeItem(`chat-attachments-${key}`);
+        }
+      } catch {
+        // Silently fail if localStorage is not available
+      }
+    },
+    [],
+  );
+
+  const clearDraftAttachments = useCallback((key: string) => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.removeItem(`chat-attachments-${key}`);
+    } catch {
+      // Silently fail if localStorage is not available
+    }
+  }, []);
+
   // Local uncontrolled message state – isolated from parent re-renders
   const [message, setMessage] = useState<string>("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -227,18 +286,37 @@ const ChatInput = memo(function ChatInput({
     }
   }, [onHeightChange]);
 
-  // Load draft message when thread changes
+  // Load draft message and attachments when thread changes
   useEffect(() => {
     if (typeof window !== "undefined") {
       const draftMessage = getDraftMessage(currentThreadKey);
+      const draftAttachments = getDraftAttachments(currentThreadKey);
+
       // Only set draft if there's no preset message
       if (!presetMessage) {
         setMessage(draftMessage);
         // Auto-resize after setting draft message
         setTimeout(autoResize, 0);
       }
+
+      // Restore draft attachments
+      if (draftAttachments.length > 0) {
+        // Add each attachment to file preview context
+        draftAttachments.forEach((attachment) => {
+          addFilePreview(attachment);
+        });
+        // Set attachment IDs
+        setAttachmentIds(draftAttachments.map((att) => att.id));
+      }
     }
-  }, [currentThreadKey, getDraftMessage, autoResize, presetMessage]);
+  }, [
+    currentThreadKey,
+    getDraftMessage,
+    getDraftAttachments,
+    autoResize,
+    presetMessage,
+    addFilePreview,
+  ]);
 
   // Keep local state in sync when presetMessage changes (takes priority over draft)
   useEffect(() => {
@@ -260,6 +338,15 @@ const ChatInput = memo(function ChatInput({
 
     return () => clearTimeout(timeoutId);
   }, [message, currentThreadKey, saveDraftMessage, presetMessage]);
+
+  // Save draft attachments whenever attachments change (debounced)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      saveDraftAttachments(currentThreadKey, attachmentPreviews);
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [attachmentPreviews, currentThreadKey, saveDraftAttachments]);
 
   // Auto-resize when message changes
   useEffect(() => {
@@ -294,9 +381,10 @@ const ChatInput = memo(function ChatInput({
     // Clear attachments from context
     attachmentIds.forEach((id) => removeFilePreview(id));
     setAttachmentIds([]);
-    // Clear message and draft
+    // Clear message and drafts
     setMessage("");
     clearDraftMessage(currentThreadKey);
+    clearDraftAttachments(currentThreadKey);
   }, [
     message,
     attachmentIds,
@@ -478,74 +566,87 @@ const ChatInput = memo(function ChatInput({
   return (
     <>
       {/* Rate Limiting Warning for Anonymous Users */}
-      {isMounted && isAnonymous && isLoaded && warningLevel && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className={`mx-auto w-full sm:w-[95%] md:w-[90%] px-3 sm:px-4 py-2 border-x-2 ${
-            warningLevel.color === "red"
-              ? "bg-red-50/90 dark:bg-red-950/30 border-red-300 dark:border-red-700"
-              : warningLevel.color === "orange"
-                ? "bg-orange-50/90 dark:bg-orange-950/30 border-orange-300 dark:border-orange-700"
-                : "bg-yellow-50/90 dark:bg-yellow-950/30 border-yellow-300 dark:border-yellow-700"
-          }`}
-        >
-          <div className="flex items-center gap-2 text-xs sm:text-sm">
-            <AlertTriangle
-              className={`h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0 ${
-                warningLevel.color === "red"
-                  ? "text-red-600 dark:text-red-400"
-                  : warningLevel.color === "orange"
-                    ? "text-orange-600 dark:text-orange-400"
-                    : "text-yellow-600 dark:text-yellow-400"
-              }`}
-            />
-            <span
-              className={`font-medium ${
-                warningLevel.color === "red"
-                  ? "text-red-800 dark:text-red-200"
-                  : warningLevel.color === "orange"
-                    ? "text-orange-800 dark:text-orange-200"
-                    : "text-yellow-800 dark:text-yellow-200"
-              }`}
-            >
-              {warningLevel.level === "critical"
-                ? `Only ${remainingMessages} messages left! Sign up for unlimited access.`
-                : warningLevel.level === "warning"
-                  ? `${remainingMessages} messages remaining. Consider signing up.`
-                  : `${remainingMessages} of 10 messages remaining.`}
-            </span>
-          </div>
-        </motion.div>
-      )}
+      {isMounted &&
+        isAnonymous &&
+        isLoaded &&
+        warningLevel &&
+        warningLevel.color &&
+        warningLevel.level &&
+        typeof remainingMessages === "number" &&
+        remainingMessages >= 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className={`mx-auto w-full sm:w-[95%] md:w-[90%] px-3 sm:px-4 py-2 border-x-2 ${
+              warningLevel.color === "red"
+                ? "bg-red-50/90 dark:bg-red-950/30 border-red-300 dark:border-red-700"
+                : warningLevel.color === "orange"
+                  ? "bg-orange-50/90 dark:bg-orange-950/30 border-orange-300 dark:border-orange-700"
+                  : "bg-yellow-50/90 dark:bg-yellow-950/30 border-yellow-300 dark:border-yellow-700"
+            }`}
+          >
+            <div className="flex items-center gap-2 text-xs sm:text-sm">
+              <AlertTriangle
+                className={`h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0 ${
+                  warningLevel.color === "red"
+                    ? "text-red-600 dark:text-red-400"
+                    : warningLevel.color === "orange"
+                      ? "text-orange-600 dark:text-orange-400"
+                      : "text-yellow-600 dark:text-yellow-400"
+                }`}
+              />
+              <span
+                className={`font-medium ${
+                  warningLevel.color === "red"
+                    ? "text-red-800 dark:text-red-200"
+                    : warningLevel.color === "orange"
+                      ? "text-orange-800 dark:text-orange-200"
+                      : "text-yellow-800 dark:text-yellow-200"
+                }`}
+              >
+                {warningLevel.level === "critical"
+                  ? `Only ${remainingMessages} messages left! Sign up for unlimited access.`
+                  : warningLevel.level === "warning"
+                    ? `${remainingMessages} messages remaining. Consider signing up.`
+                    : `${remainingMessages} of 10 messages remaining.`}
+              </span>
+            </div>
+          </motion.div>
+        )}
 
       {/* Rate Limit Exceeded Warning */}
-      {isMounted && isRateLimited && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mx-auto w-full sm:w-[95%] md:w-[90%] px-3 sm:px-4 py-3 border-x-2 bg-red-50/90 dark:bg-red-950/30 border-red-300 dark:border-red-700"
-        >
-          <div className="flex items-center gap-2 text-xs sm:text-sm">
-            <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-red-600 dark:text-red-400 flex-shrink-0" />
-            <span className="font-medium text-red-800 dark:text-red-200">
-              Message limit reached! Sign up to continue chatting or wait 24
-              hours for reset.
-            </span>
-          </div>
-        </motion.div>
-      )}
+      {isMounted &&
+        isAnonymous &&
+        isLoaded &&
+        isRateLimited &&
+        !canSendMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mx-auto w-full sm:w-[95%] md:w-[90%] px-3 sm:px-4 py-3 border-x-2 bg-red-50/90 dark:bg-red-950/30 border-red-300 dark:border-red-700"
+          >
+            <div className="flex items-center gap-2 text-xs sm:text-sm">
+              <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+              <span className="font-medium text-red-800 dark:text-red-200">
+                Message limit reached! Sign up to continue chatting or wait 24
+                hours for reset.
+              </span>
+            </div>
+          </motion.div>
+        )}
 
       {/* File Attachments Preview */}
-      <FilePreview files={attachmentPreviews} onRemove={removeAttachment} />
+      {attachmentPreviews.length > 0 && (
+        <FilePreview files={attachmentPreviews} onRemove={removeAttachment} />
+      )}
 
       {/* Clean Chat Input Area */}
       <div
         ref={inputContainerRef}
         className="fixed bottom-0 left-0 right-0 md:relative md:bottom-auto md:left-auto md:right-auto bg-purple-50/30 dark:bg-purple-950/30 z-50"
       >
-        <div className="mx-auto w-full sm:w-[95%] md:w-[90%] lg:w-[80%] p-2 sm:p-3 md:p-4 border-t-2 border-l-2 border-r-2 border-purple-300 dark:border-purple-700 rounded-t-xl bg-purple-100/90 dark:bg-purple-900/90">
+        <div className="mx-auto w-full sm:w-[95%] md:w-[90%] lg:w-[80%] p-2 sm:p-2 md:p-3 border-t-2 border-l-2 border-r-2 border-purple-300 dark:border-purple-700 rounded-t-xl bg-purple-100/90 dark:bg-purple-900/90">
           {/* Hidden file input */}
           <input
             ref={fileInputRef}

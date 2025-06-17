@@ -29,7 +29,7 @@ export async function generateThreadTitle(
 
   try {
     // Use AI to generate a smart title
-    const model = getModel("gemini-2.0-flash"); // Default model
+    const model = getModel("llama3-70b-8192");
 
     const result = await generateText({
       model,

@@ -82,22 +82,14 @@ export async function POST(req: NextRequest) {
     } = data!;
 
     // ----------------------------------------------------
-    // OPTIMIZATION: Detect retry operations and load conversation from Convex
-    // instead of accepting full conversation history from client
+    // OPTIMIZATION: Only load conversation from Convex for actual retry operations
+    // New messages should use client messages to ensure proper processing
     // ----------------------------------------------------
     let messagesForAI = messages;
-    let isRetryOperation = false;
-    
-    // Check if this is a retry operation (thread exists + multiple messages sent)
-    if (threadId && messages.length > 1) {
-      console.log(
-        `[${requestId}] CHAT_API - Potential retry detected, loading conversation from Convex`,
-        {
-          threadId,
-          clientMessagesCount: messages.length,
-        }
-      );
+    let isRetryFromConvex = false;
 
+    // Only check for Convex history if this might be a retry AND we have an existing thread
+    if (threadId && messages.length > 1) {
       try {
         // Load the actual conversation history from Convex
         const existingMessages = await fetchQuery(
@@ -106,43 +98,69 @@ export async function POST(req: NextRequest) {
           fetchOptions,
         );
 
-        // Convert Convex messages to AI SDK format
-        const convexMessagesForAI = existingMessages.map((msg) => ({
-          role: msg.role as "user" | "assistant" | "system",
-          content: msg.content,
-          // Include tool information if available
-          ...(msg.toolsUsed && msg.toolsUsed.length > 0 && {
-            toolInvocations: msg.toolsUsed.map((tool) => ({
-              toolCallId: `tool-${msg._id}-${tool}`,
-              toolName: tool,
-              state: "result" as const,
-              args: {},
-              result: "Tool execution completed",
-            })),
-          }),
-        }));
+        if (existingMessages.length > 0) {
+          // Check if this is actually a retry by comparing the last user message
+          const lastUserMessageFromClient = messages
+            .filter((msg) => msg.role === "user")
+            .pop();
 
-        // Check if we have existing conversation
-        if (convexMessagesForAI.length > 0) {
-          console.log(
-            `[${requestId}] CHAT_API - Using Convex conversation history`,
-            {
-              convexMessagesCount: convexMessagesForAI.length,
-              lastMessageRole: convexMessagesForAI[convexMessagesForAI.length - 1]?.role,
-            }
-          );
+          const lastUserMessageFromDB = existingMessages
+            .filter((msg) => msg.role === "user")
+            .pop();
 
-          // Use Convex messages as the source of truth
-          messagesForAI = convexMessagesForAI;
-          isRetryOperation = true;
+          // Only use Convex history if the last user messages match exactly (indicating a retry)
+          const isActualRetry =
+            lastUserMessageFromClient &&
+            lastUserMessageFromDB &&
+            lastUserMessageFromClient.content === lastUserMessageFromDB.content;
 
-          // For retry operations, we don't need to add a new user message
-          // The conversation history already contains what we need
+          if (isActualRetry) {
+            console.log(
+              `[${requestId}] CHAT_API - Confirmed retry operation, using Convex history`,
+              {
+                threadId,
+                clientMessagesCount: messages.length,
+                convexMessagesCount: existingMessages.length,
+                lastUserMessage:
+                  lastUserMessageFromClient.content.substring(0, 100) + "...",
+              },
+            );
+
+            // Convert Convex messages to AI SDK format
+            messagesForAI = existingMessages.map((msg) => ({
+              role: msg.role as "user" | "assistant" | "system",
+              content: msg.content,
+              // Include tool information if available
+              ...(msg.toolsUsed &&
+                msg.toolsUsed.length > 0 && {
+                  toolInvocations: msg.toolsUsed.map((tool) => ({
+                    toolCallId: `tool-${msg._id}-${tool}`,
+                    toolName: tool,
+                    state: "result" as const,
+                    args: {},
+                    result: "Tool execution completed",
+                  })),
+                }),
+            }));
+
+            isRetryFromConvex = true;
+          } else {
+            console.log(
+              `[${requestId}] CHAT_API - New message detected, using client messages`,
+              {
+                threadId,
+                clientLastUser:
+                  lastUserMessageFromClient?.content.substring(0, 100) + "...",
+                dbLastUser:
+                  lastUserMessageFromDB?.content.substring(0, 100) + "...",
+              },
+            );
+          }
         }
       } catch (error) {
         console.warn(
           `[${requestId}] CHAT_API - Failed to load conversation from Convex, using client messages`,
-          error
+          error,
         );
         // Fall back to using client messages if Convex load fails
       }
@@ -167,7 +185,7 @@ export async function POST(req: NextRequest) {
     remainingMessages = rateLimitResult.remainingMessages;
 
     // Process multimodal messages if needed (only for new messages, not retries)
-    if (!isRetryOperation) {
+    if (!isRetryFromConvex) {
       messagesForAI = await processMultimodalMessages(
         messagesForAI,
         attachmentIds,
@@ -280,9 +298,9 @@ export async function POST(req: NextRequest) {
           try {
             // For retry operations, we never save user messages (they already exist)
             // For new conversations, we check and save as needed
-            let shouldSaveUserMessage = !isRetryOperation;
+            let shouldSaveUserMessage = !isRetryFromConvex;
 
-            if (!isRetryOperation) {
+            if (!isRetryFromConvex) {
               // Check if this is a retry operation and whether to save user message
               const retryResult = await detectRetryOperation(
                 messages,
@@ -293,19 +311,16 @@ export async function POST(req: NextRequest) {
               shouldSaveUserMessage = retryResult.shouldSaveUserMessage;
 
               // Debug logging for retry detection
-              console.log(
-                `[${requestId}] CHAT_API - Retry detection result:`,
-                {
-                  isRetryOperation: retryResult.isRetryOperation,
-                  shouldSaveUserMessage,
-                  messagesCount: messages.length,
-                  lastMessageRole: messages[messages.length - 1]?.role,
-                  threadId: finalThreadId,
-                }
-              );
+              console.log(`[${requestId}] CHAT_API - Retry detection result:`, {
+                isRetryOperation: retryResult.isRetryOperation,
+                shouldSaveUserMessage,
+                messagesCount: messages.length,
+                lastMessageRole: messages[messages.length - 1]?.role,
+                threadId: finalThreadId,
+              });
             } else {
               console.log(
-                `[${requestId}] CHAT_API - Retry operation detected via Convex history, skipping user message save`
+                `[${requestId}] CHAT_API - Retry operation detected via Convex history, skipping user message save`,
               );
             }
 
