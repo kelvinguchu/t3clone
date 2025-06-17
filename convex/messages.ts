@@ -157,6 +157,7 @@ export const addMessage = mutation({
       v.literal("system"),
     ),
     content: v.string(),
+    reasoning: v.optional(v.string()), // Reasoning/thinking tokens from AI models
     sessionId: v.optional(v.string()), // For anonymous access
     parentId: v.optional(v.id("messages")),
     model: v.optional(v.string()),
@@ -217,6 +218,7 @@ export const addMessage = mutation({
       threadId: args.threadId,
       role: args.role,
       content: args.content,
+      reasoning: args.reasoning,
       parentId: args.parentId,
       order: maxOrder + 1,
       model: args.model,
@@ -242,6 +244,7 @@ export const updateMessage = mutation({
   args: {
     messageId: v.id("messages"),
     content: v.string(),
+    reasoning: v.optional(v.string()), // Reasoning/thinking tokens from AI models
     sessionId: v.optional(v.string()), // For anonymous access
     isStreaming: v.optional(v.boolean()),
     tokenCount: v.optional(v.number()),
@@ -291,6 +294,7 @@ export const updateMessage = mutation({
       isStreaming?: boolean;
       tokenCount?: number;
       finishReason?: string;
+      reasoning?: string;
     } = {
       content: args.content,
       updatedAt: Date.now(),
@@ -300,6 +304,7 @@ export const updateMessage = mutation({
     if (args.tokenCount !== undefined) updates.tokenCount = args.tokenCount;
     if (args.finishReason !== undefined)
       updates.finishReason = args.finishReason;
+    if (args.reasoning !== undefined) updates.reasoning = args.reasoning;
 
     await ctx.db.patch(args.messageId, updates);
 
@@ -519,6 +524,7 @@ export const createAnonymousMessage = mutation({
   args: {
     threadId: v.id("threads"),
     content: v.string(),
+    reasoning: v.optional(v.string()), // Reasoning/thinking tokens from AI models
     sessionId: v.string(),
     role: v.optional(
       v.union(v.literal("user"), v.literal("assistant"), v.literal("system")),
@@ -553,6 +559,7 @@ export const createAnonymousMessage = mutation({
       threadId: args.threadId,
       role: args.role ?? "user",
       content: args.content,
+      reasoning: args.reasoning,
       parentId: args.parentId,
       order: maxOrder + 1,
       model: args.model,

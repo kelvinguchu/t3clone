@@ -2,6 +2,7 @@ import { groq } from "@ai-sdk/groq";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
 import type { LanguageModelV1 } from "ai";
+// Note: extractReasoningMiddleware not needed for Groq - they have native reasoning support
 import {
   getPageContentTool,
   duckDuckGoSearchTool,
@@ -28,6 +29,30 @@ export const AI_MODELS = {
     theme: "orange",
   },
 
+  "deepseek-r1-distill-llama-70b": {
+    provider: "groq",
+    model: groq("deepseek-r1-distill-llama-70b"),
+    displayName: "DeepSeek R1 Distill Llama 70B",
+    description: "Fast model with thinking tokens by DeepSeek via Groq",
+    maxTokens: 32768,
+    costPer1kTokens: { input: 0.05, output: 0.08 },
+    capabilities: ["text", "chat", "tools", "reasoning"],
+    icon: "/brand-icons/deepseek.svg",
+    theme: "blue",
+  },
+
+  "qwen/qwen3-32b": {
+    provider: "groq",
+    model: groq("qwen/qwen3-32b"),
+    displayName: "Qwen 3 32B",
+    description: "Advanced reasoning model by Qwen via Groq",
+    maxTokens: 32768,
+    costPer1kTokens: { input: 0.05, output: 0.08 },
+    capabilities: ["text", "chat", "tools", "reasoning"],
+    icon: "/brand-icons/qwen.svg",
+    theme: "purple",
+  },
+
   // Google Gemini models
   "gemini-2.0-flash": {
     provider: "google",
@@ -39,6 +64,25 @@ export const AI_MODELS = {
     capabilities: ["text", "chat", "vision", "multimodal", "tools"],
     icon: "/brand-icons/gemini.svg",
     theme: "blue",
+  },
+
+  "gemini-2.0-flash-preview-image-generation": {
+    provider: "google",
+    model: google("gemini-2.0-flash-preview-image-generation"),
+    displayName: "Gemini 2.0 Flash Image Gen",
+    description: "Google's image generation model",
+    maxTokens: 1000000,
+    costPer1kTokens: { input: 0.075, output: 0.3 },
+    capabilities: [
+      "text",
+      "chat",
+      "vision",
+      "multimodal",
+      "tools",
+      "image-generation",
+    ],
+    icon: "/brand-icons/gemini.svg",
+    theme: "purple",
   },
 
   // OpenAI models
@@ -69,18 +113,28 @@ export interface ModelConfig {
     input: number;
     output: number;
   };
-  capabilities: readonly string[];
+  capabilities: readonly (
+    | "text"
+    | "chat"
+    | "vision"
+    | "multimodal"
+    | "tools"
+    | "image-generation"
+    | "reasoning"
+  )[];
   icon: string;
   theme: string;
 }
 
-// Provider factory function - returns the configured model
+// Enhanced model factory function - Groq has native reasoning support, no middleware needed
 export function getModel(modelId: ModelId): LanguageModelV1 {
   const config = AI_MODELS[modelId];
   if (!config) {
     throw new Error(`Model ${modelId} not found`);
   }
 
+  // Groq reasoning models have native support via providerOptions, no middleware needed
+  // Only use extractReasoningMiddleware for third-party providers that output raw <think> tags
   return config.model;
 }
 
@@ -130,15 +184,6 @@ export function getModelTools(modelId: ModelId) {
   if (!providerConfig.supportsToolCalls) {
     return undefined;
   }
-
-  // Diagnostic logging – helps verify why tools may not be returned
-  console.log("[getModelTools] diagnostics", {
-    modelId,
-    provider: config.provider,
-    supportsToolCalls: providerConfig.supportsToolCalls,
-    browserbaseApiKeyPresent: !!process.env.BROWSERBASE_API_KEY,
-    browserbaseProjectIdPresent: !!process.env.BROWSERBASE_PROJECT_ID,
-  });
 
   // Check if Browserbase is configured
   const hasBrowserbaseConfig =

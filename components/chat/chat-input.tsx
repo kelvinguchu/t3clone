@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
 import { useUser } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 import {
   Select,
@@ -12,14 +12,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { motion, AnimatePresence } from "motion/react";
-import {
-  Paperclip,
-  Send,
-  Image,
-  AlertTriangle,
-  Clock,
-  Globe,
-} from "lucide-react";
+import { Paperclip, AlertTriangle, Clock, Globe, Send } from "lucide-react";
 import { useUploadThing } from "@/lib/uploadthing";
 import { useFilePreview } from "@/lib/contexts/file-preview-context";
 import {
@@ -28,10 +21,9 @@ import {
   type ModelId,
 } from "@/lib/ai-providers";
 import { FilePreview } from "./file-preview";
+import { useModelStore } from "@/lib/stores/model-store";
 
 interface ChatInputProps {
-  selectedModel: ModelId;
-  onModelChange: (model: ModelId) => void;
   /**
    * Optional preset message coming from the parent (e.g. quick-prompt). When
    * this value changes we overwrite the local message state once but we do
@@ -64,14 +56,15 @@ interface ChatInputProps {
 }
 
 const ChatInput = memo(function ChatInput({
-  selectedModel,
-  onModelChange,
   presetMessage = "",
   onSend,
   isLoading = false,
   sessionData,
 }: Readonly<ChatInputProps>) {
   const { isLoaded } = useUser();
+
+  // Use Zustand store for model selection
+  const { selectedModel, setSelectedModel } = useModelStore();
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   // Store attachment IDs instead of full attachment objects for better integration with Convex
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
@@ -81,49 +74,20 @@ const ChatInput = memo(function ChatInput({
   const [enableWebBrowsing, setEnableWebBrowsing] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Only log on actual user interactions, not timer-based re-renders
-  // console.log("[ChatInput] RENDER - Component rendered", {
-  //   messageLength: (presetMessage ?? "").length,
-  //   isLoading,
-  //   enableWebBrowsing,
-  //   isMounted,
-  //   timestamp: new Date().toISOString(),
-  // });
-
   // Initialize web browsing state after component mounts (hydration-safe)
   useEffect(() => {
-    console.log("[ChatInput] WEB_BROWSING_MOUNT - useEffect triggered");
     setIsMounted(true);
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("enableWebBrowsing");
       const initialState = saved === "true";
       setEnableWebBrowsing(initialState);
-      console.log("[ChatInput] WEB_BROWSING_INIT - Initial state loaded:", {
-        savedValue: saved,
-        initialState,
-        timestamp: new Date().toISOString(),
-      });
-    } else {
-      console.log("[ChatInput] WEB_BROWSING_INIT - Window not available (SSR)");
     }
   }, []);
 
   // Persist web browsing state to localStorage
   useEffect(() => {
-    console.log(
-      "[ChatInput] WEB_BROWSING_PERSIST_EFFECT - useEffect triggered:",
-      {
-        isMounted,
-        enableWebBrowsing,
-        hasWindow: typeof window !== "undefined",
-      },
-    );
     if (isMounted && typeof window !== "undefined") {
       localStorage.setItem("enableWebBrowsing", enableWebBrowsing.toString());
-      console.log("[ChatInput] WEB_BROWSING_PERSIST - State persisted:", {
-        enableWebBrowsing,
-        timestamp: new Date().toISOString(),
-      });
     }
   }, [enableWebBrowsing, isMounted]);
 
@@ -147,7 +111,6 @@ const ChatInput = memo(function ChatInput({
         messageCount: sessionData?.messageCount ?? 0,
       };
 
-      // console.log("[ChatInput] SESSION_STATS - Memoizing session stats", stats);
       return stats;
     }, [
       sessionData?.isAnonymous,
@@ -174,12 +137,14 @@ const ChatInput = memo(function ChatInput({
       "Let's explore ideas together...",
       "Type your message here...",
       "Ready to chat?",
+      "Press Enter to send, Shift+Enter for new line...",
     ],
     [],
   );
 
   // Local uncontrolled message state – isolated from parent re-renders
   const [message, setMessage] = useState<string>(presetMessage || "");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Cycling placeholder animation - only when input is empty
   useEffect(() => {
@@ -195,57 +160,43 @@ const ChatInput = memo(function ChatInput({
     return () => clearInterval(interval);
   }, [placeholderTexts.length, message, attachmentPreviews.length]);
 
+  // Auto-resize function
+  const autoResize = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      const newHeight = Math.min(textarea.scrollHeight, 120); // Max height of 120px (about 5 lines)
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, []);
+
   // Keep local state in sync when presetMessage changes
   useEffect(() => {
     if (presetMessage) {
       setMessage(presetMessage);
+      // Auto-resize after setting preset message
+      setTimeout(autoResize, 0);
     }
-  }, [presetMessage]);
+  }, [presetMessage, autoResize]);
+
+  // Auto-resize when message changes
+  useEffect(() => {
+    autoResize();
+  }, [message, autoResize]);
 
   const handleSend = useCallback(() => {
-    console.log("[ChatInput] SEND_CLICKED - Send button clicked", {
-      messageLength: message.trim().length,
-      attachmentIdsCount: attachmentIds.length,
-      attachmentPreviewsCount: attachmentPreviews.length,
-      isLoading,
-      isUploading,
-      isAnonymous,
-      canSendMessage,
-      timestamp: new Date().toISOString(),
-    });
-
     if (
       (!message.trim() && attachmentIds.length === 0) ||
       isLoading ||
       isUploading
     ) {
-      console.log("[ChatInput] SEND_BLOCKED - Send blocked:", {
-        reason:
-          !message.trim() && attachmentIds.length === 0
-            ? "no_content"
-            : isLoading
-              ? "loading"
-              : "uploading",
-      });
       return;
     }
 
     // Check rate limits for anonymous users
     if (isAnonymous && !canSendMessage) {
-      console.log("[ChatInput] SEND_BLOCKED - Rate limited");
       return;
     }
-
-    console.log(
-      "[ChatInput] WEB_BROWSING_SEND - Sending message with web browsing state:",
-      {
-        messagePreview: message.substring(0, 50) + "...",
-        enableWebBrowsing,
-        webBrowsingFromLocalStorage: localStorage.getItem("enableWebBrowsing"),
-        optionsObject: { enableWebBrowsing },
-        timestamp: new Date().toISOString(),
-      },
-    );
 
     onSend(
       message,
@@ -253,13 +204,6 @@ const ChatInput = memo(function ChatInput({
       attachmentPreviews.length > 0 ? attachmentPreviews : undefined,
       { enableWebBrowsing },
     );
-
-    console.log(
-      "[ChatInput] WEB_BROWSING_SENT - onSend called with enableWebBrowsing:",
-      enableWebBrowsing,
-    );
-
-    console.log("[ChatInput] SEND_COMPLETE - Clearing attachments");
     // Clear attachments from context
     attachmentIds.forEach((id) => removeFilePreview(id));
     setAttachmentIds([]);
@@ -293,10 +237,6 @@ const ChatInput = memo(function ChatInput({
   const handleFileSelect = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.target.files || []);
-      console.log("[ChatInput] FILE_SELECT - Files selected:", {
-        fileCount: files.length,
-        files: files.map((f) => ({ name: f.name, size: f.size, type: f.type })),
-      });
 
       if (files.length === 0) return;
 
@@ -310,17 +250,10 @@ const ChatInput = memo(function ChatInput({
       });
 
       if (supportedFiles.length !== files.length) {
-        console.log("[ChatInput] FILE_SELECT - Some files filtered out:", {
-          originalCount: files.length,
-          supportedCount: supportedFiles.length,
-        });
         alert("Only images, PDFs, and text files are supported.");
       }
 
       if (supportedFiles.length > 0) {
-        console.log(
-          "[ChatInput] FILE_SELECT - Creating immediate previews for supported files",
-        );
         // Immediately show preview with loading state
         const immediatePreview = supportedFiles.map((file) => ({
           id: `temp-${Date.now()}-${Math.random()}`,
@@ -336,8 +269,6 @@ const ChatInput = memo(function ChatInput({
           addFilePreview(preview);
           setAttachmentIds((prev) => [...prev, preview.id]);
         });
-
-        console.log("[ChatInput] FILE_SELECT - Starting upload for files");
         // Start upload and handle the promise
         startUpload(supportedFiles)
           .then((uploadedFiles) => {
@@ -355,19 +286,6 @@ const ChatInput = memo(function ChatInput({
               attachmentId?: string | null;
             }>;
 
-            console.log(
-              "[ChatInput] UPLOAD_COMPLETE - Files uploaded successfully",
-              {
-                fileCount: files.length,
-                files: files.map((f) => ({
-                  name: f.name,
-                  size: f.size,
-                  key: f.key,
-                  url: f.url,
-                })),
-              },
-            );
-
             // Store attachment IDs
             const newAttachmentIds: string[] = [];
 
@@ -384,15 +302,6 @@ const ChatInput = memo(function ChatInput({
                 file.serverData?.attachmentId || // Preferred (UploadThing server response)
                 file.attachmentId || // Backwards-compatibility fallback
                 null;
-
-              console.log(
-                "[ChatInput] UPLOAD_COMPLETE - Processing uploaded file:",
-                {
-                  name: file.name,
-                  attachmentId: resolvedAttachmentId,
-                  url: file.url,
-                },
-              );
 
               // Ignore file if the server did not return a Convex attachmentId
               if (!resolvedAttachmentId) {
@@ -417,11 +326,6 @@ const ChatInput = memo(function ChatInput({
               addFilePreview(finalFileData);
               newAttachmentIds.push(resolvedAttachmentId);
             });
-
-            console.log(
-              "[ChatInput] UPLOAD_COMPLETE - New attachment IDs:",
-              newAttachmentIds,
-            );
             setAttachmentIds((prev) => [...prev, ...newAttachmentIds]);
             if (fileInputRef.current) {
               fileInputRef.current.value = "";
@@ -442,16 +346,11 @@ const ChatInput = memo(function ChatInput({
           });
       }
     },
-    [startUpload],
+    [startUpload, addFilePreview, removeFilePreview],
   );
 
   const removeAttachment = useCallback(
     (index: number) => {
-      console.log(
-        "[ChatInput] ATTACHMENT_REMOVE - Removing attachment at index:",
-        index,
-      );
-
       // Get the file ID at the specified index
       const fileId = attachmentIds[index];
       if (fileId) {
@@ -480,6 +379,10 @@ const ChatInput = memo(function ChatInput({
 
   const isRateLimited = isAnonymous && !canSendMessage;
   const isDisabled = isLoading || isRateLimited;
+  const canSend =
+    (message.trim() || attachmentPreviews.length > 0) &&
+    !isDisabled &&
+    !isUploading;
 
   return (
     <>
@@ -548,7 +451,7 @@ const ChatInput = memo(function ChatInput({
 
       {/* Clean Chat Input Area */}
       <div className="relative bg-purple-50/30 dark:bg-purple-950/30">
-        <div className="mx-auto w-[90%] p-4 border-t-2 border-l-2 border-r-2 border-purple-300 dark:border-purple-700 rounded-t-xl bg-purple-100/90 dark:bg-purple-900/90">
+        <div className="mx-auto w-[80%] p-4 border-t-2 border-l-2 border-r-2 border-purple-300 dark:border-purple-700 rounded-t-xl bg-purple-100/90 dark:bg-purple-900/90">
           {/* Hidden file input */}
           <input
             ref={fileInputRef}
@@ -562,7 +465,7 @@ const ChatInput = memo(function ChatInput({
           {/* Main Input Container */}
           <div className="relative">
             <div
-              className={`flex items-center gap-2 p-3 rounded-xl bg-white dark:bg-purple-800 border-2 border-purple-300 dark:border-purple-600 shadow-lg shadow-purple-500/10 focus-within:border-purple-500 dark:focus-within:border-purple-400 focus-within:shadow-purple-500/20 transition-all duration-300 ${
+              className={`p-2 rounded-xl bg-white dark:bg-purple-800 border-2 border-purple-300 dark:border-purple-600 shadow-lg shadow-purple-500/10 focus-within:border-purple-500 dark:focus-within:border-purple-400 focus-within:shadow-purple-500/20 transition-all duration-300 ${
                 !message.trim() && attachmentPreviews.length === 0
                   ? "hover:shadow-purple-500/30"
                   : ""
@@ -572,37 +475,39 @@ const ChatInput = memo(function ChatInput({
                   : ""
               }`}
             >
-              <div className="flex-1 relative">
+              {/* Textarea Container */}
+              <div className="relative min-h-[24px]">
                 {/* Animated Placeholder */}
-                <div className="absolute inset-0 flex items-center pointer-events-none">
-                  <AnimatePresence mode="wait">
-                    <motion.span
-                      key={placeholderIndex}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{
-                        duration: 0.5,
-                        ease: "easeInOut",
-                      }}
-                      className="text-sm text-purple-700 dark:text-purple-300 font-medium ml-3"
-                    >
-                      {message.trim() || attachmentPreviews.length > 0
-                        ? ""
-                        : isRateLimited
+                {!message.trim() && attachmentPreviews.length === 0 && (
+                  <div className="absolute top-0 left-0 pointer-events-none">
+                    <AnimatePresence mode="wait">
+                      <motion.span
+                        key={placeholderIndex}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{
+                          duration: 0.5,
+                          ease: "easeInOut",
+                        }}
+                        className="text-sm text-purple-700 dark:text-purple-300 font-medium"
+                      >
+                        {isRateLimited
                           ? "Message limit reached. Sign up to continue..."
                           : isLoading
                             ? "Generating..."
                             : isUploading
                               ? "Uploading files..."
                               : placeholderTexts[placeholderIndex]}
-                    </motion.span>
-                  </AnimatePresence>
-                </div>
+                      </motion.span>
+                    </AnimatePresence>
+                  </div>
+                )}
 
-                <Input
+                <Textarea
+                  ref={textareaRef}
                   placeholder=""
-                  className="border-none shadow-none bg-transparent focus-visible:ring-0 text-sm placeholder:text-transparent resize-none min-h-[20px] font-medium transition-all duration-500 relative z-10 text-purple-900 dark:text-purple-100"
+                  className="border-none shadow-none bg-transparent focus-visible:ring-0 text-sm placeholder:text-transparent resize-none min-h-[24px] font-medium transition-all duration-200 w-full text-purple-900 dark:text-purple-100 p-0 overflow-y-auto"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={(e) => {
@@ -610,198 +515,145 @@ const ChatInput = memo(function ChatInput({
                       e.preventDefault();
                       handleSend();
                     }
+                    // Allow Shift+Enter for new lines (default behavior)
                   }}
                   disabled={isDisabled}
+                  rows={1}
+                  style={{
+                    height: "auto",
+                    minHeight: "24px",
+                    maxHeight: "120px",
+                  }}
                 />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center gap-1.5">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-purple-600 hover:text-purple-700 hover:bg-purple-100 dark:hover:bg-purple-700 rounded-lg"
-                  title="Attach file"
-                  disabled={isDisabled}
-                  onClick={() => triggerFileSelect("application/pdf,text/*")}
-                >
-                  <Paperclip className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg"
-                  title="Upload image"
-                  disabled={isDisabled}
-                  onClick={() => triggerFileSelect("image/*")}
-                >
-                  <Image className="h-3.5 w-3.5" />
-                </Button>
-
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className={`h-7 w-7 rounded-lg transition-all duration-200 ${
-                    enableWebBrowsing
-                      ? "text-emerald-600 hover:text-emerald-700 bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-800/40 ring-2 ring-emerald-300 dark:ring-emerald-600"
-                      : "text-gray-600 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
-                  }`}
-                  title={
-                    enableWebBrowsing
-                      ? "Web browsing enabled (persistent) - AI will browse the web for information"
-                      : "Enable web browsing - AI will search and browse websites when needed"
-                  }
-                  disabled={isDisabled}
-                  onClick={() => {
-                    const newState = !enableWebBrowsing;
-                    console.log(
-                      "[ChatInput] WEB_BROWSING_TOGGLE - Button clicked:",
-                      {
-                        previousState: enableWebBrowsing,
-                        newState,
-                        timestamp: new Date().toISOString(),
-                      },
-                    );
-                    setEnableWebBrowsing(newState);
-                  }}
-                >
-                  <Globe
-                    className={`h-3.5 w-3.5 ${enableWebBrowsing ? "animate-pulse" : ""}`}
-                  />
-                </Button>
-
-                <Button
-                  onClick={handleSend}
-                  disabled={
-                    (!message.trim() && attachmentPreviews.length === 0) ||
-                    isDisabled ||
-                    isUploading
-                  }
-                  size="icon"
-                  className="h-7 w-7 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-lg shadow-purple-500/25 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                </Button>
               </div>
             </div>
           </div>
 
-          {/* Model Selector and Status Row – always reserve space to prevent layout shift */}
-          <div
-            className="flex items-center justify-between mt-2 px-1"
-            style={{ minHeight: "32px" }}
-          >
-            {/* Model selector - always visible */}
-            <Select
-              value={selectedModel}
-              onValueChange={onModelChange}
-              disabled={isLoading}
-            >
-              <SelectTrigger className="group w-auto min-w-48 border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-md text-xs text-purple-700 dark:text-purple-200 hover:bg-purple-50 dark:hover:bg-purple-700 hover:border-purple-400 dark:hover:border-purple-500 rounded-xl h-8 shadow-lg shadow-purple-500/10 transition-all duration-300 hover:shadow-purple-500/20 hover:scale-[1.02]">
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <img
-                      src={currentModelInfo.icon}
-                      alt={currentModelInfo.name}
-                      className="h-3.5 w-3.5 transition-transform duration-300 group-hover:scale-110"
-                    />
-                    <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-400/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          {/* Bottom Row: Model Selector and Action Buttons */}
+          <div className="flex items-center justify-between mt-3 px-1">
+            {/* Left side: Model selector and action buttons */}
+            <div className="flex items-center gap-2">
+              <Select
+                value={selectedModel}
+                onValueChange={(newModel) => {
+                  setSelectedModel(newModel as ModelId);
+                }}
+                disabled={isLoading}
+              >
+                <SelectTrigger className="group w-auto min-w-48 border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-md text-xs text-purple-700 dark:text-purple-200 hover:bg-purple-50 dark:hover:bg-purple-700 hover:border-purple-400 dark:hover:border-purple-500 rounded-xl h-8 shadow-lg shadow-purple-500/10 transition-all duration-300 hover:shadow-purple-500/20 hover:scale-[1.02]">
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <img
+                        src={currentModelInfo.icon}
+                        alt={currentModelInfo.name}
+                        className="h-3.5 w-3.5 transition-transform duration-300 group-hover:scale-110"
+                      />
+                      <div className="absolute inset-0 rounded-full bg-gradient-to-r from-purple-400/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    </div>
+                    <span className="font-semibold tracking-wide">
+                      {currentModelInfo.name}
+                    </span>
                   </div>
-                  <span className="font-semibold tracking-wide">
-                    {currentModelInfo.name}
-                  </span>
-                </div>
-              </SelectTrigger>
-              <SelectContent className="border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-xl shadow-2xl shadow-purple-500/25 rounded-xl p-1">
-                {availableModels.map((modelId) => {
-                  const modelInfo = getModelInfo(modelId);
-                  return (
-                    <SelectItem
-                      key={modelId}
-                      value={modelId}
-                      className={`rounded-lg hover:bg-purple-50 dark:hover:bg-purple-700 transition-all duration-200 hover:scale-[1.02] focus:bg-gradient-to-r ${
-                        modelInfo.theme === "blue"
-                          ? "focus:from-blue-500/10 focus:to-blue-600/10"
-                          : modelInfo.theme === "green"
-                            ? "focus:from-green-500/10 focus:to-green-600/10"
-                            : "focus:from-orange-500/10 focus:to-orange-600/10"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 py-1">
-                        <div className="relative">
-                          <img
-                            src={modelInfo.icon}
-                            alt={modelInfo.name}
-                            className="h-4 w-4"
-                          />
-                          <div
-                            className={`absolute -inset-1 rounded-full blur-sm opacity-60 ${
-                              modelInfo.theme === "blue"
-                                ? "bg-blue-400/20"
-                                : modelInfo.theme === "green"
-                                  ? "bg-green-400/20"
-                                  : "bg-orange-400/20"
-                            }`}
-                          ></div>
+                </SelectTrigger>
+                <SelectContent className="border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-xl shadow-2xl shadow-purple-500/25 rounded-xl p-1">
+                  {availableModels.map((modelId) => {
+                    const modelInfo = getModelInfo(modelId);
+                    return (
+                      <SelectItem
+                        key={modelId}
+                        value={modelId}
+                        className={`rounded-lg hover:bg-purple-50 dark:hover:bg-purple-700 transition-all duration-200 hover:scale-[1.02] focus:bg-gradient-to-r ${
+                          modelInfo.theme === "blue"
+                            ? "focus:from-blue-500/10 focus:to-blue-600/10"
+                            : modelInfo.theme === "green"
+                              ? "focus:from-green-500/10 focus:to-green-600/10"
+                              : "focus:from-orange-500/10 focus:to-orange-600/10"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 py-1">
+                          <div className="relative">
+                            <img
+                              src={modelInfo.icon}
+                              alt={modelInfo.name}
+                              className="h-4 w-4"
+                            />
+                            <div
+                              className={`absolute -inset-1 rounded-full blur-sm opacity-60 ${
+                                modelInfo.theme === "blue"
+                                  ? "bg-blue-400/20"
+                                  : modelInfo.theme === "green"
+                                    ? "bg-green-400/20"
+                                    : "bg-orange-400/20"
+                              }`}
+                            ></div>
+                          </div>
+                          <div className="flex-1">
+                            <span className="font-medium">
+                              {modelInfo.name}
+                            </span>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {modelInfo.description}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <span className="font-medium">{modelInfo.name}</span>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {modelInfo.description}
-                          </p>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
 
-            {/* Status indicators - conditionally visible */}
-            <div className="flex items-center gap-2 text-xs text-purple-600/60 dark:text-purple-400/60">
-              {/* Web Browsing Status Indicator */}
-              {enableWebBrowsing && (
-                <div className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-600 text-emerald-700 dark:text-emerald-400">
-                  <span className="flex items-center gap-1 font-medium">
-                    <Globe className="h-3 w-3 animate-pulse" />
-                    Web browsing active
-                  </span>
-                </div>
-              )}
+              {/* Action Buttons */}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-purple-600 hover:text-purple-700 hover:bg-purple-100 dark:hover:bg-purple-700 rounded-lg"
+                title="Attach files (images, PDFs, text)"
+                disabled={isDisabled}
+                onClick={() =>
+                  triggerFileSelect("image/*,application/pdf,text/*")
+                }
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+              </Button>
 
-              {/* Anonymous User Message Counter - only show when not loading */}
-              {!isLoading && !isUploading && isAnonymous && isLoaded && (
-                <div
-                  className={`px-2 py-1 rounded-lg backdrop-blur-md border transition-all duration-200 ${
-                    warningLevel?.color === "red"
-                      ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-600 text-red-700 dark:text-red-400"
-                      : warningLevel?.color === "orange"
-                        ? "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-600 text-orange-700 dark:text-orange-400"
-                        : warningLevel?.color === "yellow"
-                          ? "bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-600 text-yellow-700 dark:text-yellow-400"
-                          : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-600 text-green-700 dark:text-green-400"
-                  }`}
-                >
-                  <span className="font-medium">
-                    {remainingMessages}/10 messages
-                  </span>
-                </div>
-              )}
-
-              {/* Send status indicator - always visible */}
-              <div className="px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-800 backdrop-blur-md border border-purple-200 dark:border-purple-600">
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1 py-0.5 rounded text-[10px] bg-purple-100 dark:bg-purple-700 text-purple-700 dark:text-purple-200">
-                    ↵
-                  </kbd>
-                  {isLoading
-                    ? "generating"
-                    : isUploading
-                      ? "uploading"
-                      : "to send"}
-                </span>
-              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                className={`h-7 w-7 rounded-lg transition-all duration-200 ${
+                  enableWebBrowsing
+                    ? "text-emerald-600 hover:text-emerald-700 bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-800/40"
+                    : "text-gray-600 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+                title={
+                  enableWebBrowsing
+                    ? "Web browsing enabled - AI will browse the web for information"
+                    : "Enable web browsing - AI will search and browse websites when needed"
+                }
+                disabled={isDisabled}
+                onClick={() => {
+                  const newState = !enableWebBrowsing;
+                  setEnableWebBrowsing(newState);
+                }}
+              >
+                <Globe className="h-3.5 w-3.5" />
+              </Button>
             </div>
+
+            {/* Right side: Send Button */}
+            <Button
+              size="icon"
+              variant={canSend ? "default" : "ghost"}
+              className={`h-8 w-8 shrink-0 transition-all duration-200 ${
+                canSend
+                  ? "bg-purple-600 hover:bg-purple-700 text-white shadow-lg hover:shadow-xl hover:scale-105"
+                  : "text-purple-400 dark:text-purple-500 cursor-not-allowed"
+              }`}
+              onClick={handleSend}
+              disabled={!canSend}
+              title={canSend ? "Send message" : "Type a message to send"}
+            >
+              <Send className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>

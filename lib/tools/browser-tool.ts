@@ -19,16 +19,6 @@ async function getDebugUrl(id: string) {
 }
 
 async function createSession() {
-  console.log("[createSession] Starting session creation...");
-  console.log(
-    "[createSession] API Key present:",
-    !!process.env.BROWSERBASE_API_KEY,
-  );
-  console.log(
-    "[createSession] Project ID present:",
-    !!process.env.BROWSERBASE_PROJECT_ID,
-  );
-
   const response = await fetch(`https://www.browserbase.com/v1/sessions`, {
     method: "POST",
     headers: {
@@ -40,12 +30,6 @@ async function createSession() {
       keepAlive: true,
     }),
   });
-
-  console.log("[createSession] Response status:", response.status);
-  console.log(
-    "[createSession] Response headers:",
-    Object.fromEntries(response.headers.entries()),
-  );
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -60,10 +44,6 @@ async function createSession() {
   }
 
   const data = await response.json();
-  console.log("[createSession] Session created successfully:", {
-    id: data.id,
-    hasDebugUrl: !!data.debugUrl,
-  });
   return { id: data.id, debugUrl: data.debugUrl };
 }
 
@@ -104,14 +84,9 @@ export const createSessionTool = tool({
   parameters: z.object({}),
   execute: async () => {
     try {
-      console.log("[createSessionTool] Executing session creation...");
       const session = await createSession();
       activeSessions.add(session.id);
       const debugUrl = await getDebugUrl(session.id);
-      console.log("[createSessionTool] Session created successfully:", {
-        sessionId: session.id,
-        hasDebugUrl: !!debugUrl.debuggerFullscreenUrl,
-      });
       return {
         toolName: "Browser session ready",
         success: true,

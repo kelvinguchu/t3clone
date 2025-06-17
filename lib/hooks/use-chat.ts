@@ -5,6 +5,7 @@ import type { JSONValue } from "ai";
 import { useAnonymousSession } from "./use-anonymous-session";
 import { type ModelId } from "@/lib/ai-providers";
 import { useState, useCallback, useRef } from "react";
+import { handleChatError, shouldAutoRetry } from "@/lib/utils/error-handler";
 
 interface UseChatProps {
   modelId: ModelId;
@@ -40,15 +41,6 @@ export function useChat({
       .slice(2, 6)}`;
   }
   const hookId = hookIdRef.current;
-  console.log(`[${hookId}] USECHAT - Hook initialized with:`, {
-    modelId,
-    initialThreadId,
-    hasOnError: !!onError,
-    initialMessagesCount: initialMessages?.length,
-    experimental_throttle,
-    sendExtraMessageFields,
-    timestamp: new Date().toISOString(),
-  });
 
   const { sessionData, isAnonymous, refreshSession } = useAnonymousSession();
 
@@ -57,18 +49,6 @@ export function useChat({
   const [currentAttachmentIds, setCurrentAttachmentIds] = useState<string[]>(
     [],
   );
-
-  console.log(`[${hookId}] USECHAT - Current state:`, {
-    threadId,
-    currentAttachmentIds,
-    sessionData: sessionData
-      ? {
-          sessionId: sessionData.sessionId,
-          remainingMessages: sessionData.remainingMessages,
-        }
-      : null,
-    isAnonymous,
-  });
 
   const requestBody = {
     modelId,
@@ -85,11 +65,6 @@ export function useChat({
     ...(threadId && { "X-Thread-Id": threadId }),
   };
 
-  console.log(`[${hookId}] USECHAT - Request configuration:`, {
-    body: requestBody,
-    headers: requestHeaders,
-  });
-
   // Optimized request body preparation for performance
   const optimizedPrepareRequestBody = useCallback(
     experimental_prepareRequestBody ||
@@ -103,20 +78,6 @@ export function useChat({
         requestData?: JSONValue;
         requestBody?: object;
       }) => {
-        console.log(
-          `[${hookId}] PREPARE_REQUEST_BODY - Building request body:`,
-          {
-            messagesCount: messages.length,
-            id,
-            modelId,
-            threadId,
-            currentAttachmentIds,
-            requestBodyKeys: requestBody ? Object.keys(requestBody) : [],
-            requestBodyContent: requestBody,
-            timestamp: new Date().toISOString(),
-          },
-        );
-
         // Send all messages as expected by the API route
         const finalRequestBody: Record<string, unknown> = {
           messages,
@@ -130,20 +91,6 @@ export function useChat({
           // This is critical for web browsing functionality
           ...(requestBody as Record<string, unknown>),
         };
-
-        console.log(`[${hookId}] PREPARE_REQUEST_BODY - Final request body:`, {
-          requestBodyKeys: Object.keys(finalRequestBody),
-          enableWebBrowsing: finalRequestBody.enableWebBrowsing,
-          hasEnableWebBrowsing: "enableWebBrowsing" in finalRequestBody,
-          requestBodyPreview: {
-            messagesCount: Array.isArray(finalRequestBody.messages)
-              ? finalRequestBody.messages.length
-              : 0,
-            modelId: finalRequestBody.modelId,
-            threadId: finalRequestBody.threadId,
-            enableWebBrowsing: finalRequestBody.enableWebBrowsing,
-          },
-        });
 
         return finalRequestBody;
       }),
@@ -159,70 +106,58 @@ export function useChat({
   // Enhanced callbacks for immediate UI feedback
   const handleResponse = useCallback(
     (response: Response) => {
-      console.log(
-        `[${hookId}] USECHAT - onResponse called (IMMEDIATE FEEDBACK):`,
-        {
-          status: response.status,
-          statusText: response.statusText,
-          headers: Object.fromEntries(response.headers.entries()),
-          timestamp: new Date().toISOString(),
-        },
-      );
-
       // Handle rate limiting headers
       const newThreadId = response.headers.get("X-Thread-Id");
 
       if (newThreadId) {
-        console.log(
-          `[${hookId}] USECHAT - Setting new thread ID:`,
-          newThreadId,
-        );
         setThreadId(newThreadId);
       }
-
-      // Immediate UI feedback - response received, streaming will start
-      console.log(
-        `[${hookId}] USECHAT - Response received, streaming starting...`,
-      );
     },
     [hookId],
   );
 
   const handleFinish = useCallback(
-    (
-      message: Message,
-      {
-        usage,
-        finishReason,
-      }: {
-        usage?: {
-          promptTokens: number;
-          completionTokens: number;
-          totalTokens: number;
-        };
-        finishReason?: string;
-      },
-    ) => {
-      console.log(`[${hookId}] USECHAT - onFinish called:`, {
-        messageId: message.id,
-        messageLength: message.content.length,
-        usage,
-        finishReason,
-        timestamp: new Date().toISOString(),
-      });
+    async (message: Message) => {
+      // Extract reasoning from message parts for logging purposes
+      let reasoning: string | undefined;
+      const messageWithParts = message as Message & {
+        parts?: Array<{
+          type: string;
+          reasoning?: string;
+        }>;
+      };
+
+      if (messageWithParts.parts) {
+        const reasoningParts = messageWithParts.parts.filter(
+          (part) => part.type === "reasoning",
+        );
+        if (reasoningParts.length > 0) {
+          reasoning = reasoningParts
+            .map((part) => part.reasoning || "")
+            .join("\n");
+        }
+      }
+
+      // Also check direct reasoning property (fallback)
+      const messageWithReasoning = message as Message & { reasoning?: string };
+      if (!reasoning && messageWithReasoning.reasoning) {
+        reasoning = messageWithReasoning.reasoning;
+      }
+
+      // Note: We don't update the database here because:
+      // 1. AI SDK message IDs are not valid Convex IDs
+      // 2. Reasoning should be saved server-side during the streaming process
+      // 3. The onFinish callback is for client-side logic only
 
       // Clear attachment IDs after message is sent
       setCurrentAttachmentIds([]);
 
       // Refresh session data for anonymous users to get updated message count
       if (isAnonymous && sessionData) {
-        console.log(
-          `[${hookId}] USECHAT - Refreshing session for anonymous user`,
-        );
         refreshSession();
       }
     },
-    [hookId, isAnonymous, sessionData, refreshSession],
+    [hookId, isAnonymous, sessionData, refreshSession, threadId],
   );
 
   const handleError = useCallback(
@@ -232,6 +167,10 @@ export function useChat({
         stack: error.stack,
         timestamp: new Date().toISOString(),
       });
+
+      // Handle the error with user-friendly feedback (without retry for now)
+      handleChatError(error);
+
       onError?.(error);
     },
     [hookId, onError],
@@ -241,7 +180,14 @@ export function useChat({
     id: threadId ?? undefined,
     api: "/api/chat",
     // Use text protocol for Groq models to fix streaming hangs
-    streamProtocol: modelId === "llama3-70b-8192" ? "text" : "data",
+    // But use data protocol for reasoning models to enable reasoning extraction
+    streamProtocol:
+      modelId === "llama3-70b-8192"
+        ? "text"
+        : modelId === "deepseek-r1-distill-llama-70b" ||
+            modelId === "qwen/qwen3-32b"
+          ? "data" // reasoning models need data protocol for reasoning extraction
+          : "data",
     initialMessages,
     body: requestBody,
     headers: requestHeaders,
@@ -256,6 +202,24 @@ export function useChat({
     onFinish: handleFinish,
     onError: handleError,
   });
+
+  // Enhanced error handler with retry functionality (after chat is defined)
+  const handleErrorWithRetry = useCallback(
+    (error: Error) => {
+      const parsedError = handleChatError(error, () => {
+        // Retry function - reload the chat
+        chat.reload?.();
+      });
+
+      // Check if we should auto-retry for certain error types
+      if (shouldAutoRetry(parsedError)) {
+        setTimeout(() => {
+          chat.reload?.();
+        }, 2000); // Auto-retry after 2 seconds for network/server errors
+      }
+    },
+    [chat],
+  );
 
   return {
     ...chat,
@@ -281,116 +245,70 @@ export function useChat({
         enableWebBrowsing?: boolean;
       },
     ) => {
-      const messageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      console.log(
-        `[${hookId}] WEB_BROWSING_SENDMESSAGE - sendMessage called with web browsing [${messageId}]:`,
-        {
-          contentLength: content.trim().length,
-          contentPreview: content.substring(0, 50) + "...",
-          enableWebBrowsing: options?.enableWebBrowsing,
-          optionsObject: options,
-          hasExperimentalAttachments:
-            !!options?.experimental_attachments?.length,
-          currentStatus: chat.status,
-          timestamp: new Date().toISOString(),
-        },
-      );
-
       if (
         !content.trim() &&
         (!attachmentIds || attachmentIds.length === 0) &&
         !options?.experimental_attachments?.length
       ) {
-        console.log(
-          `[${hookId}] USECHAT - sendMessage blocked [${messageId}]: no content, no attachments, and no experimental attachments`,
-        );
         return;
       }
 
-      // Immediate UI feedback - message is being sent
-      console.log(
-        `[${hookId}] USECHAT - Message sending initiated [${messageId}] - Status will change to 'submitted'`,
-      );
+      try {
+        if (options?.experimental_attachments?.length) {
+          // Build extra request body to ensure attachmentIds and flags are included
+          const appendOptions: {
+            body: Record<string, unknown>;
+          } = {
+            body: {},
+          };
 
-      if (options?.experimental_attachments?.length) {
-        console.log(
-          `[${hookId}] USECHAT - Using chat.append with experimental_attachments [${messageId}]`,
-        );
+          if (attachmentIds && attachmentIds.length > 0) {
+            appendOptions.body.attachmentIds = attachmentIds;
+            // Keep local state so subsequent sends work
+            setCurrentAttachmentIds(attachmentIds);
+          }
 
-        // Build extra request body to ensure attachmentIds and flags are included
-        const appendOptions: {
-          body: Record<string, unknown>;
-        } = {
-          body: {},
-        };
+          if (options?.enableWebBrowsing) {
+            appendOptions.body.enableWebBrowsing = true;
+          }
 
-        if (attachmentIds && attachmentIds.length > 0) {
-          appendOptions.body.attachmentIds = attachmentIds;
-          // Keep local state so subsequent sends work
-          setCurrentAttachmentIds(attachmentIds);
+          chat.append(
+            {
+              role: "user",
+              content: content.trim(),
+              experimental_attachments: options.experimental_attachments,
+            },
+            appendOptions,
+          );
+
+          // Clear the input afterwards
+          chat.setInput("");
+        } else {
+          // Build request body for regular message
+          const appendOptions: {
+            body: Record<string, unknown>;
+          } = {
+            body: {},
+          };
+
+          if (options?.enableWebBrowsing) {
+            appendOptions.body.enableWebBrowsing = true;
+          }
+
+          chat.append(
+            {
+              role: "user",
+              content: content.trim(),
+            },
+            appendOptions,
+          );
         }
-
-        if (options?.enableWebBrowsing) {
-          appendOptions.body.enableWebBrowsing = true;
+      } catch (error) {
+        // Handle send message errors with user feedback
+        if (error instanceof Error) {
+          handleErrorWithRetry(error);
         }
-
-        console.log(
-          `[${hookId}] WEB_BROWSING_APPEND_EXP - appendOptions for experimental_attachments [${messageId}]:`,
-          {
-            enableWebBrowsing: appendOptions.body.enableWebBrowsing,
-            bodyKeys: Object.keys(appendOptions.body),
-            fullBody: appendOptions.body,
-          },
-        );
-
-        chat.append(
-          {
-            role: "user",
-            content: content.trim(),
-            experimental_attachments: options.experimental_attachments,
-          },
-          appendOptions,
-        );
-
-        // Clear the input afterwards
-        chat.setInput("");
-      } else {
-        console.log(
-          `[${hookId}] USECHAT - Using chat.append for regular message [${messageId}]`,
-        );
-
-        // Build request body for regular message
-        const appendOptions: {
-          body: Record<string, unknown>;
-        } = {
-          body: {},
-        };
-
-        if (options?.enableWebBrowsing) {
-          appendOptions.body.enableWebBrowsing = true;
-        }
-
-        console.log(
-          `[${hookId}] WEB_BROWSING_APPEND_REG - appendOptions for regular message [${messageId}]:`,
-          {
-            enableWebBrowsing: appendOptions.body.enableWebBrowsing,
-            bodyKeys: Object.keys(appendOptions.body),
-            fullBody: appendOptions.body,
-          },
-        );
-
-        chat.append(
-          {
-            role: "user",
-            content: content.trim(),
-          },
-          appendOptions,
-        );
       }
-
-      console.log(
-        `[${hookId}] USECHAT - Message sending initiated successfully [${messageId}] - UI should show immediate feedback`,
-      );
     },
   };
 }

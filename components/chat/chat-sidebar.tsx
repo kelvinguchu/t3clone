@@ -20,8 +20,6 @@ export function ChatSidebar() {
     isLoading: anonSessionLoading,
   } = useAnonymousSession();
   const [searchQuery, setSearchQuery] = useState("");
-  console.log("[Sidebar] user:", user);
-  console.log("[Sidebar] sessionId:", sessionId);
 
   const pathname = usePathname();
   const currentThreadId = pathname?.startsWith("/chat/")
@@ -36,14 +34,12 @@ export function ChatSidebar() {
     api.threads.getUserThreads,
     user?.id ? { userId: user.id } : "skip",
   );
-  console.log("[Sidebar] userThreads:", userThreads);
 
   // Load anonymous threads from Convex using reactive session ID
   const anonymousThreads = useQuery(
     api.threads.getAnonymousThreads,
     sessionId ? { sessionId } : "skip",
   );
-  console.log("[Sidebar] anonymousThreads:", anonymousThreads);
 
   // Always include anonymous threads; for authenticated users these may be
   // transient until they are claimed/promoted, but should still appear.
@@ -53,12 +49,6 @@ export function ChatSidebar() {
   const threadsData = Array.from(
     new Map(combinedThreads.map((t) => [String(t._id), t])).values(),
   );
-  console.log("[Sidebar] threadsData:", threadsData);
-
-  // Debug: log the current thread list whenever it changes
-  useEffect(() => {
-    // Thread data updated
-  }, [threadsData]);
 
   // --- Mutations with optimistic updates -----------------------------------
   const createThread = useMutation(

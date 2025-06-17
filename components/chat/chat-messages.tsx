@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { GitBranch, Globe } from "lucide-react";
+import { GitBranch, Globe, Brain } from "lucide-react";
 import { Markdown } from "@/components/ui/markdown";
 import { AiOutlineCopy } from "react-icons/ai";
 import { FiRefreshCw } from "react-icons/fi";
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/popover";
 import { getAvailableModels, getModelInfo } from "@/lib/ai-providers";
 import { ChatMessageAttachments } from "./chat-message-attachments";
+import { ThinkingDisplay } from "./thinking-display";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
@@ -24,6 +25,14 @@ type DisplayMessage = {
   // Tool usage tracking from database
   toolsUsed?: string[];
   hasToolCalls?: boolean;
+  // Reasoning/thinking tokens from AI models
+  reasoning?: string;
+  // Message parts from AI SDK (for streaming reasoning)
+  parts?: Array<{
+    type: string;
+    text?: string;
+    reasoning?: string;
+  }>;
   attachments?: Array<{
     id: string;
     name: string;
@@ -46,12 +55,33 @@ export interface ChatMessagesProps {
   loadingStatusText?: string | null;
   threadId?: string | null;
   // AI SDK reload function for retry functionality
-  reload?: () => Promise<string | undefined>;
+  reload?: () => Promise<string | null | undefined>;
+  // Enhanced thinking phase props
+  isThinkingPhase?: boolean;
+  shouldShowThinkingDisplay?: boolean;
+  hasStartedResponding?: boolean;
 }
 
 // Compact Loading Indicator Component
-function CompactLoadingIndicator({ text }: { text: string }) {
+function CompactLoadingIndicator({ text }: { text: string | null }) {
   const isBrowsing = text === "Browsing...";
+  const isThinking = text === "Thinking...";
+  const isDefault = !text; // When text is null, show default animated dots
+
+  if (isDefault) {
+    // Default loading state - just animated dots
+    return (
+      <div className="flex justify-start mb-4">
+        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-xs font-medium border shadow-sm max-w-fit bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-600">
+          <div className="flex items-center gap-1">
+            <div className="h-1.5 w-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+            <div className="h-1.5 w-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+            <div className="h-1.5 w-1.5 bg-gray-500 rounded-full animate-bounce"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex justify-start mb-4">
@@ -59,7 +89,9 @@ function CompactLoadingIndicator({ text }: { text: string }) {
         className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-xs font-medium border shadow-sm max-w-fit ${
           isBrowsing
             ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-600"
-            : "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-600"
+            : isThinking
+              ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-600"
+              : "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-600"
         }`}
       >
         {isBrowsing ? (
@@ -68,6 +100,11 @@ function CompactLoadingIndicator({ text }: { text: string }) {
             <span className="text-emerald-700 dark:text-emerald-300">
               {text}
             </span>
+          </>
+        ) : isThinking ? (
+          <>
+            <Brain className="h-3 w-3 text-amber-600 animate-pulse" />
+            <span className="text-amber-700 dark:text-amber-300">{text}</span>
           </>
         ) : (
           <>
@@ -86,6 +123,9 @@ export function ChatMessages({
   loadingStatusText,
   threadId,
   reload,
+  isThinkingPhase,
+  shouldShowThinkingDisplay,
+  hasStartedResponding,
 }: ChatMessagesProps) {
   // Track which assistant message was recently copied
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -161,7 +201,13 @@ export function ChatMessages({
                 await reload();
               } catch (error) {
                 console.error("Failed to retry message:", error);
-                // Could add toast notification here
+                // Import and use error handler
+                if (error instanceof Error) {
+                  const { handleChatError } = await import(
+                    "@/lib/utils/error-handler"
+                  );
+                  handleChatError(error, handleRetry);
+                }
               }
             }
           };
@@ -179,18 +225,100 @@ export function ChatMessages({
 
           const isCurrentStreaming = isLoading && index === messages.length - 1;
 
+          // Extract reasoning from message parts or direct property
+          const extractReasoning = (
+            message: DisplayMessage,
+          ): string | undefined => {
+            // First check message parts (for streaming reasoning)
+            if (message.parts) {
+              const reasoningParts = message.parts.filter(
+                (part) => part.type === "reasoning",
+              );
+              if (reasoningParts.length > 0) {
+                const extracted = reasoningParts
+                  .map((part) => part.reasoning || "")
+                  .join("\n");
+                return extracted;
+              }
+            }
+            // Fallback to direct reasoning property (from database)
+            return message.reasoning;
+          };
+
+          const currentReasoning = extractReasoning(msg);
+
+          // Determine if this is the current streaming message
+          const isCurrentStreamingMessage =
+            isLoading &&
+            index === messages.length - 1 &&
+            msg.role === "assistant";
+
+          // Show thinking display for:
+          // 1. Any historical assistant message with reasoning content (always show)
+          // 2. Current streaming message with enhanced logic
+          const shouldShowThinkingForThisMessage = (() => {
+            // Must have reasoning content
+            if (!currentReasoning || currentReasoning.trim().length === 0) {
+              return false;
+            }
+
+            // If we're not currently loading/streaming, then ALL messages are historical
+            // Show ThinkingDisplay for any historical message with reasoning
+            if (!isLoading) {
+              return true;
+            }
+
+            // If we ARE loading/streaming, then only the last assistant message is "current"
+            const isCurrentStreamingMessage =
+              isLoading &&
+              index === messages.length - 1 &&
+              msg.role === "assistant";
+
+            if (!isCurrentStreamingMessage) {
+              // Historical message during active session - always show if has reasoning
+              return true;
+            }
+
+            // Current streaming message - use enhanced logic
+            return shouldShowThinkingDisplay || isThinkingPhase;
+          })();
+
+          // Force expanded state during thinking phase, auto-collapse when responding starts
+          // Only apply to the current streaming message
+          const forceExpanded = isCurrentStreamingMessage && isThinkingPhase;
+          const forceCollapsed =
+            isCurrentStreamingMessage &&
+            hasStartedResponding &&
+            !isThinkingPhase;
+
           return (
             <div key={index} className="flex justify-start mb-6">
               <div className="w-full max-w-4xl mx-auto">
-                <div className="whitespace-pre-wrap break-words text-gray-900 dark:text-gray-100">
-                  <Markdown content={msg.content} />
-                  {/* Show streaming cursor for the last assistant message during streaming */}
-                  {isLoading &&
-                    msg.role === "assistant" &&
-                    index === messages.length - 1 && (
-                      <span className="inline-block w-2 h-5 bg-purple-500 animate-pulse ml-1" />
-                    )}
-                </div>
+                {/* Enhanced thinking display logic */}
+                {shouldShowThinkingForThisMessage && (
+                  <ThinkingDisplay
+                    reasoning={currentReasoning ?? ""} // Show even if empty during thinking phase
+                    isStreaming={isCurrentStreamingMessage}
+                    forceExpanded={forceExpanded}
+                    forceCollapsed={forceCollapsed}
+                  />
+                )}
+
+                {/* Only show content if we have actual content or not in pure thinking phase */}
+                {(msg.content.trim() ||
+                  !isThinkingPhase ||
+                  hasStartedResponding) && (
+                  <div className="whitespace-pre-wrap break-words text-gray-900 dark:text-gray-100">
+                    <Markdown content={msg.content} />
+                    {/* Show streaming cursor for the last assistant message during streaming */}
+                    {isLoading &&
+                      msg.role === "assistant" &&
+                      index === messages.length - 1 &&
+                      !isThinkingPhase && ( // Don't show cursor during thinking phase
+                        <span className="inline-block w-2 h-5 bg-purple-500 animate-pulse ml-1" />
+                      )}
+                  </div>
+                )}
 
                 {/* Assistant message attachments */}
                 {msg.attachments && msg.attachments.length > 0 && (
@@ -296,7 +424,10 @@ export function ChatMessages({
                         {msg.hasToolCalls && (
                           <Globe className="h-3 w-3 text-emerald-500" />
                         )}
-                        <span>{msg.model || "Model"}</span>
+                        {/* Only show model name for assistant messages, and only if we have the actual model */}
+                        {msg.role === "assistant" && msg.model && (
+                          <span>{msg.model}</span>
+                        )}
                       </div>
                     </span>
                   </div>
@@ -307,8 +438,8 @@ export function ChatMessages({
         })}
 
         {/* ENHANCED LOADING INDICATORS: Compact and immediate feedback */}
-        {loadingStatusText && (
-          <CompactLoadingIndicator text={loadingStatusText} />
+        {isLoading && (
+          <CompactLoadingIndicator text={loadingStatusText ?? null} />
         )}
       </div>
     </div>

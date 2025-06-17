@@ -204,7 +204,10 @@ export async function getSmartContext(
   // Model-specific context window sizes (approximate)
   const modelLimits: Record<string, number> = {
     "llama3-70b-8192": 8192,
+    "deepseek-r1-distill-llama-70b": 8192,
+    "qwen/qwen3-32b": 32768,
     "gemini-2.0-flash": 32000,
+    "gemini-2.0-flash-preview-image-generation": 32000,
     "gpt-4.1-mini": 128000,
   };
 

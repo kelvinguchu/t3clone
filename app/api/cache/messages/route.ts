@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
           "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
           "X-Processing-Time": `${processingTime}ms`,
           // Add ETag for better caching
-          ETag: `"${threadId}-${summary?.lastUpdated || Date.now()}"`,
+          ETag: `"${threadId}-${summary?.lastUpdated ?? Date.now()}"`,
         },
       },
     );

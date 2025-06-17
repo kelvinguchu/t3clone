@@ -11,6 +11,7 @@ const detectLang = require("lang-detector") as (text: string) => string;
 
 interface MarkdownProps {
   content: string;
+  isThinking?: boolean;
 }
 
 interface CodeBlockProps {
@@ -156,12 +157,41 @@ const CodeBlock = ({ children, className, ...props }: CodeBlockProps) => {
   );
 };
 
-export function Markdown({ content }: Readonly<MarkdownProps>) {
+export function Markdown({
+  content,
+  isThinking = false,
+}: Readonly<MarkdownProps>) {
+  // Base classes for thinking content - make everything fainter
+  const thinkingClasses = isThinking
+    ? "opacity-70 text-gray-600 dark:text-gray-400"
+    : "";
+
   return (
-    <div className="prose prose-gray dark:prose-invert max-w-none prose-code:!bg-transparent prose-code:!text-inherit prose-code:!p-0 prose-code:!rounded-none prose-code:!border-0">
+    <div
+      className={`prose prose-gray dark:prose-invert max-w-none prose-code:!bg-transparent prose-code:!text-inherit prose-code:!p-0 prose-code:!rounded-none prose-code:!border-0 ${thinkingClasses}`}
+    >
       <MarkdownToJsx
         options={{
           overrides: {
+            // Handle custom <think> tags by rendering them as spans with thinking styling
+            think: {
+              component: ({
+                children,
+                ...props
+              }: {
+                children?: React.ReactNode;
+                [key: string]: unknown;
+              }) => (
+                <span
+                  className="inline-block px-2 py-0.5 mx-1 bg-amber-50 dark:bg-amber-950/10 border border-amber-200 dark:border-amber-800 rounded-md text-xs text-amber-700 dark:text-amber-400 font-mono italic opacity-60 whitespace-nowrap"
+                  title="Model's thinking process"
+                  {...props}
+                >
+                  💭 {children}
+                </span>
+              ),
+            },
+
             // Inline code (single backticks) - simple styling, no language detection
             code: {
               component: InlineCode,
@@ -175,76 +205,88 @@ export function Markdown({ content }: Readonly<MarkdownProps>) {
               },
             },
 
-            // Typography
+            // Typography - adjust for thinking content
             p: {
               props: {
-                className:
-                  "mb-4 leading-7 text-purple-950 dark:text-purple-100",
+                className: isThinking
+                  ? "mb-4 leading-7 text-gray-600 dark:text-gray-400"
+                  : "mb-4 leading-7 text-purple-950 dark:text-purple-100",
               },
             },
 
-            // Headings
+            // Headings - adjust for thinking content
             h1: {
               props: {
-                className:
-                  "text-3xl font-bold tracking-tight text-purple-950 dark:text-purple-100 mt-8 mb-4 first:mt-0 border-b border-gray-200 dark:border-gray-700 pb-2",
+                className: isThinking
+                  ? "text-3xl font-bold tracking-tight text-gray-600 dark:text-gray-400 mt-8 mb-4 first:mt-0 border-b border-gray-200 dark:border-gray-700 pb-2"
+                  : "text-3xl font-bold tracking-tight text-purple-950 dark:text-purple-100 mt-8 mb-4 first:mt-0 border-b border-gray-200 dark:border-gray-700 pb-2",
               },
             },
             h2: {
               props: {
-                className:
-                  "text-2xl font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-8 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2",
+                className: isThinking
+                  ? "text-2xl font-semibold tracking-tight text-gray-600 dark:text-gray-400 mt-8 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2"
+                  : "text-2xl font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-8 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2",
               },
             },
             h3: {
               props: {
-                className:
-                  "text-xl font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-6 mb-3",
+                className: isThinking
+                  ? "text-xl font-semibold tracking-tight text-gray-600 dark:text-gray-400 mt-6 mb-3"
+                  : "text-xl font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-6 mb-3",
               },
             },
             h4: {
               props: {
-                className:
-                  "text-lg font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-6 mb-3",
+                className: isThinking
+                  ? "text-lg font-semibold tracking-tight text-gray-600 dark:text-gray-400 mt-6 mb-3"
+                  : "text-lg font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-6 mb-3",
               },
             },
             h5: {
               props: {
-                className:
-                  "text-base font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-4 mb-2",
+                className: isThinking
+                  ? "text-base font-semibold tracking-tight text-gray-600 dark:text-gray-400 mt-4 mb-2"
+                  : "text-base font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-4 mb-2",
               },
             },
             h6: {
               props: {
-                className:
-                  "text-sm font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-4 mb-2",
+                className: isThinking
+                  ? "text-sm font-semibold tracking-tight text-gray-600 dark:text-gray-400 mt-4 mb-2"
+                  : "text-sm font-semibold tracking-tight text-purple-950 dark:text-purple-100 mt-4 mb-2",
               },
             },
 
-            // Lists
+            // Lists - adjust for thinking content
             ul: {
               props: {
-                className:
-                  "mb-4 pl-6 space-y-2 list-disc marker:text-purple-400 dark:marker:text-purple-500",
+                className: isThinking
+                  ? "mb-4 pl-6 space-y-2 list-disc marker:text-gray-400 dark:marker:text-gray-500"
+                  : "mb-4 pl-6 space-y-2 list-disc marker:text-purple-400 dark:marker:text-purple-500",
               },
             },
             ol: {
               props: {
-                className:
-                  "mb-4 pl-6 space-y-2 list-decimal marker:text-purple-400 dark:marker:text-purple-500",
+                className: isThinking
+                  ? "mb-4 pl-6 space-y-2 list-decimal marker:text-gray-400 dark:marker:text-gray-500"
+                  : "mb-4 pl-6 space-y-2 list-decimal marker:text-purple-400 dark:marker:text-purple-500",
               },
             },
             li: {
               props: {
-                className: "leading-7 text-purple-950 dark:text-purple-100",
+                className: isThinking
+                  ? "leading-7 text-gray-600 dark:text-gray-400"
+                  : "leading-7 text-purple-950 dark:text-purple-100",
               },
             },
 
-            // Blockquotes
+            // Blockquotes - adjust for thinking content
             blockquote: {
               props: {
-                className:
-                  "border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-2 my-4 bg-blue-50 dark:bg-blue-950/30 italic text-purple-900 dark:text-purple-200",
+                className: isThinking
+                  ? "border-l-4 border-gray-400 dark:border-gray-500 pl-4 py-2 my-4 bg-gray-50 dark:bg-gray-800/30 italic text-gray-600 dark:text-gray-400"
+                  : "border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-2 my-4 bg-blue-50 dark:bg-blue-950/30 italic text-purple-900 dark:text-purple-200",
               },
             },
 
@@ -281,14 +323,16 @@ export function Markdown({ content }: Readonly<MarkdownProps>) {
             },
             th: {
               props: {
-                className:
-                  "px-4 py-3 text-left text-xs font-medium text-purple-900 dark:text-purple-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700",
+                className: isThinking
+                  ? "px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700"
+                  : "px-4 py-3 text-left text-xs font-medium text-purple-900 dark:text-purple-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700",
               },
             },
             td: {
               props: {
-                className:
-                  "px-4 py-3 text-sm text-purple-950 dark:text-purple-100 border-b border-gray-200 dark:border-gray-700",
+                className: isThinking
+                  ? "px-4 py-3 text-sm text-gray-600 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700"
+                  : "px-4 py-3 text-sm text-purple-950 dark:text-purple-100 border-b border-gray-200 dark:border-gray-700",
               },
             },
 
@@ -300,15 +344,19 @@ export function Markdown({ content }: Readonly<MarkdownProps>) {
               },
             },
 
-            // Strong and emphasis
+            // Strong and emphasis - adjust for thinking content
             strong: {
               props: {
-                className: "font-semibold text-purple-950 dark:text-purple-100",
+                className: isThinking
+                  ? "font-semibold text-gray-600 dark:text-gray-400"
+                  : "font-semibold text-purple-950 dark:text-purple-100",
               },
             },
             em: {
               props: {
-                className: "italic text-purple-950 dark:text-purple-100",
+                className: isThinking
+                  ? "italic text-gray-600 dark:text-gray-400"
+                  : "italic text-purple-950 dark:text-purple-100",
               },
             },
 

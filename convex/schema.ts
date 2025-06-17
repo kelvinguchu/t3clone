@@ -68,6 +68,9 @@ export default defineSchema({
     ),
     content: v.string(),
 
+    // Reasoning/thinking tokens from AI models (e.g., DeepSeek R1, Qwen)
+    reasoning: v.optional(v.string()),
+
     // Message tree structure for branching
     parentId: v.optional(v.id("messages")), // For branching conversations
     order: v.number(), // Order within the thread/branch

@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Noto_Sans_Mono, Rubik} from "next/font/google";
+import { Noto_Sans_Mono, Rubik } from "next/font/google";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ClerkProvider } from "@clerk/nextjs";
 import { FilePreviewProvider } from "@/lib/contexts/file-preview-context";
 import { AnonymousSessionProvider } from "@/lib/contexts/anonymous-session-context";
+import { Toaster } from "@/components/ui/sonner";
 
 const rubik = Rubik({
   variable: "--font-rubik",
@@ -46,7 +47,10 @@ export default function RootLayout({
         <ClerkProvider dynamic>
           <ConvexClientProvider>
             <FilePreviewProvider>
-              <AnonymousSessionProvider>{children}</AnonymousSessionProvider>
+              <AnonymousSessionProvider>
+                {children}
+                <Toaster />
+              </AnonymousSessionProvider>
             </FilePreviewProvider>
           </ConvexClientProvider>
         </ClerkProvider>
