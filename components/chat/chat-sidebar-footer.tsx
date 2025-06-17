@@ -18,19 +18,19 @@ export function ChatSidebarFooter({
   user,
 }: Readonly<ChatSidebarFooterProps>) {
   return (
-    <SidebarFooter className="p-4">
-      <SidebarSeparator className="mb-4 bg-purple-200/50 dark:bg-purple-800/30" />
+    <SidebarFooter className="p-2">
+      <SidebarSeparator className="mb-2 bg-purple-200/50 dark:bg-purple-800/30" />
 
       {!hasMounted || !isLoaded ? (
         /* Render an invisible placeholder so server & first client render match,
            preventing a hydration mismatch while Clerk finishes loading or until
            after the component has mounted. */
         <div
-          className="h-12 w-full opacity-0 pointer-events-none select-none"
+          className="h-8 w-full opacity-0 pointer-events-none select-none"
           aria-hidden="true"
         />
       ) : user ? (
-        <div className="w-full p-3 h-auto bg-purple-100/80 dark:bg-purple-900/30 rounded-xl">
+        <div className="w-full p-2 h-auto bg-purple-100/80 dark:bg-purple-900/30 rounded-xl">
           <div className="flex items-center gap-3 w-full min-w-0">
             <div className="relative flex-shrink-0">
               <Avatar className="h-10 w-10 border-2 border-purple-200 dark:border-purple-800">

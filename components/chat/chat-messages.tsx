@@ -349,11 +349,11 @@ export function ChatMessages({
                 )}
                 {/* Action buttons (copy / retry / branch) – only once streaming is finished */}
                 {!isCurrentStreaming && (
-                  <div className="flex items-center gap-4 sm:gap-6 mt-2 text-gray-500 dark:text-gray-400 text-xs sm:text-sm">
+                  <div className="flex items-center gap-4 sm:gap-3 mt-2 text-purple-600 dark:text-purple-400 text-xs sm:text-sm">
                     <button
                       onClick={handleCopy}
                       aria-label="Copy response"
-                      className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors p-1 sm:p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                      className="cursor-pointer hover:text-purple-700 dark:hover:text-purple-300 transition-colors p-1 sm:p-2 rounded-md hover:bg-purple-50 dark:hover:bg-purple-900/30"
                     >
                       {copiedIndex === index ? (
                         <span className="text-green-500 text-[10px] sm:text-[12px] select-none">
@@ -363,13 +363,16 @@ export function ChatMessages({
                         <AiOutlineCopy className="h-4 w-4 sm:h-5 sm:w-5" />
                       )}
                     </button>
-                    <button
-                      onClick={handleRetry}
-                      aria-label="Retry"
-                      className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors p-1 sm:p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-                    >
-                      <FiRefreshCw className="h-4 w-4 sm:h-5 sm:w-5" />
-                    </button>
+                    {/* Only show retry button for the latest assistant message */}
+                    {isLatestAssistantMessage && (
+                      <button
+                        onClick={handleRetry}
+                        aria-label="Retry"
+                        className="cursor-pointer hover:text-purple-700 dark:hover:text-purple-300 transition-colors p-1 sm:p-2 rounded-md hover:bg-purple-50 dark:hover:bg-purple-900/30"
+                      >
+                        <FiRefreshCw className="h-4 w-4 sm:h-5 sm:w-5" />
+                      </button>
+                    )}
                     {/* Only show branch button for the latest assistant message */}
                     {msg.id && isLatestAssistantMessage && (
                       <Popover
@@ -379,7 +382,7 @@ export function ChatMessages({
                         <PopoverTrigger asChild>
                           <button
                             aria-label="Branch conversation"
-                            className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors p-1 sm:p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                            className="cursor-pointer hover:text-purple-700 dark:hover:text-purple-300 transition-colors p-1 sm:p-2 rounded-md hover:bg-purple-50 dark:hover:bg-purple-900/30"
                           >
                             <GitBranch className="h-4 w-4 sm:h-5 sm:w-5" />
                           </button>
