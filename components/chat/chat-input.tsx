@@ -69,7 +69,7 @@ const ChatInput = memo(function ChatInput({
   const pathname = usePathname();
 
   // Use Zustand store for model selection
-  const { selectedModel, setSelectedModel } = useModelStore();
+  const { selectedModel, setSelectedModel, _hasHydrated } = useModelStore();
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   // Store attachment IDs instead of full attachment objects for better integration with Convex
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
@@ -628,7 +628,7 @@ const ChatInput = memo(function ChatInput({
             {/* Model selector and action buttons */}
             <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto flex-1 min-w-0">
               <Select
-                value={selectedModel}
+                value={_hasHydrated ? selectedModel : "gemini-2.0-flash"}
                 onValueChange={(newModel) => {
                   setSelectedModel(newModel as ModelId);
                 }}
