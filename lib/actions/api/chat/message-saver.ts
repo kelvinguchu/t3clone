@@ -23,6 +23,9 @@ export async function saveUserMessage(
   const logPrefix = requestId ? `[${requestId}]` : "[saveUserMessage]";
 
   if (!shouldSaveUserMessage) {
+    console.log(
+      `${logPrefix} CHAT_API - Skipping user message save (already exists or retry detected)`,
+    );
     return { success: true };
   }
 

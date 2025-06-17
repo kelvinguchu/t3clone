@@ -91,6 +91,16 @@ export function validateChatRequest(
   const enableWebBrowsing =
     directEnableWebBrowsing ?? options?.enableWebBrowsing ?? false;
 
+  // Log request details for debugging retry operations
+  console.log(`${logPrefix} CHAT_API - Request validation:`, {
+    messagesCount: messages.length,
+    modelId,
+    threadId: finalThreadId,
+    hasThreadId: !!finalThreadId,
+    lastMessageRole: messages[messages.length - 1]?.role,
+    enableWebBrowsing,
+  });
+
   return {
     validation: { isValid: true },
     data: {

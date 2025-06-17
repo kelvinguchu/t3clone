@@ -34,7 +34,9 @@ import type { ReactNode } from "react";
 export type GroupedThreads = {
   today: Doc<"threads">[];
   yesterday: Doc<"threads">[];
-  older: Doc<"threads">[];
+  last7Days: Doc<"threads">[];
+  last30Days: Doc<"threads">[];
+  earlier: Doc<"threads">[];
 };
 
 export type ChatSidebarContentProps = {
@@ -44,6 +46,8 @@ export type ChatSidebarContentProps = {
   searchQuery: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   user: any;
+  isMobile: boolean;
+  setOpenMobile: (open: boolean) => void;
 };
 
 export function ChatSidebarContent({
@@ -52,6 +56,8 @@ export function ChatSidebarContent({
   currentThreadId,
   searchQuery,
   user,
+  isMobile,
+  setOpenMobile,
 }: Readonly<ChatSidebarContentProps>) {
   const router = useRouter();
   const [hoveredThread, setHoveredThread] = useState<string | null>(null);
@@ -66,34 +72,11 @@ export function ChatSidebarContent({
     });
   };
 
-  // Helper: resolve the best time to show (updatedAt fallback to _creationTime)
-  const getThreadTime = (t: Doc<"threads">) =>
-    typeof t.updatedAt === "number"
-      ? t.updatedAt
-      : (t as { _creationTime: number })._creationTime;
-
-  // Format timestamps for grouping headings with precise day calculation
-  const formatTimestamp = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-
-    // Reset time to start of day for accurate day comparison
-    const dateStart = new Date(
-      date.getFullYear(),
-      date.getMonth(),
-      date.getDate(),
-    );
-    const nowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    const diffInMs = nowStart.getTime() - dateStart.getTime();
-    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
-
-    if (diffInDays === 0) return "Today";
-    if (diffInDays === 1) return "Yesterday";
-    if (diffInDays < 7) return `${diffInDays} days ago`;
-    if (diffInDays < 30)
-      return `${Math.floor(diffInDays / 7)} week${Math.floor(diffInDays / 7) > 1 ? "s" : ""} ago`;
-    return date.toLocaleDateString();
+  // Close mobile sidebar when thread is clicked
+  const handleThreadClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
   };
 
   const renderThreadItem = (thread: Doc<"threads">): ReactNode => {
@@ -114,7 +97,7 @@ export function ChatSidebarContent({
         onMouseEnter={() => setHoveredThread(String(thread._id))}
         onMouseLeave={() => setHoveredThread(null)}
       >
-        <Link href={threadUrl} prefetch={true}>
+        <Link href={threadUrl} prefetch={true} onClick={handleThreadClick}>
           <SidebarMenuButton
             isActive={isActive}
             className={`w-full justify-start text-left p-2 transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer relative ${
@@ -241,22 +224,62 @@ export function ChatSidebarContent({
               </div>
             )}
 
-            {/* Older */}
-            {groupedThreads.older.length > 0 && (
+            {/* Last 7 Days */}
+            {groupedThreads.last7Days.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <h2 className="text-sm font-semibold text-purple-700 dark:text-purple-300">
-                    Previous
+                    Last 7 days
                   </h2>
                   <Badge
                     variant="secondary"
                     className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-xs"
                   >
-                    {groupedThreads.older.length}
+                    {groupedThreads.last7Days.length}
                   </Badge>
                 </div>
                 <SidebarMenu>
-                  {groupedThreads.older.map((thread) => {
+                  {groupedThreads.last7Days.map(renderThreadItem)}
+                </SidebarMenu>
+              </div>
+            )}
+
+            {/* Last 30 Days */}
+            {groupedThreads.last30Days.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <h2 className="text-sm font-semibold text-purple-700 dark:text-purple-300">
+                    Last 30 days
+                  </h2>
+                  <Badge
+                    variant="secondary"
+                    className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-xs"
+                  >
+                    {groupedThreads.last30Days.length}
+                  </Badge>
+                </div>
+                <SidebarMenu>
+                  {groupedThreads.last30Days.map(renderThreadItem)}
+                </SidebarMenu>
+              </div>
+            )}
+
+            {/* Earlier */}
+            {groupedThreads.earlier.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <h2 className="text-sm font-semibold text-purple-700 dark:text-purple-300">
+                    Earlier
+                  </h2>
+                  <Badge
+                    variant="secondary"
+                    className="bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-xs"
+                  >
+                    {groupedThreads.earlier.length}
+                  </Badge>
+                </div>
+                <SidebarMenu>
+                  {groupedThreads.earlier.map((thread: Doc<"threads">) => {
                     const isActive = currentThreadId === String(thread._id);
                     const olderCleanTitle =
                       thread.title
@@ -275,7 +298,11 @@ export function ChatSidebarContent({
                         }
                         onMouseLeave={() => setHoveredThread(null)}
                       >
-                        <Link href={threadUrl} prefetch={true}>
+                        <Link
+                          href={threadUrl}
+                          prefetch={true}
+                          onClick={handleThreadClick}
+                        >
                           <SidebarMenuButton
                             isActive={isActive}
                             className={`w-full justify-start text-left p-2 transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer relative ${
@@ -300,15 +327,6 @@ export function ChatSidebarContent({
                                   }`}
                                 >
                                   {olderCleanTitle}
-                                </div>
-                                <div
-                                  className={`text-xs truncate ${
-                                    isActive
-                                      ? "text-purple-700 dark:text-purple-300"
-                                      : "text-muted-foreground"
-                                  }`}
-                                >
-                                  {formatTimestamp(getThreadTime(thread))}
                                 </div>
                               </div>
                             </div>
@@ -362,7 +380,9 @@ export function ChatSidebarContent({
 
             {groupedThreads.today.length === 0 &&
               groupedThreads.yesterday.length === 0 &&
-              groupedThreads.older.length === 0 &&
+              groupedThreads.last7Days.length === 0 &&
+              groupedThreads.last30Days.length === 0 &&
+              groupedThreads.earlier.length === 0 &&
               searchQuery && (
                 <div className="text-center py-8">
                   <Search className="h-12 w-12 text-purple-300 mx-auto mb-3" />
@@ -378,7 +398,9 @@ export function ChatSidebarContent({
             {/* Show empty state when no threads */}
             {groupedThreads.today.length === 0 &&
               groupedThreads.yesterday.length === 0 &&
-              groupedThreads.older.length === 0 &&
+              groupedThreads.last7Days.length === 0 &&
+              groupedThreads.last30Days.length === 0 &&
+              groupedThreads.earlier.length === 0 &&
               !searchQuery && (
                 <div className="text-center py-8">
                   <MessageSquare className="h-12 w-12 text-purple-300 mx-auto mb-3" />

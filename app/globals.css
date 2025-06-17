@@ -64,14 +64,14 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: var(--color-purple-100);
+  --sidebar-foreground: var(--color-purple-900);
+  --sidebar-primary: var(--color-purple-600);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--color-purple-200);
+  --sidebar-accent-foreground: var(--color-purple-900);
+  --sidebar-border: var(--color-purple-300);
+  --sidebar-ring: var(--color-purple-600);
 }
 
 .dark {
@@ -98,14 +98,14 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar: var(--color-purple-900);
+  --sidebar-foreground: var(--color-purple-100);
+  --sidebar-primary: var(--color-purple-400);
+  --sidebar-primary-foreground: var(--color-purple-900);
+  --sidebar-accent: var(--color-purple-800);
+  --sidebar-accent-foreground: var(--color-purple-100);
+  --sidebar-border: var(--color-purple-700);
+  --sidebar-ring: var(--color-purple-400);
 }
 
 @layer base {
@@ -115,6 +115,112 @@
   body {
     @reference bg-purple-100 dark: bg-purple-900 text-foreground;
   }
+}
+
+/* Custom Purple Scrollbar Styling using our color scheme */
+/* Webkit browsers (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--color-purple-100);
+  border-radius: 6px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-purple-500);
+  border-radius: 6px;
+  border: 2px solid var(--color-purple-100);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-purple-600);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--color-purple-100);
+}
+
+/* Dark mode scrollbar */
+.dark *::-webkit-scrollbar-track {
+  background: var(--color-purple-950);
+}
+
+.dark *::-webkit-scrollbar-thumb {
+  background: var(--color-purple-600);
+  border: 2px solid var(--color-purple-950);
+}
+
+.dark *::-webkit-scrollbar-thumb:hover {
+  background: var(--color-purple-500);
+}
+
+.dark *::-webkit-scrollbar-corner {
+  background: var(--color-purple-950);
+}
+
+/* Sidebar specific scrollbar styling */
+[data-sidebar="content"]::-webkit-scrollbar {
+  width: 8px;
+}
+
+[data-sidebar="content"]::-webkit-scrollbar-track {
+  background: var(--scrollbar-track-bg, var(--color-purple-100));
+}
+
+[data-sidebar="content"]::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-bg, var(--color-purple-500));
+  border-radius: 4px;
+}
+
+[data-sidebar="content"]::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover-bg, var(--color-purple-600));
+}
+
+.dark [data-sidebar="content"]::-webkit-scrollbar-track {
+  background: var(--scrollbar-track-bg-dark, var(--color-purple-950));
+}
+
+.dark [data-sidebar="content"]::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-bg-dark, var(--color-purple-600));
+}
+
+.dark [data-sidebar="content"]::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover-bg-dark, var(--color-purple-500));
+}
+
+/* Firefox scrollbar styling (standard properties) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-purple-500) var(--color-purple-100);
+}
+
+.dark * {
+  scrollbar-color: var(--color-purple-600) var(--color-purple-950);
+}
+
+/* Custom text selection colors using our purple theme */
+::selection {
+  background-color: var(--color-purple-500);
+  color: var(--color-purple-50);
+}
+
+::-moz-selection {
+  background-color: var(--color-purple-500);
+  color: var(--color-purple-50);
+}
+
+/* Dark mode selection colors */
+.dark ::selection {
+  background-color: var(--color-purple-600);
+  color: var(--color-purple-100);
+}
+
+.dark ::-moz-selection {
+  background-color: var(--color-purple-600);
+  color: var(--color-purple-100);
 }
 
 

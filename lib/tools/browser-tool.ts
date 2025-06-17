@@ -86,7 +86,6 @@ export const createSessionTool = tool({
     try {
       const session = await createSession();
       activeSessions.add(session.id);
-      const debugUrl = await getDebugUrl(session.id);
       return {
         toolName: "Browser session ready",
         success: true,

@@ -19,7 +19,7 @@ export interface RetryMessageHandlerParams {
   sendMessage: (content: string) => Promise<void>;
 }
 
-// Handle retry logic for different model types (reasoning vs standard)
+// Optimized retry logic that leverages Convex conversation history
 export async function handleRetryMessage({
   threadId,
   status,
@@ -38,65 +38,52 @@ export async function handleRetryMessage({
   }
 
   try {
-    // Check if this is a reasoning model that uses data protocol
-    const isReasoningModel =
-      selectedModel === "deepseek-r1-distill-llama-70b" ||
-      selectedModel === "qwen/qwen3-32b";
+    console.log("[RetryHandler] Starting optimized retry operation", {
+      threadId,
+      selectedModel,
+      hookMessagesCount: hookMessages.length,
+    });
 
-    // First remove the last assistant message from the database
+    // Step 1: Remove the last assistant message from the database
     await removeLastAssistantMessage({
       threadId: threadId as Id<"threads">,
       ...(isAnonymous && anonSessionId ? { sessionId: anonSessionId } : {}),
     });
 
-    // Find the last user message to retry and the assistant message to remove
-    let lastUserMessage: Message | null = null;
+    // Step 2: Find the last assistant message to remove from UI
     let lastAssistantIndex = -1;
-    let lastUserIndex = -1;
-
-    // Find the last assistant message and the user message before it
     for (let i = hookMessages.length - 1; i >= 0; i--) {
-      if (hookMessages[i].role === "assistant" && lastAssistantIndex === -1) {
+      if (hookMessages[i].role === "assistant") {
         lastAssistantIndex = i;
-      } else if (
-        hookMessages[i].role === "user" &&
-        lastAssistantIndex !== -1 &&
-        lastUserMessage === null
-      ) {
-        lastUserMessage = hookMessages[i];
-        lastUserIndex = i;
         break;
       }
     }
 
-    if (!lastUserMessage) {
+    if (lastAssistantIndex === -1) {
+      console.warn("[RetryHandler] No assistant message found to remove");
       return;
     }
 
-    if (isReasoningModel) {
-      // For reasoning models with data protocol, the state is too complex to clean manually
-      // Instead, we'll use reload() but first clean up the database state
-      // This lets the AI SDK handle the complex data protocol state internally
+    // Step 3: Remove the assistant message from the UI state
+    setMessages((currentMessages) => {
+      return currentMessages.slice(0, lastAssistantIndex);
+    });
 
-      // Use the AI SDK's reload function which properly handles data protocol state
-      await reload();
-    } else {
-      // For standard models (text protocol), use the simpler approach
-      setMessages((currentMessages) => {
-        // Remove everything from the user message onwards (user + assistant)
-        const newMessages = currentMessages.slice(0, lastUserIndex);
-        return newMessages;
-      });
+    // Step 4: Small delay to ensure UI updates
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
-      // Standard delay
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    // Step 5: Use the AI SDK's reload() function
+    // The key optimization is that our server-side code now detects retry operations
+    // and loads conversation history from Convex instead of using the client-sent messages
+    console.log(
+      "[RetryHandler] Using AI SDK reload() with server-side conversation loading optimization",
+    );
 
-      // Send the message again
-      await sendMessage(lastUserMessage.content);
-    }
-  } catch (error) {
-    console.error("Failed to retry message:", error);
-    // If everything fails, try the basic reload as fallback
     await reload();
+
+    console.log("[RetryHandler] Optimized retry completed successfully");
+  } catch (error) {
+    console.error("[RetryHandler] Retry failed:", error);
+    throw error;
   }
 }

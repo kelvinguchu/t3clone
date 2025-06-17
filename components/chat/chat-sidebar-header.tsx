@@ -16,14 +16,7 @@ export function ChatSidebarHeader({
   setSearchQuery,
 }: Readonly<ChatSidebarHeaderProps>) {
   return (
-    <SidebarHeader className="p-4 pb-3 bg-purple-100 dark:bg-purple-900">
-      {/* Brand Header */}
-      <div className="flex items-center justify-center">
-        <h1 className="text-lg font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
-          T3.chat
-        </h1>
-      </div>
-
+    <SidebarHeader className="p-4 pb-3 bg-purple-100 dark:bg-purple-900 mt-8">
       {/* New Chat Button */}
       <Button
         className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-lg shadow-purple-500/25 transition-all duration-300 hover:shadow-purple-500/40 hover:scale-[1.02] group h-9"

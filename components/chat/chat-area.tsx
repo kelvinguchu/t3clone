@@ -481,6 +481,21 @@ const ChatArea = memo(function ChatArea({
   const { messagesContainerRef, showScrollButton, scrollToBottom } =
     useScrollManager({ displayMessages, isLoading });
 
+  // Track chat input height for dynamic scroll button positioning
+  const [inputHeight, setInputHeight] = useState(140); // Default minimum height
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile vs desktop for scroll button positioning
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   // Cache assistant messages when streaming completes
   useAssistantMessageCaching({
     isLoading,
@@ -495,15 +510,15 @@ const ChatArea = memo(function ChatArea({
 
   return (
     <div
-      className={`flex-1 flex flex-col h-full min-h-0  bg-purple-50 dark:bg-purple-900 duration-1000 border-2 border-r-purple-200 border-l-purple-200 dark:border-l-purple-800 transition-all ${modelThemeClasses} relative ${
+      className={`flex-1 flex flex-col h-full min-h-0 bg-purple-50 dark:bg-purple-900 duration-1000 transition-all ${modelThemeClasses} relative ${
         sidebarOpen
-          ? "border-t-purple-200 border-r-purple-200 rounded-t-[1rem] border-l-purple-200 dark:border-l-purple-800 dark:border-t-purple-800"
-          : "border-t-transparent border-l-transparent border-r-transparent rounded-t-[0]"
+          ? "md:border-2 md:border-r-purple-200 md:border-l-purple-200 md:dark:border-l-purple-800 md:border-t-purple-200 md:rounded-t-[1rem] md:dark:border-t-purple-800"
+          : "md:border-2 md:border-t-transparent md:border-l-transparent md:border-r-transparent md:rounded-t-[0]"
       }`}
     >
-      {/* Scrollable Messages Area */}
+      {/* Scrollable Messages Area - Account for fixed mobile header */}
       <div
-        className="flex-1 overflow-y-auto min-h-0"
+        className="flex-1 overflow-y-auto min-h-0 pt-12 md:pt-0"
         ref={messagesContainerRef}
       >
         {hasMessages ? (
@@ -512,8 +527,7 @@ const ChatArea = memo(function ChatArea({
             isLoading={isLoading}
             loadingStatusText={loadingStatusText}
             threadId={initialThreadId}
-            reload={handleRetryWithCleanup} // Enhanced retry that removes old assistant message
-            // Thinking phase props for enhanced UX
+            reload={handleRetryWithCleanup}
             isThinkingPhase={isThinkingPhase}
             shouldShowThinkingDisplay={shouldShowThinkingDisplay}
             hasStartedResponding={hasStartedResponding}
@@ -549,9 +563,9 @@ const ChatArea = memo(function ChatArea({
         </div>
       )}
 
-      {/* Fixed Chat Input at Bottom */}
-      <div className="flex-shrink-0">
-        <div className="min-h-[140px] flex flex-col justify-end">
+      {/* Fixed Chat Input at Bottom - Account for mobile positioning */}
+      <div className="flex-shrink-0 pb-safe">
+        <div className="min-h-[140px] md:min-h-[140px] flex flex-col justify-end">
           <ChatInput
             presetMessage={prefillMessage}
             onSend={handleSend}
@@ -562,17 +576,22 @@ const ChatArea = memo(function ChatArea({
               remainingMessages,
               messageCount,
             }}
+            onHeightChange={setInputHeight}
           />
         </div>
       </div>
 
       {/* Scroll-to-bottom button - TRUE overlay positioned relative to entire ChatArea */}
       <div
-        className={`absolute bottom-[160px] left-1/2 transform -translate-x-1/2 z-50 transition-all duration-300 ${
+        className={`absolute left-1/2 transform -translate-x-1/2 z-40 transition-all duration-300 ${
           showScrollButton
             ? "opacity-100 translate-y-0"
             : "opacity-0 translate-y-2 pointer-events-none"
         }`}
+        style={{
+          // Use fixed positioning on mobile to avoid dynamic height issues, dynamic on desktop
+          bottom: isMobile ? "200px" : `${inputHeight + 20}px`,
+        }}
       >
         <LiquidGlassButton
           onClick={scrollToBottom}

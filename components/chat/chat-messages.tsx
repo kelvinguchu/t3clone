@@ -145,7 +145,7 @@ export function ChatMessages({
   return (
     // Root grows to fill its parent but no artificial spacer – avoids layout shift
     <div className="flex flex-col min-h-full">
-      <div className="w-full max-w-4xl mx-auto space-y-4 p-6 flex-1 flex flex-col justify-end">
+      <div className="w-full max-w-4xl mx-auto space-y-3 sm:space-y-4 p-3 sm:p-4 md:p-6 flex-1 flex flex-col justify-end">
         {/* Render conversation messages */}
         {messages.map((msg, index) => {
           // -------------------------------------------------------------
@@ -164,11 +164,11 @@ export function ChatMessages({
 
           if (msg.role === "user") {
             return (
-              <div key={index} className="flex justify-end mb-4">
-                <div className="max-w-[70%] ml-4">
+              <div key={index} className="flex justify-end mb-3 sm:mb-4">
+                <div className="max-w-[85%] sm:max-w-[75%] md:max-w-[70%] ml-2 sm:ml-4">
                   {/* User message content */}
-                  <div className="p-4 rounded-2xl bg-purple-600 text-white">
-                    <div className="whitespace-pre-wrap break-words">
+                  <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-purple-600 text-white">
+                    <div className="whitespace-pre-wrap break-words text-sm sm:text-base">
                       <Markdown content={msg.content} />
                     </div>
                   </div>
@@ -178,7 +178,7 @@ export function ChatMessages({
                     <div className="mt-2">
                       <ChatMessageAttachments
                         attachments={msg.attachments}
-                        maxHeight={250}
+                        maxHeight={200}
                       />
                     </div>
                   )}
@@ -188,10 +188,30 @@ export function ChatMessages({
           }
 
           // Assistant message
-          const handleCopy = () => {
-            navigator.clipboard.writeText(msg.content);
-            setCopiedIndex(index);
-            setTimeout(() => setCopiedIndex(null), 2000);
+          const handleCopy = async () => {
+            try {
+              // Try modern clipboard API first
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(msg.content);
+              } else {
+                // Fallback for mobile/older browsers
+                const textArea = document.createElement("textarea");
+                textArea.value = msg.content;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-999999px";
+                textArea.style.top = "-999999px";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textArea);
+              }
+              setCopiedIndex(index);
+              setTimeout(() => setCopiedIndex(null), 2000);
+            } catch (error) {
+              console.error("Failed to copy text:", error);
+              // Could show a toast notification here
+            }
           };
 
           const handleRetry = async () => {
@@ -292,7 +312,7 @@ export function ChatMessages({
             !isThinkingPhase;
 
           return (
-            <div key={index} className="flex justify-start mb-6">
+            <div key={index} className="flex justify-start mb-4 sm:mb-6">
               <div className="w-full max-w-4xl mx-auto">
                 {/* Enhanced thinking display logic */}
                 {shouldShowThinkingForThisMessage && (
@@ -308,14 +328,14 @@ export function ChatMessages({
                 {(msg.content.trim() ||
                   !isThinkingPhase ||
                   hasStartedResponding) && (
-                  <div className="whitespace-pre-wrap break-words text-gray-900 dark:text-gray-100">
+                  <div className="whitespace-pre-wrap break-words text-gray-900 dark:text-gray-100 text-sm sm:text-base">
                     <Markdown content={msg.content} />
                     {/* Show streaming cursor for the last assistant message during streaming */}
                     {isLoading &&
                       msg.role === "assistant" &&
                       index === messages.length - 1 &&
                       !isThinkingPhase && ( // Don't show cursor during thinking phase
-                        <span className="inline-block w-2 h-5 bg-purple-500 animate-pulse ml-1" />
+                        <span className="inline-block w-1.5 sm:w-2 h-4 sm:h-5 bg-purple-500 animate-pulse ml-1" />
                       )}
                   </div>
                 )}
@@ -324,31 +344,31 @@ export function ChatMessages({
                 {msg.attachments && msg.attachments.length > 0 && (
                   <ChatMessageAttachments
                     attachments={msg.attachments}
-                    maxHeight={300}
+                    maxHeight={250}
                   />
                 )}
                 {/* Action buttons (copy / retry / branch) – only once streaming is finished */}
                 {!isCurrentStreaming && (
-                  <div className="flex items-center gap-4 mt-2 text-gray-500 dark:text-gray-400 text-sm">
+                  <div className="flex items-center gap-4 sm:gap-6 mt-2 text-gray-500 dark:text-gray-400 text-xs sm:text-sm">
                     <button
                       onClick={handleCopy}
                       aria-label="Copy response"
-                      className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                      className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors p-1 sm:p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
                     >
                       {copiedIndex === index ? (
-                        <span className="text-green-500 text-[12px] select-none">
+                        <span className="text-green-500 text-[10px] sm:text-[12px] select-none">
                           Copied
                         </span>
                       ) : (
-                        <AiOutlineCopy className="h-5 w-5" />
+                        <AiOutlineCopy className="h-4 w-4 sm:h-5 sm:w-5" />
                       )}
                     </button>
                     <button
                       onClick={handleRetry}
                       aria-label="Retry"
-                      className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                      className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors p-1 sm:p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
                     >
-                      <FiRefreshCw className="h-5 w-5" />
+                      <FiRefreshCw className="h-4 w-4 sm:h-5 sm:w-5" />
                     </button>
                     {/* Only show branch button for the latest assistant message */}
                     {msg.id && isLatestAssistantMessage && (
@@ -359,16 +379,16 @@ export function ChatMessages({
                         <PopoverTrigger asChild>
                           <button
                             aria-label="Branch conversation"
-                            className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                            className="cursor-pointer hover:text-gray-800 dark:hover:text-gray-200 transition-colors p-1 sm:p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
                           >
-                            <GitBranch className="h-5 w-5" />
+                            <GitBranch className="h-4 w-4 sm:h-5 sm:w-5" />
                           </button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-60 p-4 space-y-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-purple-200 dark:border-purple-700 shadow-xl shadow-purple-500/10 dark:shadow-purple-900/20">
+                        <PopoverContent className="w-56 sm:w-60 p-3 sm:p-4 space-y-2 sm:space-y-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-purple-200 dark:border-purple-700 shadow-xl shadow-purple-500/10 dark:shadow-purple-900/20">
                           <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wide select-none">
                             Choose model to branch with
                           </p>
-                          <div className="space-y-1.5">
+                          <div className="space-y-1 sm:space-y-1.5">
                             {getAvailableModels().map((mId) => {
                               const info = getModelInfo(mId);
                               return (
@@ -401,12 +421,12 @@ export function ChatMessages({
                                       // Could add toast notification here
                                     }
                                   }}
-                                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/30 text-sm text-left transition-all duration-200 border border-transparent hover:border-purple-200 dark:hover:border-purple-700 group cursor-pointer"
+                                  className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/30 text-xs sm:text-sm text-left transition-all duration-200 border border-transparent hover:border-purple-200 dark:hover:border-purple-700 group cursor-pointer"
                                 >
                                   <img
                                     src={info.icon}
                                     alt={info.name}
-                                    className="h-5 w-5 rounded-sm"
+                                    className="h-4 w-4 sm:h-5 sm:w-5 rounded-sm"
                                   />
                                   <span className="flex-1 font-medium text-gray-700 dark:text-gray-200 group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors">
                                     {info.name}
@@ -426,7 +446,7 @@ export function ChatMessages({
                         )}
                         {/* Only show model name for assistant messages, and only if we have the actual model */}
                         {msg.role === "assistant" && msg.model && (
-                          <span>{msg.model}</span>
+                          <span className="hidden sm:inline">{msg.model}</span>
                         )}
                       </div>
                     </span>

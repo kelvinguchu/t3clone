@@ -20,6 +20,9 @@ import {
 } from "@/lib/actions/api/chat/conversation-cacher";
 import { resumeStream } from "@/lib/actions/api/chat/stream-resumer";
 import { buildStreamResponseConfig } from "@/lib/actions/api/chat/stream-response-builder";
+import { fetchQuery } from "convex/nextjs";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 
 // Performance optimizations for streaming chat API
 export const dynamic = "force-dynamic"; // Always dynamic for real-time chat
@@ -79,10 +82,73 @@ export async function POST(req: NextRequest) {
     } = data!;
 
     // ----------------------------------------------------
-    // IMMEDIATE STREAMING OPTIMIZATION:
-    // Extract session info quickly, but defer all heavy operations
-    // to background processing in onFinish callback
+    // OPTIMIZATION: Detect retry operations and load conversation from Convex
+    // instead of accepting full conversation history from client
     // ----------------------------------------------------
+    let messagesForAI = messages;
+    let isRetryOperation = false;
+    
+    // Check if this is a retry operation (thread exists + multiple messages sent)
+    if (threadId && messages.length > 1) {
+      console.log(
+        `[${requestId}] CHAT_API - Potential retry detected, loading conversation from Convex`,
+        {
+          threadId,
+          clientMessagesCount: messages.length,
+        }
+      );
+
+      try {
+        // Load the actual conversation history from Convex
+        const existingMessages = await fetchQuery(
+          api.messages.getThreadMessages,
+          { threadId: threadId as Id<"threads"> },
+          fetchOptions,
+        );
+
+        // Convert Convex messages to AI SDK format
+        const convexMessagesForAI = existingMessages.map((msg) => ({
+          role: msg.role as "user" | "assistant" | "system",
+          content: msg.content,
+          // Include tool information if available
+          ...(msg.toolsUsed && msg.toolsUsed.length > 0 && {
+            toolInvocations: msg.toolsUsed.map((tool) => ({
+              toolCallId: `tool-${msg._id}-${tool}`,
+              toolName: tool,
+              state: "result" as const,
+              args: {},
+              result: "Tool execution completed",
+            })),
+          }),
+        }));
+
+        // Check if we have existing conversation
+        if (convexMessagesForAI.length > 0) {
+          console.log(
+            `[${requestId}] CHAT_API - Using Convex conversation history`,
+            {
+              convexMessagesCount: convexMessagesForAI.length,
+              lastMessageRole: convexMessagesForAI[convexMessagesForAI.length - 1]?.role,
+            }
+          );
+
+          // Use Convex messages as the source of truth
+          messagesForAI = convexMessagesForAI;
+          isRetryOperation = true;
+
+          // For retry operations, we don't need to add a new user message
+          // The conversation history already contains what we need
+        }
+      } catch (error) {
+        console.warn(
+          `[${requestId}] CHAT_API - Failed to load conversation from Convex, using client messages`,
+          error
+        );
+        // Fall back to using client messages if Convex load fails
+      }
+    }
+
+    // Extract session info quickly
     const { sessionId, remainingMessages: defaultRemainingMessages } =
       await resolveSessionInfo(req, userId);
     let remainingMessages = defaultRemainingMessages;
@@ -100,26 +166,20 @@ export async function POST(req: NextRequest) {
     }
     remainingMessages = rateLimitResult.remainingMessages;
 
-    // Process multimodal messages if needed
-    const messagesForAI = await processMultimodalMessages(
-      messages,
-      attachmentIds,
-      fetchOptions,
-    );
+    // Process multimodal messages if needed (only for new messages, not retries)
+    if (!isRetryOperation) {
+      messagesForAI = await processMultimodalMessages(
+        messagesForAI,
+        attachmentIds,
+        fetchOptions,
+      );
+    }
 
-    // ----------------------------------------------------
-    // EARLY THREAD CREATION (needed for X-Thread-Id header)
-    // ----------------------------------------------------
-    // We create the thread up-front so the client immediately knows the
-    // canonical URL (used by ChatArea to router.push). If a threadId was
-    // provided we use it, otherwise we create it quickly here. The heavier
-    // background logic in onFinish will detect this and skip.
-
+    // Early thread creation (needed for X-Thread-Id header)
     let earlyThreadId: string | null = threadId ?? null;
 
     if (!earlyThreadId) {
       try {
-        // NOTE: we do *not* await heavy operations – just a quick DB insert.
         const threadRes = await createThreadIfNeeded(
           null,
           messages,
@@ -218,14 +278,36 @@ export async function POST(req: NextRequest) {
         // Background: Save messages to database
         if (finalThreadId) {
           try {
-            // Check if this is a retry operation and whether to save user message
-            const retryResult = await detectRetryOperation(
-              messages,
-              finalThreadId,
-              fetchOptions,
-              requestId,
-            );
-            const shouldSaveUserMessage = retryResult.shouldSaveUserMessage;
+            // For retry operations, we never save user messages (they already exist)
+            // For new conversations, we check and save as needed
+            let shouldSaveUserMessage = !isRetryOperation;
+
+            if (!isRetryOperation) {
+              // Check if this is a retry operation and whether to save user message
+              const retryResult = await detectRetryOperation(
+                messages,
+                finalThreadId,
+                fetchOptions,
+                requestId,
+              );
+              shouldSaveUserMessage = retryResult.shouldSaveUserMessage;
+
+              // Debug logging for retry detection
+              console.log(
+                `[${requestId}] CHAT_API - Retry detection result:`,
+                {
+                  isRetryOperation: retryResult.isRetryOperation,
+                  shouldSaveUserMessage,
+                  messagesCount: messages.length,
+                  lastMessageRole: messages[messages.length - 1]?.role,
+                  threadId: finalThreadId,
+                }
+              );
+            } else {
+              console.log(
+                `[${requestId}] CHAT_API - Retry operation detected via Convex history, skipping user message save`
+              );
+            }
 
             // Save user message only if it doesn't already exist
             await saveUserMessage(
@@ -313,7 +395,7 @@ export async function POST(req: NextRequest) {
         // Background: Cache conversation context
         await cacheConversationContext(
           finalThreadId,
-          messages,
+          messagesForAI, // Use the actual messages sent to AI (from Convex)
           modelId,
           requestId,
         );

@@ -9,7 +9,7 @@ export interface RetryDetectionResult {
   error?: string;
 }
 
-// Detect if this is a retry operation and whether to skip saving duplicate user message
+// Simplified retry detection - main optimization is now in the route handler
 export async function detectRetryOperation(
   messages: Message[],
   finalThreadId: string | null,
@@ -18,17 +18,7 @@ export async function detectRetryOperation(
 ): Promise<RetryDetectionResult> {
   const logPrefix = requestId ? `[${requestId}]` : "[detectRetryOperation]";
 
-  // Check if this is a retry operation by looking for existing messages
-  const isRetryOperation = messages.length > 1 && finalThreadId;
-  let shouldSaveUserMessage = true;
-
-  if (!isRetryOperation) {
-    return {
-      isRetryOperation: false,
-      shouldSaveUserMessage: true,
-    };
-  }
-
+  // If no thread ID, this is a new conversation
   if (!finalThreadId) {
     return {
       isRetryOperation: false,
@@ -36,26 +26,49 @@ export async function detectRetryOperation(
     };
   }
 
+  // Find the last user message in the messages array
+  let lastUserMessage: Message | null = null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user") {
+      lastUserMessage = messages[i];
+      break;
+    }
+  }
+
+  // If no user message found, something is wrong
+  if (!lastUserMessage) {
+    return {
+      isRetryOperation: false,
+      shouldSaveUserMessage: false,
+    };
+  }
+
   try {
-    // For retry operations, check if the user message already exists
+    // Get existing messages from the database
     const existingMessages = await fetchQuery(
       api.messages.getThreadMessages,
       { threadId: finalThreadId as Id<"threads"> },
       fetchOptions,
     );
 
-    const lastUserMessage = messages[messages.length - 1];
-    const messageExists = existingMessages.some(
-      (msg) => msg.role === "user" && msg.content === lastUserMessage?.content,
-    );
+    // Simple check: if this exact user message already exists, don't save it again
+    const messageExists = existingMessages.some((msg) => {
+      return msg.role === "user" && msg.content === lastUserMessage!.content;
+    });
 
     if (messageExists) {
-      shouldSaveUserMessage = false;
+      console.log(
+        `${logPrefix} CHAT_API - User message already exists in database, skipping save`,
+        {
+          messageContent: lastUserMessage.content.substring(0, 100) + "...",
+          existingMessagesCount: existingMessages.length,
+        },
+      );
     }
 
     return {
-      isRetryOperation: true,
-      shouldSaveUserMessage,
+      isRetryOperation: messageExists,
+      shouldSaveUserMessage: !messageExists,
     };
   } catch (error) {
     const errorMessage =
@@ -67,7 +80,7 @@ export async function detectRetryOperation(
 
     // If we can't check for existing messages, proceed with saving (fail safe)
     return {
-      isRetryOperation: true,
+      isRetryOperation: false,
       shouldSaveUserMessage: true,
       error: errorMessage,
     };
