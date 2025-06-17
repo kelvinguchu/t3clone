@@ -17,6 +17,21 @@ import { useRouter } from "next/navigation";
 import { useAnonymousSession } from "@/lib/contexts/anonymous-session-context";
 import type { Id } from "@/convex/_generated/dataModel";
 
+// Helper function to validate if an ID is a valid Convex message ID
+function isValidConvexId(id: string): boolean {
+  // Convex IDs are typically alphanumeric strings that:
+  // 1. Don't start with "msg-" (AI SDK temporary IDs)
+  // 2. Are longer than 10 characters
+  // 3. Match the pattern of Convex document IDs
+  return (
+    !id.startsWith("msg-") &&
+    id.length > 10 &&
+    /^[a-zA-Z0-9]+$/.test(id) &&
+    // Convex IDs often start with specific characters like 'j', 'k', etc.
+    /^[jkmnpqrstvwxyz]/.test(id)
+  );
+}
+
 type DisplayMessage = {
   role: "user" | "assistant" | "system";
   content: string;
@@ -60,6 +75,12 @@ export interface ChatMessagesProps {
   isThinkingPhase?: boolean;
   shouldShowThinkingDisplay?: boolean;
   hasStartedResponding?: boolean;
+  // Control which action buttons to show
+  showActionButtons?: {
+    copy?: boolean;
+    retry?: boolean;
+    branch?: boolean;
+  };
 }
 
 // Compact Loading Indicator Component
@@ -72,7 +93,7 @@ function CompactLoadingIndicator({ text }: { text: string | null }) {
     // Default loading state - just animated dots
     return (
       <div className="flex justify-start mb-4">
-        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-xs font-medium border shadow-sm max-w-fit bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-600">
+        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-xs font-medium border shadow-sm max-w-fit bg-gray-50 dark:bg-dark-bg-tertiary/50 border-gray-200 dark:border-dark-purple-accent/50">
           <div className="flex items-center gap-1">
             <div className="h-1.5 w-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
             <div className="h-1.5 w-1.5 bg-gray-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
@@ -88,10 +109,10 @@ function CompactLoadingIndicator({ text }: { text: string | null }) {
       <div
         className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-xs font-medium border shadow-sm max-w-fit ${
           isBrowsing
-            ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-600"
+            ? "bg-emerald-50 dark:bg-dark-bg-tertiary/50 border-emerald-200 dark:border-emerald-500/50"
             : isThinking
-              ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-600"
-              : "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-600"
+              ? "bg-amber-50 dark:bg-dark-bg-tertiary/50 border-amber-200 dark:border-amber-500/50"
+              : "bg-purple-50 dark:bg-dark-bg-tertiary/50 border-purple-200 dark:border-dark-purple-accent/50"
         }`}
       >
         {isBrowsing ? (
@@ -126,6 +147,7 @@ export function ChatMessages({
   isThinkingPhase,
   shouldShowThinkingDisplay,
   hasStartedResponding,
+  showActionButtons = { copy: true, retry: true, branch: true }, // Default to showing all buttons
 }: ChatMessagesProps) {
   // Track which assistant message was recently copied
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -167,7 +189,7 @@ export function ChatMessages({
               <div key={index} className="flex justify-end mb-3 sm:mb-4">
                 <div className="max-w-[85%] sm:max-w-[75%] md:max-w-[70%] ml-2 sm:ml-4">
                   {/* User message content */}
-                  <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-purple-600 text-white">
+                  <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-purple-600 dark:bg-dark-purple-glow text-white">
                     <div className="whitespace-pre-wrap break-words text-sm sm:text-base">
                       <Markdown content={msg.content} />
                     </div>
@@ -215,19 +237,17 @@ export function ChatMessages({
           };
 
           const handleRetry = async () => {
-            // Use AI SDK's reload function for proper retry functionality
-            if (reload && messages[index - 1]?.role === "user") {
-              try {
-                await reload();
-              } catch (error) {
-                console.error("Failed to retry message:", error);
-                // Import and use error handler
-                if (error instanceof Error) {
-                  const { handleChatError } = await import(
-                    "@/lib/utils/error-handler"
-                  );
-                  handleChatError(error, handleRetry);
-                }
+            if (!reload) return;
+
+            try {
+              await reload();
+            } catch (error) {
+              console.error("Failed to retry message:", error);
+              if (error instanceof Error) {
+                const { handleChatError } = await import(
+                  "@/lib/utils/error-handler"
+                );
+                handleChatError(error, handleRetry);
               }
             }
           };
@@ -349,98 +369,108 @@ export function ChatMessages({
                 )}
                 {/* Action buttons (copy / retry / branch) – only once streaming is finished */}
                 {!isCurrentStreaming && (
-                  <div className="flex items-center gap-4 sm:gap-3 mt-2 text-purple-600 dark:text-purple-400 text-xs sm:text-sm">
-                    <button
-                      onClick={handleCopy}
-                      aria-label="Copy response"
-                      className="cursor-pointer hover:text-purple-700 dark:hover:text-purple-300 transition-colors p-1 sm:p-2 rounded-md hover:bg-purple-50 dark:hover:bg-purple-900/30"
-                    >
-                      {copiedIndex === index ? (
-                        <span className="text-green-500 text-[10px] sm:text-[12px] select-none">
-                          Copied
-                        </span>
-                      ) : (
-                        <AiOutlineCopy className="h-4 w-4 sm:h-5 sm:w-5" />
-                      )}
-                    </button>
+                  <div className="flex items-center gap-4 sm:gap-3 mt-2 text-purple-600 dark:text-slate-400 text-xs sm:text-sm">
+                    {showActionButtons?.copy && (
+                      <button
+                        onClick={handleCopy}
+                        aria-label="Copy response"
+                        className="cursor-pointer hover:text-purple-700 dark:hover:text-slate-300 transition-colors p-1 sm:p-2 rounded-md hover:bg-purple-50 dark:hover:bg-dark-bg-tertiary/50"
+                      >
+                        {copiedIndex === index ? (
+                          <span className="text-green-500 text-[10px] sm:text-[12px] select-none">
+                            Copied
+                          </span>
+                        ) : (
+                          <AiOutlineCopy className="h-4 w-4 sm:h-5 sm:w-5" />
+                        )}
+                      </button>
+                    )}
                     {/* Only show retry button for the latest assistant message */}
-                    {isLatestAssistantMessage && (
+                    {showActionButtons?.retry && isLatestAssistantMessage && (
                       <button
                         onClick={handleRetry}
                         aria-label="Retry"
-                        className="cursor-pointer hover:text-purple-700 dark:hover:text-purple-300 transition-colors p-1 sm:p-2 rounded-md hover:bg-purple-50 dark:hover:bg-purple-900/30"
+                        className="cursor-pointer hover:text-purple-700 dark:hover:text-slate-300 transition-colors p-1 sm:p-2 rounded-md hover:bg-purple-50 dark:hover:bg-dark-bg-tertiary/50"
                       >
                         <FiRefreshCw className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
                     )}
-                    {/* Only show branch button for the latest assistant message */}
-                    {msg.id && isLatestAssistantMessage && (
-                      <Popover
-                        open={branchPopover === index}
-                        onOpenChange={(o) => setBranchPopover(o ? index : null)}
-                      >
-                        <PopoverTrigger asChild>
-                          <button
-                            aria-label="Branch conversation"
-                            className="cursor-pointer hover:text-purple-700 dark:hover:text-purple-300 transition-colors p-1 sm:p-2 rounded-md hover:bg-purple-50 dark:hover:bg-purple-900/30"
-                          >
-                            <GitBranch className="h-4 w-4 sm:h-5 sm:w-5" />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-56 sm:w-60 p-3 sm:p-4 space-y-2 sm:space-y-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-purple-200 dark:border-purple-700 shadow-xl shadow-purple-500/10 dark:shadow-purple-900/20">
-                          <p className="text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wide select-none">
-                            Choose model to branch with
-                          </p>
-                          <div className="space-y-1 sm:space-y-1.5">
-                            {getAvailableModels().map((mId) => {
-                              const info = getModelInfo(mId);
-                              return (
-                                <button
-                                  key={mId}
-                                  onClick={async () => {
-                                    if (!threadId || !msg.id) return;
+                    {/* Only show branch button for the latest assistant message with a valid Convex ID */}
+                    {showActionButtons?.branch &&
+                      msg.id &&
+                      isLatestAssistantMessage &&
+                      // Only show branch button for messages that exist in the database (have Convex IDs)
+                      isValidConvexId(msg.id) && // Check if it's a valid Convex message ID
+                      msg.content &&
+                      msg.content.trim().length > 0 && ( // Must have content to branch from
+                        <Popover
+                          open={branchPopover === index}
+                          onOpenChange={(o) =>
+                            setBranchPopover(o ? index : null)
+                          }
+                        >
+                          <PopoverTrigger asChild>
+                            <button
+                              aria-label="Branch conversation"
+                              className="cursor-pointer hover:text-purple-700 dark:hover:text-slate-300 transition-colors p-1 sm:p-2 rounded-md hover:bg-purple-50 dark:hover:bg-dark-bg-tertiary/50"
+                            >
+                              <GitBranch className="h-4 w-4 sm:h-5 sm:w-5" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto min-w-48 max-w-xs p-3 sm:p-4 space-y-2 sm:space-y-3 bg-purple-50 dark:bg-dark-bg-tertiary border border-purple-200 dark:border-dark-purple-accent shadow-lg backdrop-blur-sm">
+                            <p className="text-xs font-semibold text-purple-700 dark:text-slate-300 uppercase tracking-wide select-none">
+                              Choose model to branch with
+                            </p>
+                            <div className="space-y-1 sm:space-y-1.5">
+                              {getAvailableModels().map((mId) => {
+                                const info = getModelInfo(mId);
+                                return (
+                                  <button
+                                    key={mId}
+                                    onClick={async () => {
+                                      if (!threadId || !msg.id) return;
 
-                                    try {
-                                      // Call the branchThread mutation
-                                      const newThreadId = await branchThread({
-                                        sourceThreadId:
-                                          threadId as Id<"threads">,
-                                        branchFromMessageId:
-                                          msg.id as Id<"messages">,
-                                        model: mId,
-                                        ...(sessionId ? { sessionId } : {}),
-                                      });
+                                      try {
+                                        // Call the branchThread mutation
+                                        const newThreadId = await branchThread({
+                                          sourceThreadId:
+                                            threadId as Id<"threads">,
+                                          branchFromMessageId:
+                                            msg.id as Id<"messages">,
+                                          model: mId,
+                                          ...(sessionId ? { sessionId } : {}),
+                                        });
 
-                                      // Navigate to the new branched thread
-                                      router.push(`/chat/${newThreadId}`);
+                                        // Navigate to the new branched thread
+                                        router.push(`/chat/${newThreadId}`);
 
-                                      // Close the popover
-                                      setBranchPopover(null);
-                                    } catch (error) {
-                                      console.error(
-                                        "Failed to branch thread:",
-                                        error,
-                                      );
-                                      // Could add toast notification here
-                                    }
-                                  }}
-                                  className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/30 text-xs sm:text-sm text-left transition-all duration-200 border border-transparent hover:border-purple-200 dark:hover:border-purple-700 group cursor-pointer"
-                                >
-                                  <img
-                                    src={info.icon}
-                                    alt={info.name}
-                                    className="h-4 w-4 sm:h-5 sm:w-5 rounded-sm"
-                                  />
-                                  <span className="flex-1 font-medium text-gray-700 dark:text-gray-200 group-hover:text-purple-700 dark:group-hover:text-purple-300 transition-colors">
-                                    {info.name}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                    )}
+                                        // Close the popover
+                                        setBranchPopover(null);
+                                      } catch (error) {
+                                        console.error(
+                                          "Failed to branch thread:",
+                                          error,
+                                        );
+                                        // Could add toast notification here
+                                      }
+                                    }}
+                                    className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5 rounded-lg hover:bg-purple-100 dark:hover:bg-dark-bg-secondary text-xs sm:text-sm text-left transition-all duration-200 border border-transparent hover:border-purple-200 dark:hover:border-dark-purple-accent group cursor-pointer whitespace-nowrap"
+                                  >
+                                    <img
+                                      src={info.icon}
+                                      alt={info.name}
+                                      className="h-4 w-4 sm:h-5 sm:w-5 rounded-sm flex-shrink-0"
+                                    />
+                                    <span className="font-medium text-gray-700 dark:text-gray-200 group-hover:text-purple-700 dark:group-hover:text-slate-200 transition-colors">
+                                      {info.name}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )}
                     <span className="ml-auto text-xs text-gray-400 select-none uppercase tracking-wide">
                       <div className="flex items-center gap-1">
                         {/* Show tool usage icon if tools were used */}

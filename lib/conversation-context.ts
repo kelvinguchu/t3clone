@@ -208,7 +208,6 @@ export async function getSmartContext(
     "qwen/qwen3-32b": 32768,
     "gemini-2.0-flash": 32000,
     "gemini-2.0-flash-preview-image-generation": 32000,
-    "gpt-4.1-mini": 128000,
   };
 
   const maxTokens = modelLimits[model] || DEFAULT_CONTEXT_WINDOW;

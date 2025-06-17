@@ -128,7 +128,7 @@ export function ChatWelcomeScreen({
                 ? "text-red-600/80 dark:text-red-400/80"
                 : isAnonymous
                   ? "text-orange-600/80 dark:text-orange-400/80"
-                  : "text-purple-600/80 dark:text-purple-400/80"
+                  : "text-purple-600/80 dark:text-slate-400"
             }`}
           >
             {getUserSubtext()}
@@ -136,7 +136,7 @@ export function ChatWelcomeScreen({
 
           {/* Sign up prompt for anonymous users with low messages */}
           {mounted && isAnonymous && remainingMessages <= 3 && (
-            <div className="mb-3 sm:mb-4 md:mb-6 p-2 sm:p-3 md:p-4 mx-1 sm:mx-2 md:mx-0 rounded-md sm:rounded-lg md:rounded-xl bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-950/30 dark:to-red-950/30 border border-orange-200 dark:border-orange-700">
+            <div className="mb-3 sm:mb-4 md:mb-6 p-2 sm:p-3 md:p-4 mx-1 sm:mx-2 md:mx-0 rounded-md sm:rounded-lg md:rounded-xl bg-gradient-to-r from-orange-50 to-red-50 dark:from-dark-bg-tertiary/50 dark:to-dark-bg-tertiary/70 border border-orange-200 dark:border-orange-500/50">
               <p className="text-xs sm:text-sm text-orange-800 dark:text-orange-200 font-medium mb-1 sm:mb-2">
                 ⚡ Running low on messages!
               </p>
@@ -161,8 +161,8 @@ export function ChatWelcomeScreen({
                     }
                     className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0 ${
                       isActive
-                        ? "bg-purple-600 text-white"
-                        : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/50"
+                        ? "bg-purple-600 dark:bg-dark-purple-glow text-white"
+                        : "bg-purple-100 dark:bg-dark-bg-tertiary/50 text-purple-700 dark:text-slate-300 hover:bg-purple-200 dark:hover:bg-dark-bg-secondary"
                     }`}
                   >
                     <IconComponent className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -184,8 +184,8 @@ export function ChatWelcomeScreen({
                       disabled={(isAnonymous && !canSendMessage) || isLoading}
                       className={`w-full text-left px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm rounded-md sm:rounded-lg transition-all duration-200 ${
                         (isAnonymous && !canSendMessage) || isLoading
-                          ? "bg-gray-100/80 dark:bg-gray-900/20 text-gray-400 dark:text-gray-600 cursor-not-allowed"
-                          : "bg-purple-50/80 dark:bg-purple-900/20 text-purple-800 dark:text-purple-200 hover:bg-purple-100/80 dark:hover:bg-purple-800/30 hover:scale-[1.01] sm:hover:scale-[1.02] hover:shadow-md"
+                          ? "bg-gray-100/80 dark:bg-dark-bg-tertiary/30 text-gray-400 dark:text-slate-600 cursor-not-allowed"
+                          : "bg-purple-50/80 dark:bg-dark-bg-tertiary/30 text-purple-800 dark:text-slate-200 hover:bg-purple-100/80 dark:hover:bg-dark-bg-secondary/50 hover:scale-[1.01] sm:hover:scale-[1.02] hover:shadow-md"
                       }`}
                     >
                       {prompt}

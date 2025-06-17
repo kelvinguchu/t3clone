@@ -13,7 +13,21 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { motion, AnimatePresence } from "motion/react";
-import { Paperclip, AlertTriangle, Clock, Globe, Send } from "lucide-react";
+import {
+  Paperclip,
+  AlertTriangle,
+  Clock,
+  Globe,
+  Send,
+  Square,
+  Eye,
+  Brain,
+  Wrench,
+  Image,
+  Layers,
+  Zap,
+  FileText,
+} from "lucide-react";
 import { useUploadThing } from "@/lib/uploadthing";
 import { useFilePreview } from "@/lib/contexts/file-preview-context";
 import {
@@ -46,7 +60,6 @@ interface ChatInputProps {
       enableWebBrowsing?: boolean;
     },
   ) => void;
-  isLoading?: boolean;
   // Session data passed from parent to avoid duplicate hook calls
   sessionData?: {
     isAnonymous: boolean;
@@ -56,14 +69,22 @@ interface ChatInputProps {
   };
   // Callback to report input height changes to parent
   onHeightChange?: (height: number) => void;
+  // Stop function from useChat hook
+  onStop?: () => void;
+  // Status from useChat hook for determining button state
+  status?: "ready" | "submitted" | "streaming" | "error";
+  // Partial save state for visual feedback
+  isSavingPartial?: boolean;
 }
 
 const ChatInput = memo(function ChatInput({
   presetMessage = "",
   onSend,
-  isLoading = false,
   sessionData,
   onHeightChange,
+  onStop,
+  status = "ready",
+  isSavingPartial,
 }: Readonly<ChatInputProps>) {
   const { isLoaded } = useUser();
   const pathname = usePathname();
@@ -358,38 +379,55 @@ const ChatInput = memo(function ChatInput({
     autoResize();
   }, [autoResize]);
 
-  const handleSend = useCallback(() => {
-    if (
-      (!message.trim() && attachmentIds.length === 0) ||
-      isLoading ||
-      isUploading
-    ) {
-      return;
-    }
+  const isRateLimited = isAnonymous && !canSendMessage;
+  // Update disabled logic - no longer disable input during streaming
+  const isDisabled = isRateLimited; // Remove isLoading from disabled state
 
-    // Check rate limits for anonymous users
-    if (isAnonymous && !canSendMessage) {
-      return;
-    }
+  // Determine button state based on AI SDK status
+  const isStreaming = status === "streaming" || status === "submitted";
+  const canSend =
+    (message.trim() || attachmentPreviews.length > 0) &&
+    !isDisabled &&
+    !isUploading &&
+    status === "ready";
+  const canStop = isStreaming && onStop;
 
-    onSend(
-      message,
-      attachmentIds.length > 0 ? attachmentIds : undefined,
-      attachmentPreviews.length > 0 ? attachmentPreviews : undefined,
-      { enableWebBrowsing },
-    );
-    // Clear attachments from context
-    attachmentIds.forEach((id) => removeFilePreview(id));
-    setAttachmentIds([]);
-    // Clear message and drafts
-    setMessage("");
-    clearDraftMessage(currentThreadKey);
-    clearDraftAttachments(currentThreadKey);
+  // Handle send or stop action
+  const handleSendOrStop = useCallback(() => {
+    if (isStreaming && onStop) {
+      // Stop the current generation (this will save partial content)
+      onStop();
+    } else {
+      // Send new message
+      if ((!message.trim() && attachmentIds.length === 0) || isUploading) {
+        return;
+      }
+
+      // Check rate limits for anonymous users
+      if (isAnonymous && !canSendMessage) {
+        return;
+      }
+
+      onSend(
+        message,
+        attachmentIds.length > 0 ? attachmentIds : undefined,
+        attachmentPreviews.length > 0 ? attachmentPreviews : undefined,
+        { enableWebBrowsing },
+      );
+      // Clear attachments from context
+      attachmentIds.forEach((id) => removeFilePreview(id));
+      setAttachmentIds([]);
+      // Clear message and drafts
+      setMessage("");
+      clearDraftMessage(currentThreadKey);
+      clearDraftAttachments(currentThreadKey);
+    }
   }, [
+    isStreaming,
+    onStop,
     message,
     attachmentIds,
     attachmentPreviews,
-    isLoading,
     isUploading,
     isAnonymous,
     canSendMessage,
@@ -398,7 +436,16 @@ const ChatInput = memo(function ChatInput({
     enableWebBrowsing,
     currentThreadKey,
     clearDraftMessage,
+    clearDraftAttachments,
   ]);
+
+  // Enhanced button title with partial save feedback
+  const getButtonTitle = () => {
+    if (isSavingPartial) return "Saving partial response...";
+    if (canStop) return "Stop generation and save partial response";
+    if (canSend) return "Send message";
+    return "Type a message to send";
+  };
 
   // Hidden file input
   const originalAccept = "image/*,application/pdf,text/*";
@@ -556,13 +603,6 @@ const ChatInput = memo(function ChatInput({
     return null;
   }, [isAnonymous, isLoaded, messageCount]);
 
-  const isRateLimited = isAnonymous && !canSendMessage;
-  const isDisabled = isLoading || isRateLimited;
-  const canSend =
-    (message.trim() || attachmentPreviews.length > 0) &&
-    !isDisabled &&
-    !isUploading;
-
   return (
     <>
       {/* Rate Limiting Warning for Anonymous Users */}
@@ -580,10 +620,10 @@ const ChatInput = memo(function ChatInput({
             exit={{ opacity: 0, y: -10 }}
             className={`mx-auto w-full sm:w-[95%] md:w-[90%] px-3 sm:px-4 py-2 border-x-2 ${
               warningLevel.color === "red"
-                ? "bg-red-50/90 dark:bg-red-950/30 border-red-300 dark:border-red-700"
+                ? "bg-red-50/90 dark:bg-dark-bg-tertiary/80 border-red-300 dark:border-red-500/50"
                 : warningLevel.color === "orange"
-                  ? "bg-orange-50/90 dark:bg-orange-950/30 border-orange-300 dark:border-orange-700"
-                  : "bg-yellow-50/90 dark:bg-yellow-950/30 border-yellow-300 dark:border-yellow-700"
+                  ? "bg-orange-50/90 dark:bg-dark-bg-tertiary/80 border-orange-300 dark:border-orange-500/50"
+                  : "bg-yellow-50/90 dark:bg-dark-bg-tertiary/80 border-yellow-300 dark:border-yellow-500/50"
             }`}
           >
             <div className="flex items-center gap-2 text-xs sm:text-sm">
@@ -624,7 +664,7 @@ const ChatInput = memo(function ChatInput({
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mx-auto w-full sm:w-[95%] md:w-[90%] px-3 sm:px-4 py-3 border-x-2 bg-red-50/90 dark:bg-red-950/30 border-red-300 dark:border-red-700"
+            className="mx-auto w-full sm:w-[95%] md:w-[90%] px-3 sm:px-4 py-3 border-x-2 bg-red-50/90 dark:bg-dark-bg-tertiary/80 border-red-300 dark:border-red-500/50"
           >
             <div className="flex items-center gap-2 text-xs sm:text-sm">
               <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-red-600 dark:text-red-400 flex-shrink-0" />
@@ -644,9 +684,9 @@ const ChatInput = memo(function ChatInput({
       {/* Clean Chat Input Area */}
       <div
         ref={inputContainerRef}
-        className="fixed bottom-0 left-0 right-0 md:relative md:bottom-auto md:left-auto md:right-auto bg-purple-50/30 dark:bg-purple-950/30 z-50"
+        className="fixed bottom-0 left-0 right-0 md:relative md:bottom-auto md:left-auto md:right-auto bg-purple-50/30 dark:bg-dark-bg/50 z-50"
       >
-        <div className="mx-auto w-full sm:w-[95%] md:w-[90%] lg:w-[80%] p-2 sm:p-2 md:p-3 border-t-2 border-l-2 border-r-2 border-purple-300 dark:border-purple-700 rounded-t-xl bg-purple-100/90 dark:bg-purple-900/90">
+        <div className="mx-auto w-full sm:w-[95%] md:w-[90%] lg:w-[80%] p-2 sm:p-2 md:p-3 border-t-2 border-l-2 border-r-2 border-purple-300 dark:border-dark-purple-accent rounded-t-xl bg-purple-100/90 dark:bg-dark-bg-secondary/90">
           {/* Hidden file input */}
           <input
             ref={fileInputRef}
@@ -660,7 +700,7 @@ const ChatInput = memo(function ChatInput({
           {/* Main Input Container */}
           <div className="relative">
             <div
-              className={`p-2 sm:p-3 rounded-xl bg-white dark:bg-purple-800 border-2 border-purple-300 dark:border-purple-600 shadow-lg shadow-purple-500/10 focus-within:border-purple-500 dark:focus-within:border-purple-400 focus-within:shadow-purple-500/20 transition-all duration-300 ${
+              className={`p-2 sm:p-3 rounded-xl bg-white dark:bg-dark-bg-tertiary border-2 border-purple-300 dark:border-dark-purple-accent shadow-lg shadow-purple-500/10 focus-within:border-purple-500 dark:focus-within:border-dark-purple-glow focus-within:shadow-purple-500/20 dark:focus-within:shadow-dark-purple-glow/20 transition-all duration-300 ${
                 !message.trim() && attachmentPreviews.length === 0
                   ? "hover:shadow-purple-500/30"
                   : ""
@@ -685,11 +725,11 @@ const ChatInput = memo(function ChatInput({
                           duration: 0.5,
                           ease: "easeInOut",
                         }}
-                        className="text-xs sm:text-sm text-purple-700 dark:text-purple-300 font-medium"
+                        className="text-xs sm:text-sm text-purple-700 dark:text-slate-300 font-medium"
                       >
                         {isRateLimited
                           ? "Message limit reached. Sign up to continue..."
-                          : isLoading
+                          : isStreaming
                             ? "Generating..."
                             : isUploading
                               ? "Uploading files..."
@@ -702,13 +742,13 @@ const ChatInput = memo(function ChatInput({
                 <Textarea
                   ref={textareaRef}
                   placeholder=""
-                  className="border-none shadow-none bg-transparent focus-visible:ring-0 text-xs sm:text-sm placeholder:text-transparent resize-none min-h-[24px] font-medium transition-all duration-200 w-full text-purple-900 dark:text-purple-100 p-0 overflow-y-auto"
+                  className="border-none shadow-none bg-transparent focus-visible:ring-0 text-xs sm:text-sm placeholder:text-transparent resize-none min-h-[24px] font-medium transition-all duration-200 w-full text-purple-900 dark:text-slate-200 p-0 overflow-y-auto"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      handleSend();
+                      handleSendOrStop();
                     }
                     // Allow Shift+Enter for new lines (default behavior)
                   }}
@@ -733,9 +773,9 @@ const ChatInput = memo(function ChatInput({
                 onValueChange={(newModel) => {
                   setSelectedModel(newModel as ModelId);
                 }}
-                disabled={isLoading}
+                disabled={isDisabled}
               >
-                <SelectTrigger className="group w-auto min-w-20 sm:min-w-32 md:min-w-40 border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-md text-xs text-purple-700 dark:text-purple-200 hover:bg-purple-50 dark:hover:bg-purple-700 hover:border-purple-400 dark:hover:border-purple-500 rounded-lg h-8 sm:h-9 shadow-lg shadow-purple-500/10 transition-all duration-300 hover:shadow-purple-500/20 hover:scale-[1.02] flex-shrink-0">
+                <SelectTrigger className="group w-auto min-w-20 sm:min-w-32 md:min-w-40 border-2 border-purple-300 dark:border-dark-purple-accent bg-white dark:bg-dark-bg-tertiary backdrop-blur-md text-xs text-purple-700 dark:text-slate-200 hover:bg-purple-50 dark:hover:bg-dark-bg-secondary hover:border-purple-400 dark:hover:border-dark-purple-glow rounded-lg h-8 sm:h-9 shadow-lg shadow-purple-500/10 transition-all duration-300 hover:shadow-purple-500/20 dark:hover:shadow-dark-purple-glow/20 hover:scale-[1.02] flex-shrink-0">
                   <div className="flex items-center gap-1">
                     <div className="relative">
                       <img
@@ -750,14 +790,14 @@ const ChatInput = memo(function ChatInput({
                     </span>
                   </div>
                 </SelectTrigger>
-                <SelectContent className="border-2 border-purple-300 dark:border-purple-600 bg-white dark:bg-purple-800 backdrop-blur-xl shadow-2xl shadow-purple-500/25 rounded-xl p-1 w-full max-w-xs">
+                <SelectContent className="border-2 border-purple-300 dark:border-dark-purple-accent bg-white dark:bg-dark-bg-tertiary backdrop-blur-xl shadow-2xl shadow-purple-500/25 dark:shadow-dark-purple-glow/25 rounded-xl p-1 w-full max-w-xs">
                   {availableModels.map((modelId) => {
                     const modelInfo = getModelInfo(modelId);
                     return (
                       <SelectItem
                         key={modelId}
                         value={modelId}
-                        className={`rounded-lg hover:bg-purple-50 dark:hover:bg-purple-700 transition-all duration-200 hover:scale-[1.02] focus:bg-gradient-to-r ${
+                        className={`rounded-lg hover:bg-purple-50 dark:hover:bg-dark-bg-secondary transition-all duration-200 hover:scale-[1.02] focus:bg-gradient-to-r ${
                           modelInfo.theme === "blue"
                             ? "focus:from-blue-500/10 focus:to-blue-600/10"
                             : modelInfo.theme === "green"
@@ -786,9 +826,29 @@ const ChatInput = memo(function ChatInput({
                             <span className="font-medium text-xs sm:text-sm">
                               {modelInfo.name}
                             </span>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
-                              {modelInfo.description}
-                            </p>
+                            <div className="flex items-center gap-1 mt-1">
+                              {modelInfo.capabilities.vision && (
+                                <Eye className="h-3 w-3 text-blue-500" />
+                              )}
+                              {modelInfo.capabilities.thinking && (
+                                <Brain className="h-3 w-3 text-amber-500" />
+                              )}
+                              {modelInfo.capabilities.tools && (
+                                <Wrench className="h-3 w-3 text-green-500" />
+                              )}
+                              {modelInfo.capabilities.imageGeneration && (
+                                <Image className="h-3 w-3 text-purple-500" />
+                              )}
+                              {modelInfo.capabilities.multimodal && (
+                                <Layers className="h-3 w-3 text-indigo-500" />
+                              )}
+                              {modelInfo.capabilities.fastResponse && (
+                                <Zap className="h-3 w-3 text-yellow-500" />
+                              )}
+                              {modelInfo.capabilities.longContext && (
+                                <FileText className="h-3 w-3 text-cyan-500" />
+                              )}
+                            </div>
                           </div>
                         </div>
                       </SelectItem>
@@ -801,7 +861,7 @@ const ChatInput = memo(function ChatInput({
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-8 w-8 sm:h-9 sm:w-9 cursor-pointer text-purple-600 hover:text-purple-700 hover:bg-purple-100 dark:hover:bg-purple-700 rounded-lg flex-shrink-0"
+                className="h-8 w-8 sm:h-9 sm:w-9 cursor-pointer text-purple-600 dark:text-slate-400 hover:text-purple-700 dark:hover:text-slate-300 hover:bg-purple-100 dark:hover:bg-dark-bg-secondary rounded-lg flex-shrink-0"
                 title="Attach files (images, PDFs, text)"
                 disabled={isDisabled}
                 onClick={() =>
@@ -817,7 +877,7 @@ const ChatInput = memo(function ChatInput({
                 className={`h-8 w-8 sm:h-9 sm:w-9 cursor-pointer rounded-lg transition-all duration-200 flex-shrink-0 ${
                   enableWebBrowsing
                     ? "text-emerald-600 hover:text-emerald-700 bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-800/40"
-                    : "text-gray-600 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    : "text-gray-600 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300 hover:bg-gray-100 dark:hover:bg-dark-bg-secondary"
                 }`}
                 title={
                   enableWebBrowsing
@@ -834,20 +894,26 @@ const ChatInput = memo(function ChatInput({
               </Button>
             </div>
 
-            {/* Send Button */}
+            {/* Send/Stop Button */}
             <Button
               size="icon"
-              variant={canSend ? "default" : "ghost"}
+              variant={canSend || canStop ? "default" : "ghost"}
               className={`h-8 w-8 sm:h-9 sm:w-9 cursor-pointer shrink-0 transition-all duration-200 ml-2 ${
-                canSend
+                canSend || canStop
                   ? "bg-purple-600 hover:bg-purple-700 text-white shadow-lg hover:shadow-xl hover:scale-105"
                   : "text-purple-400 dark:text-purple-500 cursor-not-allowed"
-              }`}
-              onClick={handleSend}
-              disabled={!canSend}
-              title={canSend ? "Send message" : "Type a message to send"}
+              } ${isSavingPartial ? "animate-pulse bg-orange-500 hover:bg-orange-600" : ""}`}
+              onClick={handleSendOrStop}
+              disabled={(!canSend && !canStop) || isSavingPartial}
+              title={getButtonTitle()}
             >
-              <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+              {isSavingPartial ? (
+                <div className="h-4 w-4 sm:h-5 sm:w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : canStop ? (
+                <Square className="h-4 w-4 sm:h-5 sm:w-5" />
+              ) : (
+                <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+              )}
             </Button>
           </div>
         </div>

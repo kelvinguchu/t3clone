@@ -162,8 +162,24 @@ const ChatArea = memo(function ChatArea({
       | "skip",
   );
 
+  // Handle thread deletion: if we're on a specific thread but it returns null,
+  // it means the thread was deleted, so redirect to main chat page
+  useEffect(() => {
+    if (
+      initialThreadId && // We're on a specific thread page
+      historicalQueryArgs !== "skip" && // Query should be running
+      historicalMessages === null // Thread not found (deleted)
+    ) {
+      console.log("[ChatArea] Thread deleted, redirecting to main chat page");
+      router.push("/chat");
+      return; // Early return to prevent further processing
+    }
+  }, [initialThreadId, historicalQueryArgs, historicalMessages, router]);
+
   // FIXED: Stabilize initial messages to prevent cascading re-renders
   const initialMessages = useMemo(() => {
+    // Handle null case (thread deleted) by returning undefined
+    if (historicalMessages === null) return undefined;
     if (!historicalMessages) return undefined;
 
     return historicalMessages.map(
@@ -209,6 +225,8 @@ const ChatArea = memo(function ChatArea({
     data,
     setMessages,
     reload, // AI SDK reload function for retry functionality
+    stop, // Stop function from AI SDK with partial save capability
+    isSavingPartial, // Partial save state
   } = useChat(useChatConfig);
 
   // FIXED: Use stable message references to prevent infinite re-renders
@@ -337,6 +355,21 @@ const ChatArea = memo(function ChatArea({
       | "skip",
   );
 
+  // Handle thread deletion for threadMeta query as well
+  useEffect(() => {
+    if (
+      initialThreadId && // We're on a specific thread page
+      threadMetaQueryArgs !== "skip" && // Query should be running
+      threadMeta === null // Thread not found (deleted)
+    ) {
+      console.log(
+        "[ChatArea] Thread metadata not found (deleted), redirecting to main chat page",
+      );
+      router.push("/chat");
+      return; // Early return to prevent further processing
+    }
+  }, [initialThreadId, threadMetaQueryArgs, threadMeta, router]);
+
   // FIXED: Stabilize model change effect to prevent cascading updates
   // Only auto-change model when thread first loads, not when user manually changes it
   const currentModelFromThread = threadMeta?.model;
@@ -369,7 +402,8 @@ const ChatArea = memo(function ChatArea({
     return convertToDisplayMessages(
       effectiveMessages,
       selectedModel,
-      historicalMessages,
+      // Handle null case by passing undefined to the converter
+      historicalMessages === null ? undefined : historicalMessages,
     );
   }, [effectiveMessages, selectedModel, historicalMessages]);
 
@@ -500,9 +534,9 @@ const ChatArea = memo(function ChatArea({
 
   return (
     <div
-      className={`flex-1 flex flex-col h-full min-h-0 bg-purple-50 dark:bg-purple-900 duration-1000 transition-all ${modelThemeClasses} relative ${
+      className={`flex-1 flex flex-col h-full min-h-0 bg-purple-50 dark:bg-dark-bg duration-1000 transition-all ${modelThemeClasses} relative ${
         sidebarOpen
-          ? "md:border-2 md:border-r-purple-200 md:border-l-purple-200 md:dark:border-l-purple-800 md:border-t-purple-200 md:rounded-t-[1rem] md:dark:border-t-purple-800"
+          ? "md:border-2 md:border-r-purple-200 md:border-l-purple-200 md:dark:border-l-dark-purple-accent md:border-t-purple-200 md:rounded-t-[1rem] md:dark:border-t-dark-purple-accent"
           : "md:border-2 md:border-t-transparent md:border-l-transparent md:border-r-transparent md:rounded-t-[0]"
       }`}
     >
@@ -559,7 +593,6 @@ const ChatArea = memo(function ChatArea({
         <ChatInput
           presetMessage={prefillMessage}
           onSend={handleSend}
-          isLoading={isLoading}
           sessionData={{
             isAnonymous,
             canSendMessage,
@@ -567,6 +600,9 @@ const ChatArea = memo(function ChatArea({
             messageCount,
           }}
           onHeightChange={setInputHeight}
+          onStop={stop}
+          status={status}
+          isSavingPartial={isSavingPartial}
         />
       </div>
 

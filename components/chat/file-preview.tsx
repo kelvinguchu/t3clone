@@ -50,9 +50,9 @@ export const FilePreview = memo(
     }
 
     return (
-      <div className="mx-auto w-full sm:w-[95%] md:w-[90%] lg:w-[80%] px-3 py-2 border-x-2 border-purple-300 dark:border-purple-700 bg-gradient-to-r from-purple-50/90 to-blue-50/90 dark:from-purple-950/30 dark:to-blue-950/30">
+      <div className="mx-auto w-full sm:w-[95%] md:w-[90%] lg:w-[80%] px-3 py-2 border-x-2 border-purple-300 dark:border-dark-purple-accent bg-gradient-to-r from-purple-50/90 to-blue-50/90 dark:from-dark-bg-tertiary/50 dark:to-dark-bg-secondary/70">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-medium text-purple-700 dark:text-purple-300">
+          <span className="text-xs font-medium text-purple-700 dark:text-slate-300">
             {files.length} file{files.length > 1 ? "s" : ""} attached
           </span>
         </div>
@@ -65,7 +65,7 @@ export const FilePreview = memo(
             return (
               <div
                 key={file.id}
-                className="relative group flex items-center gap-2 px-2 py-1.5 bg-white dark:bg-purple-800/80 rounded-lg border border-purple-200 dark:border-purple-600 shadow-sm hover:shadow-md transition-all duration-200 max-w-48"
+                className="relative group flex items-center gap-2 px-2 py-1.5 bg-white dark:bg-dark-bg-tertiary/80 rounded-lg border border-purple-200 dark:border-dark-purple-accent/50 shadow-sm hover:shadow-md transition-all duration-200 max-w-48"
               >
                 {/* File Preview/Icon */}
                 <div className="flex-shrink-0 relative">
@@ -86,7 +86,7 @@ export const FilePreview = memo(
                       )}
                     </div>
                   ) : (
-                    <div className="w-8 h-8 rounded bg-purple-100 dark:bg-purple-700 flex items-center justify-center text-purple-600 dark:text-purple-300 relative">
+                    <div className="w-8 h-8 rounded bg-purple-100 dark:bg-dark-bg-secondary flex items-center justify-center text-purple-600 dark:text-slate-400 relative">
                       {getFileIcon(file.contentType)}
                       {file.isUploading && (
                         <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded">
@@ -99,11 +99,11 @@ export const FilePreview = memo(
 
                 {/* File Info */}
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-purple-800 dark:text-purple-200 truncate">
+                  <div className="text-xs font-medium text-purple-800 dark:text-slate-200 truncate">
                     {file.name}
                   </div>
                   {file.size && (
-                    <div className="text-xs text-purple-600 dark:text-purple-400">
+                    <div className="text-xs text-purple-600 dark:text-slate-400">
                       {formatFileSize(file.size)}
                     </div>
                   )}

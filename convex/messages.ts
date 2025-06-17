@@ -11,7 +11,9 @@ export const getThreadMessages = query({
     // First check if user has access to this thread
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
-      throw new Error("Thread not found");
+      // Return null instead of throwing error to handle race conditions
+      // when thread is deleted while query is executing
+      return null;
     }
 
     const identity = await ctx.auth.getUserIdentity();
@@ -49,7 +51,9 @@ export const getThreadMessagesWithAttachments = query({
     // First check if user has access to this thread
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
-      throw new Error("Thread not found");
+      // Return null instead of throwing error to handle race conditions
+      // when thread is deleted while query is executing
+      return null;
     }
 
     const identity = await ctx.auth.getUserIdentity();

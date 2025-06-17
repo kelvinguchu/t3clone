@@ -195,7 +195,8 @@ export const googleSearchTool = tool({
         )
         .join("\n\n");
 
-      const evaluationModelId: ModelId = (modelId as ModelId) || "gpt-4.1-mini";
+      const evaluationModelId: ModelId =
+        (modelId as ModelId) || "llama3-70b-8192";
       const model = getModel(evaluationModelId);
 
       const response = await generateText({
@@ -266,7 +267,8 @@ export const duckDuckGoSearchTool = tool({
         .map((r) => `${r.title}\nSource: ${r.source}\n${r.snippet}`)
         .join("\n\n");
 
-      const evaluationModelId: ModelId = (modelId as ModelId) || "gpt-4.1-mini";
+      const evaluationModelId: ModelId =
+        (modelId as ModelId) || "llama3-70b-8192";
       const model = getModel(evaluationModelId);
 
       const summary = await generateText({
@@ -337,7 +339,8 @@ export const getPageContentTool = tool({
 
       const text = `${article?.title || ""}\n${article?.textContent || ""}`;
 
-      const evaluationModelId: ModelId = (modelId as ModelId) || "gpt-4.1-mini";
+      const evaluationModelId: ModelId =
+        (modelId as ModelId) || "llama3-70b-8192";
       const model = getModel(evaluationModelId);
 
       const response = await generateText({

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 
 // Get all threads for a user (authenticated users only)
 export const getUserThreads = query({
@@ -86,7 +87,9 @@ export const getThread = query({
   handler: async (ctx, args) => {
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
-      throw new Error("Thread not found");
+      // Return null instead of throwing error to handle race conditions
+      // when thread is deleted while query is executing
+      return null;
     }
 
     const identity = await ctx.auth.getUserIdentity();
@@ -256,6 +259,7 @@ export const toggleThreadShare = mutation({
     threadId: v.id("threads"),
     isPublic: v.boolean(),
     expiresInHours: v.optional(v.number()),
+    allowCloning: v.optional(v.boolean()), // New parameter for cloning control
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -275,6 +279,12 @@ export const toggleThreadShare = mutation({
       updatedAt: number;
       shareToken?: string;
       shareExpiresAt?: number;
+      allowCloning?: boolean;
+      shareMetadata?: {
+        viewCount: number;
+        lastViewed: number;
+        allowedViewers?: string[];
+      };
     } = {
       isPublic: args.isPublic,
       updatedAt: Date.now(),
@@ -284,6 +294,15 @@ export const toggleThreadShare = mutation({
       // Generate share token
       updates.shareToken = crypto.randomUUID();
 
+      // Set cloning permission (default to true if not specified)
+      updates.allowCloning = args.allowCloning ?? true;
+
+      // Initialize share metadata
+      updates.shareMetadata = {
+        viewCount: 0,
+        lastViewed: Date.now(),
+      };
+
       if (args.expiresInHours) {
         updates.shareExpiresAt =
           Date.now() + args.expiresInHours * 60 * 60 * 1000;
@@ -292,6 +311,8 @@ export const toggleThreadShare = mutation({
       // Remove share settings
       updates.shareToken = undefined;
       updates.shareExpiresAt = undefined;
+      updates.allowCloning = undefined;
+      updates.shareMetadata = undefined;
     }
 
     await ctx.db.patch(args.threadId, updates);
@@ -300,10 +321,11 @@ export const toggleThreadShare = mutation({
   },
 });
 
-// Get shared thread by token (public access)
-export const getSharedThread = query({
+// Get shared thread by token with view tracking (public access)
+export const getSharedThreadWithTracking = query({
   args: {
     shareToken: v.string(),
+    viewerId: v.optional(v.string()), // Clerk user ID if authenticated
   },
   handler: async (ctx, args) => {
     const thread = await ctx.db
@@ -325,6 +347,298 @@ export const getSharedThread = query({
     }
 
     return thread;
+  },
+});
+
+// Track a view of a shared thread (mutation for updating view count)
+export const trackShareView = mutation({
+  args: {
+    shareToken: v.string(),
+    viewerId: v.optional(v.string()), // Clerk user ID if authenticated
+  },
+  handler: async (ctx, args) => {
+    const thread = await ctx.db
+      .query("threads")
+      .withIndex("by_share_token", (q) => q.eq("shareToken", args.shareToken))
+      .unique();
+
+    if (!thread || !thread.isPublic) {
+      // Silently fail for invalid threads to prevent tracking attacks
+      return;
+    }
+
+    // Update view count and last viewed
+    const currentMetadata = thread.shareMetadata || {
+      viewCount: 0,
+      lastViewed: Date.now(),
+    };
+    await ctx.db.patch(thread._id, {
+      shareMetadata: {
+        ...currentMetadata,
+        viewCount: currentMetadata.viewCount + 1,
+        lastViewed: Date.now(),
+      },
+    });
+  },
+});
+
+// Check if user has already cloned a shared thread
+export const checkExistingClone = query({
+  args: {
+    shareToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    // Get the original thread
+    const originalThread = await ctx.db
+      .query("threads")
+      .withIndex("by_share_token", (q) => q.eq("shareToken", args.shareToken))
+      .unique();
+
+    if (!originalThread) {
+      return null;
+    }
+
+    // Check if user has already cloned this thread using compound index
+    const existingClone = await ctx.db
+      .query("threads")
+      .withIndex("by_user_original", (q) =>
+        q
+          .eq("userId", identity.subject)
+          .eq("originalThreadId", originalThread._id),
+      )
+      .unique();
+
+    return existingClone ? existingClone._id : null;
+  },
+});
+
+// Clone a shared thread for authenticated users
+export const cloneSharedThread = mutation({
+  args: {
+    shareToken: v.string(),
+    newTitle: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()), // Optional idempotency key for request deduplication
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Authentication required to clone threads");
+    }
+
+    // Get the original thread
+    const originalThread = await ctx.db
+      .query("threads")
+      .withIndex("by_share_token", (q) => q.eq("shareToken", args.shareToken))
+      .unique();
+
+    if (!originalThread || !originalThread.isPublic) {
+      throw new Error("Thread not found or not public");
+    }
+
+    // Check if share has expired
+    if (
+      originalThread.shareExpiresAt &&
+      originalThread.shareExpiresAt < Date.now()
+    ) {
+      throw new Error("Shared thread has expired");
+    }
+
+    // Check if cloning is allowed
+    if (originalThread.allowCloning === false) {
+      throw new Error("Cloning is not allowed for this thread");
+    }
+
+    // Use the compound index to check for existing clone
+    const existingClone = await ctx.db
+      .query("threads")
+      .withIndex("by_user_original", (q) =>
+        q
+          .eq("userId", identity.subject)
+          .eq("originalThreadId", originalThread._id),
+      )
+      .unique();
+
+    if (existingClone) {
+      // Return the existing clone ID instead of creating a new one
+      return existingClone._id;
+    }
+
+    const now = Date.now();
+
+    try {
+      // Create cloned thread
+      const clonedThreadId = await ctx.db.insert("threads", {
+        title: args.newTitle || `${originalThread.title} (Copy)`,
+        userId: identity.subject,
+        model: originalThread.model,
+        systemPrompt: originalThread.systemPrompt,
+        originalThreadId: originalThread._id,
+        isAnonymous: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // Clone all messages
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_thread", (q) => q.eq("threadId", originalThread._id))
+        .order("asc")
+        .collect();
+
+      for (const message of messages) {
+        await ctx.db.insert("messages", {
+          threadId: clonedThreadId,
+          role: message.role,
+          content: message.content,
+          reasoning: message.reasoning,
+          parentId: undefined,
+          order: message.order,
+          model: message.model,
+          tokenCount: message.tokenCount,
+          finishReason: message.finishReason,
+          toolsUsed: message.toolsUsed,
+          hasToolCalls: message.hasToolCalls,
+          cloned: true,
+          createdAt: message.createdAt,
+          updatedAt: now,
+        });
+      }
+
+      // Update clone count on original thread
+      await ctx.db.patch(originalThread._id, {
+        cloneCount: (originalThread.cloneCount || 0) + 1,
+      });
+
+      return clonedThreadId;
+    } catch (error) {
+      // If there's a race condition and another clone was created simultaneously,
+      // check again for the existing clone and return it
+      const raceConditionClone = await ctx.db
+        .query("threads")
+        .withIndex("by_user_original", (q) =>
+          q
+            .eq("userId", identity.subject)
+            .eq("originalThreadId", originalThread._id),
+        )
+        .unique();
+
+      if (raceConditionClone) {
+        return raceConditionClone._id;
+      }
+
+      // If it's a different error, re-throw it
+      throw error;
+    }
+  },
+});
+
+// Cleanup duplicate clones (admin function to fix existing duplicates)
+export const cleanupDuplicateClones = mutation({
+  args: {
+    originalThreadId: v.id("threads"),
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || identity.subject !== args.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    // Find all clones of this thread by this user
+    const clones = await ctx.db
+      .query("threads")
+      .withIndex("by_user_original", (q) =>
+        q
+          .eq("userId", args.userId)
+          .eq("originalThreadId", args.originalThreadId),
+      )
+      .collect();
+
+    if (clones.length <= 1) {
+      return { message: "No duplicates found", deletedCount: 0 };
+    }
+
+    // Keep the oldest clone (first created) and delete the rest
+    const sortedClones = clones.sort(
+      (a, b) => a._creationTime - b._creationTime,
+    );
+    const clonesToDelete = sortedClones.slice(1); // Remove first (oldest) element
+
+    let deletedCount = 0;
+
+    for (const clone of clonesToDelete) {
+      // Delete messages associated with this clone
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_thread", (q) => q.eq("threadId", clone._id))
+        .collect();
+
+      for (const message of messages) {
+        await ctx.db.delete(message._id);
+      }
+
+      // Delete attachments associated with this clone
+      const attachments = await ctx.db
+        .query("attachments")
+        .withIndex("by_thread", (q) => q.eq("threadId", clone._id))
+        .collect();
+
+      for (const attachment of attachments) {
+        await ctx.db.delete(attachment._id);
+      }
+
+      // Delete the clone thread
+      await ctx.db.delete(clone._id);
+      deletedCount++;
+    }
+
+    return {
+      message: `Cleaned up ${deletedCount} duplicate clones, kept the original clone`,
+      deletedCount,
+      keptCloneId: sortedClones[0]._id,
+    };
+  },
+});
+
+// Get thread statistics for thread owners
+export const getThreadStats = query({
+  args: {
+    threadId: v.id("threads"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Authentication required");
+    }
+
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread || thread.userId !== identity.subject) {
+      throw new Error("Thread not found or unauthorized");
+    }
+
+    // Get clone count by querying cloned threads
+    const clones = await ctx.db
+      .query("threads")
+      .withIndex("by_original_thread", (q) =>
+        q.eq("originalThreadId", args.threadId),
+      )
+      .collect();
+
+    return {
+      viewCount: thread.shareMetadata?.viewCount || 0,
+      cloneCount: thread.cloneCount || 0,
+      lastViewed: thread.shareMetadata?.lastViewed,
+      isPublic: thread.isPublic || false,
+      shareToken: thread.shareToken,
+      shareExpiresAt: thread.shareExpiresAt,
+      allowCloning: thread.allowCloning !== false, // Default to true
+      clonesCount: clones.length, // Verification count from actual clones
+    };
   },
 });
 
@@ -512,5 +826,99 @@ export const claimAnonymousThreads = mutation({
     // Deduplicate thread IDs and return count
     const uniqueCount = Array.from(new Set(threads.map((t) => t._id))).length;
     return { migrated: uniqueCount };
+  },
+});
+
+// PAGINATED VERSIONS FOR INFINITE SCROLLING
+
+// Get paginated threads for a user (authenticated users only)
+export const getUserThreadsPaginated = query({
+  args: {
+    userId: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || identity.subject !== args.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    // Use the by_user index and order by updatedAt (desc), then _creationTime (desc)
+    const result = await ctx.db
+      .query("threads")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    // Sort the page results to handle bulk updates properly
+    const sortedPage = result.page.sort((a, b) => {
+      const aTime = a.updatedAt ?? a._creationTime;
+      const bTime = b.updatedAt ?? b._creationTime;
+
+      // Check if multiple threads have the same updatedAt (bulk update indicator)
+      const timeDiff = Math.abs(aTime - bTime);
+      if (timeDiff < 1000) {
+        // Within 1 second = likely bulk update
+        // For bulk updates, sort by creation time to maintain natural order
+        return b._creationTime - a._creationTime;
+      }
+
+      // Primary sort by updatedAt/creationTime
+      if (bTime !== aTime) {
+        return bTime - aTime;
+      }
+
+      // Secondary sort by _creationTime (most recent first) when updatedAt is identical
+      return b._creationTime - a._creationTime;
+    });
+
+    return {
+      ...result,
+      page: sortedPage,
+    };
+  },
+});
+
+// Get paginated threads for anonymous session
+export const getAnonymousThreadsPaginated = query({
+  args: {
+    sessionId: v.string(),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    // Use the by_session index and filter for anonymous threads
+    const result = await ctx.db
+      .query("threads")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .filter((q) => q.eq(q.field("isAnonymous"), true))
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    // Sort the page results to handle bulk updates properly
+    const sortedPage = result.page.sort((a, b) => {
+      const aTime = a.updatedAt ?? a._creationTime;
+      const bTime = b.updatedAt ?? b._creationTime;
+
+      // Check if multiple threads have the same updatedAt (bulk update indicator)
+      const timeDiff = Math.abs(aTime - bTime);
+      if (timeDiff < 1000) {
+        // Within 1 second = likely bulk update
+        // For bulk updates, sort by creation time to maintain natural order
+        return b._creationTime - a._creationTime;
+      }
+
+      // Primary sort by updatedAt/creationTime
+      if (bTime !== aTime) {
+        return bTime - aTime;
+      }
+
+      // Secondary sort by _creationTime (most recent first) when updatedAt is identical
+      return b._creationTime - a._creationTime;
+    });
+
+    return {
+      ...result,
+      page: sortedPage,
+    };
   },
 });

@@ -47,6 +47,11 @@ const nextConfig: NextConfig = {
 
     return config;
   },
+  env: {
+    // Ensure Clerk redirect URLs are properly configured
+    NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: "/chat",
+    NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: "/chat",
+  },
 };
 
 export default nextConfig;

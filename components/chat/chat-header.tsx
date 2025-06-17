@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import {
   Settings,
@@ -19,12 +19,22 @@ import {
   useNewChatHandler,
 } from "@/lib/actions/chat/chat-sidebar";
 import { useUser } from "@clerk/nextjs";
+import { useTheme } from "next-themes";
 
 export function ChatHeader() {
   const { open } = useSidebar();
   const { user } = useUser();
   const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Theme functionality with safe mounting
+  const [mounted, setMounted] = useState(false);
+  const { setTheme, resolvedTheme } = useTheme();
+
+  // useEffect only runs on the client, so now we can safely show the UI
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Use extracted utilities for new chat functionality
   const { threadsData, sessionId, sessionData } = useThreadsFetcher();
@@ -41,22 +51,36 @@ export function ChatHeader() {
     <>
       {/* Fixed positioned controls in top-left - Desktop only */}
       <div className="hidden md:flex fixed top-2 left-2 z-[60] items-center gap-1">
-        <SidebarTrigger className="text-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors bg-purple-100 dark:bg-purple-900 backdrop-blur-sm border border-purple-200 dark:border-purple-700" />
+        <SidebarTrigger className="text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent" />
 
         {/* Settings and Theme buttons - always visible on desktop */}
         <button
-          className="size-7 text-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors bg-purple-100 dark:bg-purple-900 backdrop-blur-sm border border-purple-200 dark:border-purple-700 rounded-md flex items-center justify-center"
+          className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center"
           title="Settings"
         >
           <Settings className="h-4 w-4" />
         </button>
-        <button
-          className="size-7 text-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors bg-purple-100 dark:bg-purple-900 backdrop-blur-sm border border-purple-200 dark:border-purple-700 rounded-md flex items-center justify-center"
-          title="Toggle theme"
-        >
-          <Sun className="h-4 w-4 dark:hidden" />
-          <Moon className="h-4 w-4 hidden dark:block" />
-        </button>
+
+        {/* Theme toggle button - safe implementation */}
+        {mounted ? (
+          <button
+            onClick={() =>
+              setTheme(resolvedTheme === "dark" ? "light" : "dark")
+            }
+            className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center"
+            title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
+          >
+            {resolvedTheme === "dark" ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </button>
+        ) : (
+          <div className="size-7 bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center">
+            <div className="h-4 w-4 bg-purple-300 dark:bg-dark-purple-light rounded animate-pulse" />
+          </div>
+        )}
 
         {/* Search and New Chat buttons - animate in when sidebar is closed */}
         <AnimatePresence>
@@ -71,7 +95,7 @@ export function ChatHeader() {
               >
                 <motion.button
                   onClick={() => setSearchDialogOpen(true)}
-                  className="h-7 px-3 text-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors bg-purple-100 dark:bg-purple-900 backdrop-blur-sm border border-purple-200 dark:border-purple-700 rounded-md flex items-center justify-center gap-1"
+                  className="h-7 px-3 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center gap-1"
                   title="Search conversations"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -90,7 +114,7 @@ export function ChatHeader() {
               >
                 <motion.button
                   onClick={handleNewChat}
-                  className="size-7 text-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors bg-purple-100 dark:bg-purple-900 backdrop-blur-sm border border-purple-200 dark:border-purple-700 rounded-md flex items-center justify-center"
+                  className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center"
                   title="Start new chat"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -109,17 +133,17 @@ export function ChatHeader() {
           open ? "md:pl-12" : "md:pl-24"
         } ${
           open
-            ? "bg-purple-100 dark:bg-purple-900"
-            : "bg-purple-50 dark:bg-purple-900"
-        } border-b border-purple-200 dark:border-purple-700 md:border-b-0`}
+            ? "bg-purple-100 dark:bg-dark-bg-secondary"
+            : "bg-purple-50 dark:bg-dark-bg"
+        } border-b border-purple-200 dark:border-dark-purple-accent md:border-b-0`}
       >
         {/* Mobile sidebar trigger */}
         <div className="md:hidden">
-          <SidebarTrigger className="text-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors bg-purple-100 dark:bg-purple-900 backdrop-blur-sm border border-purple-200 dark:border-purple-700" />
+          <SidebarTrigger className="text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent" />
         </div>
 
         {/* Centered title */}
-        <h1 className="text-sm font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent flex-1 text-center">
+        <h1 className="text-sm font-bold bg-gradient-to-r from-purple-600 to-purple-800 dark:from-dark-purple-glow dark:to-purple-400 bg-clip-text text-transparent flex-1 text-center">
           T3 Chat
         </h1>
 
@@ -127,7 +151,7 @@ export function ChatHeader() {
         <div className="md:hidden">
           <button
             onClick={() => setMobileMenuOpen(true)}
-            className="size-7 text-purple-900 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors bg-purple-100 dark:bg-purple-900 backdrop-blur-sm border border-purple-200 dark:border-purple-700 rounded-md flex items-center justify-center"
+            className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center"
             title="Menu"
           >
             <MoreVertical className="h-4 w-4" />
@@ -154,16 +178,16 @@ export function ChatHeader() {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 20, stiffness: 300 }}
-              className="fixed top-0 right-0 h-full w-72 bg-purple-100 dark:bg-purple-900 shadow-2xl z-[60] md:hidden border-l border-purple-200 dark:border-purple-700"
+              className="fixed top-0 right-0 h-full w-72 bg-purple-100 dark:bg-dark-bg-secondary shadow-2xl z-[60] md:hidden border-l border-purple-200 dark:border-dark-purple-accent"
             >
               {/* Menu header */}
-              <div className="flex items-center justify-between p-4 border-b border-purple-200 dark:border-purple-700">
-                <h2 className="text-lg font-semibold text-purple-900 dark:text-purple-100">
+              <div className="flex items-center justify-between p-4 border-b border-purple-200 dark:border-dark-purple-accent">
+                <h2 className="text-lg font-semibold text-purple-900 dark:text-slate-200">
                   Menu
                 </h2>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
-                  className="size-8 text-purple-600 hover:bg-purple-200 dark:hover:bg-purple-800 rounded-lg flex items-center justify-center transition-colors"
+                  className="size-8 text-purple-600 dark:text-slate-400 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary rounded-lg flex items-center justify-center transition-colors"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -173,7 +197,7 @@ export function ChatHeader() {
               <div className="p-4 space-y-3">
                 {/* Settings button */}
                 <button
-                  className="w-full flex items-center gap-3 p-3 text-purple-900 dark:text-purple-100 hover:bg-purple-200 dark:hover:bg-purple-800 rounded-lg transition-colors"
+                  className="w-full flex items-center gap-3 p-3 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary rounded-lg transition-colors"
                   onClick={() => {
                     // Handle settings
                     setMobileMenuOpen(false);
@@ -184,20 +208,30 @@ export function ChatHeader() {
                 </button>
 
                 {/* Theme toggle button */}
-                <button
-                  className="w-full flex items-center gap-3 p-3 text-purple-900 dark:text-purple-100 hover:bg-purple-200 dark:hover:bg-purple-800 rounded-lg transition-colors"
-                  onClick={() => {
-                    // Handle theme toggle
-                    setMobileMenuOpen(false);
-                  }}
-                >
-                  <Sun className="h-5 w-5 dark:hidden" />
-                  <Moon className="h-5 w-5 hidden dark:block" />
-                  <span className="font-medium">
-                    <span className="dark:hidden">Dark mode</span>
-                    <span className="hidden dark:block">Light mode</span>
-                  </span>
-                </button>
+                {mounted ? (
+                  <button
+                    className="w-full flex items-center gap-3 p-3 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary rounded-lg transition-colors"
+                    onClick={() => {
+                      setTheme(resolvedTheme === "dark" ? "light" : "dark");
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    {resolvedTheme === "dark" ? (
+                      <Sun className="h-5 w-5" />
+                    ) : (
+                      <Moon className="h-5 w-5" />
+                    )}
+                    <span className="font-medium">
+                      Switch to {resolvedTheme === "dark" ? "light" : "dark"}{" "}
+                      mode
+                    </span>
+                  </button>
+                ) : (
+                  <div className="w-full flex items-center gap-3 p-3 text-purple-900 dark:text-slate-200">
+                    <div className="h-5 w-5 bg-purple-300 dark:bg-dark-purple-light rounded animate-pulse" />
+                    <div className="h-4 w-24 bg-purple-300 dark:bg-dark-purple-light rounded animate-pulse" />
+                  </div>
+                )}
               </div>
             </motion.div>
           </>

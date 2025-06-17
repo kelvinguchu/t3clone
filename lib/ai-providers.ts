@@ -1,6 +1,6 @@
 import { groq } from "@ai-sdk/groq";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { openai } from "@ai-sdk/openai";
+
 import type { LanguageModelV1 } from "ai";
 // Note: extractReasoningMiddleware not needed for Groq - they have native reasoning support
 import {
@@ -24,7 +24,15 @@ export const AI_MODELS = {
     description: "Fast and efficient model by Meta via Groq",
     maxTokens: 8192,
     costPer1kTokens: { input: 0.05, output: 0.08 },
-    capabilities: ["text", "chat", "tools"],
+    capabilities: {
+      vision: false,
+      thinking: false,
+      tools: true,
+      imageGeneration: false,
+      multimodal: false,
+      fastResponse: true,
+      longContext: false,
+    },
     icon: "/brand-icons/llama.svg",
     theme: "orange",
   },
@@ -36,7 +44,15 @@ export const AI_MODELS = {
     description: "Fast model with thinking tokens by DeepSeek via Groq",
     maxTokens: 32768,
     costPer1kTokens: { input: 0.05, output: 0.08 },
-    capabilities: ["text", "chat", "tools", "reasoning"],
+    capabilities: {
+      vision: false,
+      thinking: true,
+      tools: true,
+      imageGeneration: false,
+      multimodal: false,
+      fastResponse: true,
+      longContext: true,
+    },
     icon: "/brand-icons/deepseek.svg",
     theme: "blue",
   },
@@ -48,7 +64,15 @@ export const AI_MODELS = {
     description: "Advanced reasoning model by Qwen via Groq",
     maxTokens: 32768,
     costPer1kTokens: { input: 0.05, output: 0.08 },
-    capabilities: ["text", "chat", "tools", "reasoning"],
+    capabilities: {
+      vision: false,
+      thinking: true,
+      tools: true,
+      imageGeneration: false,
+      multimodal: false,
+      fastResponse: true,
+      longContext: true,
+    },
     icon: "/brand-icons/qwen.svg",
     theme: "purple",
   },
@@ -61,7 +85,15 @@ export const AI_MODELS = {
     description: "Google's latest multimodal model",
     maxTokens: 1000000,
     costPer1kTokens: { input: 0.075, output: 0.3 },
-    capabilities: ["text", "chat", "vision", "multimodal", "tools"],
+    capabilities: {
+      vision: true,
+      thinking: true,
+      tools: true,
+      imageGeneration: false,
+      multimodal: true,
+      fastResponse: false,
+      longContext: true,
+    },
     icon: "/brand-icons/gemini.svg",
     theme: "blue",
   },
@@ -73,35 +105,23 @@ export const AI_MODELS = {
     description: "Google's image generation model",
     maxTokens: 1000000,
     costPer1kTokens: { input: 0.075, output: 0.3 },
-    capabilities: [
-      "text",
-      "chat",
-      "vision",
-      "multimodal",
-      "tools",
-      "image-generation",
-    ],
+    capabilities: {
+      vision: true,
+      thinking: true,
+      tools: true,
+      imageGeneration: true,
+      multimodal: true,
+      fastResponse: false,
+      longContext: true,
+    },
     icon: "/brand-icons/gemini.svg",
     theme: "purple",
-  },
-
-  // OpenAI models
-  "gpt-4.1-mini": {
-    provider: "openai",
-    model: openai("gpt-4.1-mini"),
-    displayName: "GPT-4.1 Mini",
-    description: "Efficient & intelligent responses",
-    maxTokens: 128000,
-    costPer1kTokens: { input: 0.15, output: 0.6 },
-    capabilities: ["text", "chat", "vision", "tools"],
-    icon: "/brand-icons/openai.svg",
-    theme: "green",
   },
 } as const;
 
 // Type definitions
 export type ModelId = keyof typeof AI_MODELS;
-export type Provider = "groq" | "google" | "openai";
+export type Provider = "groq" | "google";
 
 export interface ModelConfig {
   provider: Provider;
@@ -113,15 +133,15 @@ export interface ModelConfig {
     input: number;
     output: number;
   };
-  capabilities: readonly (
-    | "text"
-    | "chat"
-    | "vision"
-    | "multimodal"
-    | "tools"
-    | "image-generation"
-    | "reasoning"
-  )[];
+  capabilities: {
+    vision: boolean;
+    thinking: boolean;
+    tools: boolean;
+    imageGeneration: boolean;
+    multimodal: boolean;
+    fastResponse: boolean;
+    longContext: boolean;
+  };
   icon: string;
   theme: string;
 }
@@ -212,10 +232,6 @@ export function validateProviderKeys() {
     missing.push("GEMINI_API_KEY");
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    missing.push("OPENAI_API_KEY");
-  }
-
   if (missing.length > 0) {
     throw new Error(
       `Missing required environment variables: ${missing.join(", ")}`,
@@ -242,14 +258,6 @@ export const PROVIDER_CONFIGS = {
     supportsToolCalls: true,
     supportsVision: true,
     supportsThinking: true,
-    maxRetries: 3,
-  },
-  openai: {
-    // OpenAI-specific settings
-    defaultTemperature: 0.7,
-    supportsStreaming: true,
-    supportsToolCalls: true,
-    supportsVision: true,
     maxRetries: 3,
   },
 } as const;

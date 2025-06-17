@@ -50,6 +50,14 @@ export function useChat({
     [],
   );
 
+  // Track partial content for stop-with-save functionality
+  const [isSavingPartial, setIsSavingPartial] = useState(false);
+  const lastMessageRef = useRef<Message | null>(null);
+  const lastRequestDataRef = useRef<{
+    messages: Message[];
+    attachmentIds: string[];
+  } | null>(null);
+
   const requestBody = {
     modelId,
     // Include threadId so the backend appends to existing conversation
@@ -221,6 +229,107 @@ export function useChat({
     [chat],
   );
 
+  // Save partial content to database
+  const savePartialContent = useCallback(
+    async (
+      content: string,
+      messages: Message[],
+      attachmentIds: string[] = [],
+    ) => {
+      if (!content.trim()) return;
+
+      setIsSavingPartial(true);
+      try {
+        const response = await fetch("/api/chat/partial-save", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(sessionData && { "X-Session-ID": sessionData.sessionId }),
+            ...(threadId && { "X-Thread-Id": threadId }),
+          },
+          body: JSON.stringify({
+            messages,
+            modelId,
+            threadId,
+            partialContent: content,
+            attachmentIds,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `Failed to save partial content: ${response.statusText}`,
+          );
+        }
+
+        const result = await response.json();
+
+        // Update thread ID if we got a new one
+        if (result.threadId && !threadId) {
+          setThreadId(result.threadId);
+        }
+
+        console.log(`[${hookId}] Partial content saved successfully:`, {
+          contentLength: content.length,
+          threadId: result.threadId,
+        });
+      } catch (error) {
+        console.error(`[${hookId}] Failed to save partial content:`, error);
+        // Don't throw - partial save failure shouldn't break the UI
+      } finally {
+        setIsSavingPartial(false);
+      }
+    },
+    [hookId, sessionData, threadId, modelId],
+  );
+
+  // Enhanced stop function that saves partial content before stopping
+  const stopWithSave = useCallback(async () => {
+    // Get the current partial content from the last assistant message
+    const currentMessages = chat.messages;
+    const lastMessage = currentMessages[currentMessages.length - 1];
+
+    if (
+      lastMessage &&
+      lastMessage.role === "assistant" &&
+      lastMessage.content
+    ) {
+      console.log(`[${hookId}] Stopping with partial save:`, {
+        contentLength: lastMessage.content.length,
+        threadId,
+      });
+
+      // Save partial content before stopping
+      const messagesToSave =
+        lastRequestDataRef.current?.messages || currentMessages.slice(0, -1);
+      const attachmentIds = lastRequestDataRef.current?.attachmentIds || [];
+
+      await savePartialContent(
+        lastMessage.content,
+        messagesToSave,
+        attachmentIds,
+      );
+    }
+
+    // Stop the stream
+    chat.stop?.();
+
+    // Clear partial content tracking
+    lastMessageRef.current = null;
+    lastRequestDataRef.current = null;
+  }, [chat, hookId, threadId, savePartialContent]);
+
+  // Track messages for partial save context
+  const trackMessageForPartialSave = useCallback(
+    (messages: Message[], attachmentIds: string[] = []) => {
+      lastRequestDataRef.current = {
+        messages: messages.slice(), // Create a copy
+        attachmentIds: [...attachmentIds],
+      };
+    },
+    [],
+  );
+
   return {
     ...chat,
     modelId,
@@ -232,6 +341,10 @@ export function useChat({
     isLoading: chat.status === "submitted" || chat.status === "streaming",
     // Expose status for granular UI control
     status: chat.status,
+    // Enhanced stop function with partial save capability
+    stop: stopWithSave,
+    // Expose partial save state
+    isSavingPartial,
     // Add convenient method for sending messages with optional attachment IDs or experimental attachments
     sendMessage: async (
       content: string,
@@ -254,6 +367,21 @@ export function useChat({
       }
 
       try {
+        // Track this message for potential partial save
+        const currentMessages = [...chat.messages];
+        const newUserMessage: Message = {
+          id: `user-${Date.now()}`,
+          role: "user",
+          content: content.trim(),
+          ...(options?.experimental_attachments && {
+            experimental_attachments: options.experimental_attachments,
+          }),
+        };
+        trackMessageForPartialSave(
+          [...currentMessages, newUserMessage],
+          attachmentIds,
+        );
+
         if (options?.experimental_attachments?.length) {
           // Build extra request body to ensure attachmentIds and flags are included
           const appendOptions: {

@@ -19,7 +19,7 @@ export function ChatSidebarFooter({
 }: Readonly<ChatSidebarFooterProps>) {
   return (
     <SidebarFooter className="p-2">
-      <SidebarSeparator className="mb-2 bg-purple-200/50 dark:bg-purple-800/30" />
+      <SidebarSeparator className="mb-2 bg-purple-200/50 dark:bg-dark-purple-accent/30" />
 
       {!hasMounted || !isLoaded ? (
         /* Render an invisible placeholder so server & first client render match,
@@ -30,29 +30,29 @@ export function ChatSidebarFooter({
           aria-hidden="true"
         />
       ) : user ? (
-        <div className="w-full p-2 h-auto bg-purple-100/80 dark:bg-purple-900/30 rounded-xl">
+        <div className="w-full p-2 h-auto bg-purple-100/80 dark:bg-dark-bg-tertiary/50 rounded-xl border border-transparent dark:border-dark-purple-accent/20">
           <div className="flex items-center gap-3 w-full min-w-0">
             <div className="relative flex-shrink-0">
-              <Avatar className="h-10 w-10 border-2 border-purple-200 dark:border-purple-800">
+              <Avatar className="h-10 w-10 border-2 border-purple-200 dark:border-dark-purple-accent">
                 <AvatarImage src={user.imageUrl} />
-                <AvatarFallback className="bg-gradient-to-br from-purple-600 to-purple-700 text-white font-semibold">
+                <AvatarFallback className="bg-gradient-to-br from-purple-600 to-purple-700 dark:from-dark-purple-glow dark:to-dark-purple-light text-white font-semibold">
                   {user.firstName?.charAt(0) ??
                     user.emailAddresses[0]?.emailAddress.charAt(0) ??
                     "U"}
                 </AvatarFallback>
               </Avatar>
-              <div className="absolute -bottom-1 -right-1 h-4 w-4 bg-green-500 border-2 border-white dark:border-purple-950 rounded-full" />
+              <div className="absolute -bottom-1 -right-1 h-4 w-4 bg-green-500 border-2 border-white dark:border-dark-bg-tertiary rounded-full" />
             </div>
             <div className="flex-1 text-left min-w-0">
-              <div className="font-semibold text-purple-900 dark:text-purple-100 text-sm truncate">
+              <div className="font-semibold text-purple-900 dark:text-slate-200 text-sm truncate">
                 {user.fullName ??
                   user.firstName ??
                   user.emailAddresses[0]?.emailAddress.split("@")[0] ??
                   "User"}
               </div>
               <div className="flex items-center gap-1">
-                <Crown className="h-3 w-3 text-purple-600 flex-shrink-0" />
-                <span className="text-xs text-purple-600 dark:text-purple-400 font-medium truncate">
+                <Crown className="h-3 w-3 text-purple-600 dark:text-dark-purple-glow flex-shrink-0" />
+                <span className="text-xs text-purple-600 dark:text-slate-400 font-medium truncate">
                   {(user.publicMetadata?.plan as string) || "Free Plan"}
                 </span>
               </div>
@@ -65,7 +65,7 @@ export function ChatSidebarFooter({
           forceRedirectUrl="/chat"
           signUpForceRedirectUrl="/chat"
         >
-          <Button className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-lg shadow-purple-500/25">
+          <Button className="w-full bg-gradient-to-r from-purple-600 to-purple-700 dark:from-dark-purple-glow dark:to-dark-purple-light hover:from-purple-700 hover:to-purple-800 dark:hover:from-dark-purple-light dark:hover:to-dark-purple-glow text-white shadow-lg shadow-purple-500/25 dark:shadow-dark-purple-glow/30">
             <LogIn className="h-4 w-4 mr-2" />
             Sign In
           </Button>

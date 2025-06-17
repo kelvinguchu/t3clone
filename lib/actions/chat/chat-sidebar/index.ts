@@ -19,3 +19,9 @@ export type { GroupedThreads } from "./thread-grouper";
 // New chat handling
 export { useNewChatHandler } from "./new-chat-handler";
 export type { NewChatHandlerParams } from "./new-chat-handler";
+
+// Chat sidebar action exports
+export { useThreadRename } from "./thread-rename-handler";
+export { useThreadDelete } from "./thread-delete-handler";
+export { useThreadShare } from "./thread-share-handler";
+export { useThreadActions } from "./thread-actions-manager";

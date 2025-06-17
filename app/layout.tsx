@@ -7,6 +7,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { FilePreviewProvider } from "@/lib/contexts/file-preview-context";
 import { AnonymousSessionProvider } from "@/lib/contexts/anonymous-session-context";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "next-themes";
 
 const rubik = Rubik({
   variable: "--font-rubik",
@@ -24,10 +25,10 @@ const notoSansMono = Noto_Sans_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "T3.chat - AI Conversations",
-  description: "Modern AI chat interface powered by T3 stack",
+  title: "T3 Chat- AI Conversations",
+  description: "Modern AI chat interface with all models.",
   icons: {
-    icon: "/convex.svg",
+    icon: "/logo.svg",
   },
 };
 
@@ -37,23 +38,30 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <Script src="https://unpkg.com/react-scan/dist/auto.global.js" />
       </head>
       <body
-        className={`${rubik.className} font-mono antialiased bg-purple-100 dark:bg-purple-900`}
+        className={`${rubik.className} font-mono antialiased bg-purple-100 dark:bg-dark-bg`}
       >
-        <ClerkProvider dynamic>
-          <ConvexClientProvider>
-            <FilePreviewProvider>
-              <AnonymousSessionProvider>
-                {children}
-                <Toaster />
-              </AnonymousSessionProvider>
-            </FilePreviewProvider>
-          </ConvexClientProvider>
-        </ClerkProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ClerkProvider dynamic>
+            <ConvexClientProvider>
+              <FilePreviewProvider>
+                <AnonymousSessionProvider>
+                  {children}
+                  <Toaster />
+                </AnonymousSessionProvider>
+              </FilePreviewProvider>
+            </ConvexClientProvider>
+          </ClerkProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

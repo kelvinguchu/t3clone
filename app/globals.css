@@ -17,6 +17,14 @@
   --color-purple-900: #351287;
   --color-purple-950: #1e0756;
   
+  /* Dark mode blackish-purple variants */
+  --color-dark-bg: #0a0a0f;
+  --color-dark-bg-secondary: #12121a;
+  --color-dark-bg-tertiary: #1a1a26;
+  --color-dark-purple-accent: #2d1b4e;
+  --color-dark-purple-light: #4a2c7a;
+  --color-dark-purple-glow: #6b46c1;
+  
   /* Theme mappings */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -98,14 +106,14 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: var(--color-purple-900);
-  --sidebar-foreground: var(--color-purple-100);
-  --sidebar-primary: var(--color-purple-400);
-  --sidebar-primary-foreground: var(--color-purple-900);
-  --sidebar-accent: var(--color-purple-800);
-  --sidebar-accent-foreground: var(--color-purple-100);
-  --sidebar-border: var(--color-purple-700);
-  --sidebar-ring: var(--color-purple-400);
+  --sidebar: var(--color-dark-bg-secondary);
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-primary: var(--color-dark-purple-glow);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--color-dark-bg-tertiary);
+  --sidebar-accent-foreground: #cbd5e1;
+  --sidebar-border: var(--color-dark-purple-accent);
+  --sidebar-ring: var(--color-dark-purple-glow);
 }
 
 @layer base {
@@ -113,7 +121,7 @@
     @reference border-border outline-ring/50;
   }
   body {
-    @reference bg-purple-100 dark: bg-purple-900 text-foreground;
+    @reference bg-purple-100 dark: bg-dark-bg text-foreground;
   }
 }
 
@@ -145,20 +153,20 @@
 
 /* Dark mode scrollbar */
 .dark *::-webkit-scrollbar-track {
-  background: var(--color-purple-950);
+  background: var(--color-dark-bg);
 }
 
 .dark *::-webkit-scrollbar-thumb {
-  background: var(--color-purple-600);
-  border: 2px solid var(--color-purple-950);
+  background: var(--color-dark-purple-light);
+  border: 2px solid var(--color-dark-bg);
 }
 
 .dark *::-webkit-scrollbar-thumb:hover {
-  background: var(--color-purple-500);
+  background: var(--color-dark-purple-glow);
 }
 
 .dark *::-webkit-scrollbar-corner {
-  background: var(--color-purple-950);
+  background: var(--color-dark-bg);
 }
 
 /* Sidebar specific scrollbar styling */
@@ -180,15 +188,15 @@
 }
 
 .dark [data-sidebar="content"]::-webkit-scrollbar-track {
-  background: var(--scrollbar-track-bg-dark, var(--color-purple-950));
+  background: var(--scrollbar-track-bg-dark, var(--color-dark-bg-secondary));
 }
 
 .dark [data-sidebar="content"]::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb-bg-dark, var(--color-purple-600));
+  background: var(--scrollbar-thumb-bg-dark, var(--color-dark-purple-light));
 }
 
 .dark [data-sidebar="content"]::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover-bg-dark, var(--color-purple-500));
+  background: var(--scrollbar-thumb-hover-bg-dark, var(--color-dark-purple-glow));
 }
 
 /* Firefox scrollbar styling (standard properties) */
@@ -198,7 +206,7 @@
 }
 
 .dark * {
-  scrollbar-color: var(--color-purple-600) var(--color-purple-950);
+  scrollbar-color: var(--color-dark-purple-light) var(--color-dark-bg);
 }
 
 /* Custom text selection colors using our purple theme */
@@ -214,13 +222,13 @@
 
 /* Dark mode selection colors */
 .dark ::selection {
-  background-color: var(--color-purple-600);
-  color: var(--color-purple-100);
+  background-color: var(--color-dark-purple-glow);
+  color: #ffffff;
 }
 
 .dark ::-moz-selection {
-  background-color: var(--color-purple-600);
-  color: var(--color-purple-100);
+  background-color: var(--color-dark-purple-glow);
+  color: #ffffff;
 }
 
 

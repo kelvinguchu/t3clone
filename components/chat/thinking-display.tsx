@@ -39,15 +39,15 @@ export function ThinkingDisplay({
     // During thinking phase, show even if no reasoning content yet
     if (forceExpanded) {
       return (
-        <div className="mb-3 border border-blue-200 dark:border-blue-700 rounded-lg overflow-hidden bg-blue-50/50 dark:bg-blue-950/20">
+        <div className="mb-3 border border-blue-200 dark:border-dark-purple-accent/50 rounded-lg overflow-hidden bg-blue-50/50 dark:bg-dark-bg-tertiary/30">
           {/* Header */}
           <button
             onClick={() => setIsExpanded(!effectiveExpanded)}
-            className="w-full flex items-center justify-between p-3 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors"
+            className="w-full flex items-center justify-between p-3 hover:bg-blue-100/50 dark:hover:bg-dark-bg-secondary/50 transition-colors"
           >
             <div className="flex items-center gap-2">
               <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+              <span className="text-sm font-medium text-blue-700 dark:text-slate-300">
                 Thinking Process
                 {isStreaming && (
                   <span className="ml-2 inline-block w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
@@ -63,8 +63,8 @@ export function ThinkingDisplay({
 
           {/* Content */}
           {effectiveExpanded && (
-            <div className="px-3 pb-3 border-t border-blue-200 dark:border-blue-700">
-              <div className="mt-3 text-sm text-blue-800 dark:text-blue-200 bg-white/50 dark:bg-gray-900/50 rounded p-3 font-mono whitespace-pre-wrap">
+            <div className="px-3 pb-3 border-t border-blue-200 dark:border-dark-purple-accent/50">
+              <div className="mt-3 text-sm text-blue-800 dark:text-slate-200 bg-white/50 dark:bg-dark-bg-secondary/50 rounded p-3 font-mono whitespace-pre-wrap">
                 <div className="text-blue-600 dark:text-blue-400 italic">
                   Thinking...
                   <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1" />
@@ -79,15 +79,15 @@ export function ThinkingDisplay({
   }
 
   return (
-    <div className="mb-3 border border-blue-200 dark:border-blue-700 rounded-lg overflow-hidden bg-blue-50/50 dark:bg-blue-950/20">
+    <div className="mb-3 border border-blue-200 dark:border-dark-purple-accent/50 rounded-lg overflow-hidden bg-blue-50/50 dark:bg-dark-bg-tertiary/30">
       {/* Header */}
       <button
         onClick={() => setIsExpanded(!effectiveExpanded)}
-        className="w-full flex items-center justify-between p-3 hover:bg-blue-100/50 dark:hover:bg-blue-900/30 transition-colors"
+        className="w-full flex items-center justify-between p-3 hover:bg-blue-100/50 dark:hover:bg-dark-bg-secondary/50 transition-colors"
       >
         <div className="flex items-center gap-2">
           <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+          <span className="text-sm font-medium text-blue-700 dark:text-slate-300">
             Thinking Process
             {isStreaming && (
               <span className="ml-2 inline-block w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
@@ -103,8 +103,8 @@ export function ThinkingDisplay({
 
       {/* Content */}
       {effectiveExpanded && (
-        <div className="px-3 pb-3 border-t border-blue-200 dark:border-blue-700">
-          <div className="mt-3 text-sm text-blue-800 dark:text-blue-200 bg-white/50 dark:bg-gray-900/50 rounded p-3 font-mono whitespace-pre-wrap">
+        <div className="px-3 pb-3 border-t border-blue-200 dark:border-dark-purple-accent/50">
+          <div className="mt-3 text-sm text-blue-800 dark:text-slate-200 bg-white/50 dark:bg-dark-bg-secondary/50 rounded p-3 font-mono whitespace-pre-wrap">
             <Markdown content={reasoning} isThinking={true} />
             {isStreaming && (
               <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1" />

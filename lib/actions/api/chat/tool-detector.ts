@@ -9,9 +9,7 @@ export function detectToolUsage(
     role: string;
     content: unknown;
   }>,
-  requestId?: string,
 ): ToolUsageResult {
-  const logPrefix = requestId ? `[${requestId}]` : "[detectToolUsage]";
 
   const toolsUsedInResponse: string[] = [];
   let hasAnyToolCalls = false;

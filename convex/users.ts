@@ -43,7 +43,7 @@ export const createUserSettings = mutation({
     const now = Date.now();
     return await ctx.db.insert("userSettings", {
       userId: args.userId,
-      defaultModel: "gpt-4",
+      defaultModel: "gemini-2.0-flash",
       theme: "system",
       enableWebSearch: false,
       enableImageGeneration: false,

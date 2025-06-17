@@ -1,4 +1,4 @@
-import { streamText } from "ai";
+import { streamText, type CoreMessage, convertToCoreMessages } from "ai";
 import { NextRequest } from "next/server";
 
 import { getOrCreateAnonymousSession } from "@/lib/utils/session";
@@ -85,8 +85,9 @@ export async function POST(req: NextRequest) {
     // OPTIMIZATION: Only load conversation from Convex for actual retry operations
     // New messages should use client messages to ensure proper processing
     // ----------------------------------------------------
-    let messagesForAI = messages;
+    let messagesForAI: CoreMessage[] = convertToCoreMessages(messages);
     let isRetryFromConvex = false;
+    const originalMessages = messages; // Keep original messages for functions that need Message[]
 
     // Only check for Convex history if this might be a retry AND we have an existing thread
     if (threadId && messages.length > 1) {
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
           fetchOptions,
         );
 
-        if (existingMessages.length > 0) {
+        if (existingMessages && existingMessages.length > 0) {
           // Check if this is actually a retry by comparing the last user message
           const lastUserMessageFromClient = messages
             .filter((msg) => msg.role === "user")
@@ -126,21 +127,10 @@ export async function POST(req: NextRequest) {
               },
             );
 
-            // Convert Convex messages to AI SDK format
+            // Convert Convex messages to CoreMessage format (no IDs needed for CoreMessage)
             messagesForAI = existingMessages.map((msg) => ({
               role: msg.role as "user" | "assistant" | "system",
               content: msg.content,
-              // Include tool information if available
-              ...(msg.toolsUsed &&
-                msg.toolsUsed.length > 0 && {
-                  toolInvocations: msg.toolsUsed.map((tool) => ({
-                    toolCallId: `tool-${msg._id}-${tool}`,
-                    toolName: tool,
-                    state: "result" as const,
-                    args: {},
-                    result: "Tool execution completed",
-                  })),
-                }),
             }));
 
             isRetryFromConvex = true;
@@ -156,6 +146,12 @@ export async function POST(req: NextRequest) {
               },
             );
           }
+        } else if (existingMessages === null) {
+          // Thread was deleted, log this case
+          console.log(
+            `[${requestId}] CHAT_API - Thread not found (possibly deleted), using client messages`,
+            { threadId },
+          );
         }
       } catch (error) {
         console.warn(
@@ -186,11 +182,15 @@ export async function POST(req: NextRequest) {
 
     // Process multimodal messages if needed (only for new messages, not retries)
     if (!isRetryFromConvex) {
-      messagesForAI = await processMultimodalMessages(
-        messagesForAI,
+      const processedCoreMessages = await processMultimodalMessages(
+        originalMessages,
         attachmentIds,
         fetchOptions,
       );
+
+      // Use the processed core messages directly - they're already in the correct format for streamText
+      // No need to convert back to Message[] since streamText accepts CoreMessage[]
+      messagesForAI = processedCoreMessages;
     }
 
     // Early thread creation (needed for X-Thread-Id header)
@@ -241,15 +241,15 @@ export async function POST(req: NextRequest) {
       ...(tools && { experimental_toolCallStreaming: true }),
       // Add provider options for Groq reasoning models
       ...(modelConfig.provider === "groq" &&
-        (modelConfig.capabilities as readonly string[]).includes(
-          "reasoning",
-        ) && {
+        modelConfig.capabilities.thinking && {
           providerOptions: {
             groq: {
               reasoningFormat: "parsed" as const,
             },
           },
         }),
+      // Forward abort signal from client to AI provider
+      abortSignal: req.signal,
 
       onFinish: async (result) => {
         // Background: Handle session management for anonymous users
@@ -380,7 +380,6 @@ export async function POST(req: NextRequest) {
             // Detect tool usage from response messages
             const { toolsUsedInResponse, hasAnyToolCalls } = detectToolUsage(
               result.response.messages,
-              requestId,
             );
 
             // Save AI response messages (response.messages already contains only NEW messages)
@@ -410,7 +409,7 @@ export async function POST(req: NextRequest) {
         // Background: Cache conversation context
         await cacheConversationContext(
           finalThreadId,
-          messagesForAI, // Use the actual messages sent to AI (from Convex)
+          originalMessages, // Use original Message[] format for caching
           modelId,
           requestId,
         );
@@ -451,7 +450,6 @@ export async function POST(req: NextRequest) {
       modelConfig,
       userId,
       remainingMessages,
-      requestId,
     );
 
     // Attach the thread id so the client can redirect immediately

@@ -119,7 +119,8 @@ export function convertToDisplayMessages(
     return {
       role: m.role as DisplayMessage["role"],
       content: m.content,
-      id: m.id,
+      // Use Convex message ID if available (needed for branching), otherwise use AI SDK ID
+      id: historicalMessage?._id ?? m.id,
       // Use model from database if available, otherwise use current selected model for new messages
       model:
         historicalMessage?.model ??

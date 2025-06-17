@@ -23,16 +23,9 @@ export function buildStreamResponseConfig(
   modelConfig: ModelConfig,
   userId: string | null,
   remainingMessages: number,
-  requestId?: string,
 ): StreamResponseConfig {
-  const logPrefix = requestId
-    ? `[${requestId}]`
-    : "[buildStreamResponseConfig]";
-
   // Use different streaming approach based on provider and reasoning support
-  const supportsReasoning = modelConfig.capabilities.includes(
-    "reasoning" as any,
-  );
+  const supportsReasoning = modelConfig.capabilities.thinking;
 
   // Base headers for all streaming responses
   const baseHeaders: StreamHeaders = {

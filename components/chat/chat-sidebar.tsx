@@ -8,9 +8,7 @@ import { ChatSidebarHeader } from "./chat-sidebar-header";
 import { ChatSidebarContent } from "./chat-sidebar-content";
 import { ChatSidebarFooter } from "./chat-sidebar-footer";
 import {
-  useThreadsFetcher,
   useThreadCreator,
-  useThreadGrouping,
   useNewChatHandler,
 } from "@/lib/actions/chat/chat-sidebar";
 
@@ -29,24 +27,17 @@ export function ChatSidebar() {
   const { signOut } = useClerk();
   const router = useRouter();
 
-  // Use extracted thread fetcher (now includes sessionData to avoid duplicate calls)
-  const { threadsData, threadsLoading, sessionId, sessionData } =
-    useThreadsFetcher();
-
   // Use extracted thread creator
   const threadCreator = useThreadCreator(user);
 
   // Use extracted new chat handler
   const handleNewChat = useNewChatHandler({
     user,
-    sessionId,
-    sessionData,
-    threadsData,
+    sessionId: null,
+    sessionData: null,
+    threadsData: [],
     threadCreator,
   });
-
-  // Use extracted thread grouping
-  const groupedThreads = useThreadGrouping(threadsData, searchQuery);
 
   const handleSignOut = async () => {
     try {
@@ -67,7 +58,7 @@ export function ChatSidebar() {
   }, []);
 
   return (
-    <Sidebar className="border-none bg-purple-100 dark:bg-purple-900 [&[data-mobile=true]]:bg-purple-100 [&[data-mobile=true]]:dark:bg-purple-900">
+    <Sidebar className="border-none bg-purple-100 dark:bg-dark-bg-secondary [&[data-mobile=true]]:bg-purple-100 [&[data-mobile=true]]:dark:bg-dark-bg-secondary">
       <ChatSidebarHeader
         handleNewChat={handleNewChat}
         searchQuery={searchQuery}
@@ -75,8 +66,6 @@ export function ChatSidebar() {
       />
 
       <ChatSidebarContent
-        threadsLoading={threadsLoading}
-        groupedThreads={groupedThreads}
         currentThreadId={currentThreadId}
         searchQuery={searchQuery}
         user={user}

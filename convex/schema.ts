@@ -18,28 +18,42 @@ export default defineSchema({
     ipHash: v.optional(v.string()), // Hashed IP to group sessions for migration
 
     // Thread settings
-    model: v.string(), // 'gpt-4', 'claude-3', 'gemini-pro', etc.
+    model: v.string(),
     systemPrompt: v.optional(v.string()),
 
     // Branching - for conversation branches
     parentThreadId: v.optional(v.id("threads")), // If this thread is a branch of another
     branchFromMessageId: v.optional(v.id("messages")), // Which message this branch started from
 
+    // Cloning - for thread sharing and cloning functionality
+    originalThreadId: v.optional(v.id("threads")), // If this is a cloned thread, reference to original
+    cloneCount: v.optional(v.number()), // How many times this thread has been cloned
+    allowCloning: v.optional(v.boolean()), // Whether owner allows others to clone this thread (default: true)
+
     // Timestamps
     createdAt: v.number(),
     updatedAt: v.number(),
 
-    // Share settings
+    // Enhanced share settings
     isPublic: v.optional(v.boolean()),
     shareToken: v.optional(v.string()),
     shareExpiresAt: v.optional(v.number()),
+    shareMetadata: v.optional(
+      v.object({
+        viewCount: v.number(), // How many times this shared thread has been viewed
+        lastViewed: v.number(), // Timestamp of last view
+        allowedViewers: v.optional(v.array(v.string())), // Specific user IDs allowed to view (for future use)
+      }),
+    ),
   })
     .index("by_user", ["userId"])
     .index("by_session", ["sessionId"]) // Index for anonymous session lookup
     .index("by_anonymous", ["isAnonymous", "createdAt"]) // Index for anonymous threads
     .index("by_share_token", ["shareToken"])
     .index("by_updated", ["updatedAt"])
-    .index("by_ip_hash", ["ipHash"]),
+    .index("by_ip_hash", ["ipHash"])
+    .index("by_original_thread", ["originalThreadId"]) // Index for finding clones of a thread
+    .index("by_user_original", ["userId", "originalThreadId"]), // Unique constraint for preventing duplicate clones
 
   // Stream tracking for resumable streams
   streams: defineTable({

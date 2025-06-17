@@ -22,16 +22,13 @@ export interface RetryMessageHandlerParams {
 // Optimized retry logic that leverages Convex conversation history
 export async function handleRetryMessage({
   threadId,
-  status,
   hookMessages,
   selectedModel,
-  data,
   isAnonymous,
   anonSessionId,
   removeLastAssistantMessage,
   setMessages,
   reload,
-  sendMessage,
 }: RetryMessageHandlerParams): Promise<void> {
   if (!threadId) {
     return;
