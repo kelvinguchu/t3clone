@@ -102,31 +102,21 @@ export function ApiKeysPage() {
 
   return (
     <div className="h-full w-full space-y-6 px-4">
-      {/* Page Header */}
-      <div className="space-y-2 text-center">
-        <h1 className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-          API Keys
-        </h1>
-        <p className="text-purple-700 dark:text-purple-300 text-sm">
-          Bring your own API keys for select models.
-        </p>
-      </div>
-
       {/* Pro Feature Notice */}
       <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-6 text-center">
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100">
-              Pro Feature
-            </h3>
-            <p className="text-purple-700 dark:text-purple-300 mt-2">
-              Upgrade to Pro to access this feature.
-            </p>
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100">
+                Pro Feature
+              </h3>
+              <p className="text-purple-700 dark:text-purple-300 mt-2">
+                Upgrade to Pro to access this feature.
+              </p>
+            </div>
+            <Button className="bg-purple-600 hover:bg-purple-700 text-white">
+              Upgrade to Pro - $8/month
+            </Button>
           </div>
-          <Button className="bg-purple-600 hover:bg-purple-700 text-white">
-            Upgrade to Pro - $8/month
-          </Button>
-        </div>
       </div>
 
       {/* API Providers List */}

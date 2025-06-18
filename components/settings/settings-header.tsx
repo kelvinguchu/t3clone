@@ -33,8 +33,8 @@ export function SettingsHeader() {
   const pageTitle = getPageTitle(pathname);
 
   return (
-    <div className="flex items-center justify-center h-6 p-2 bg-purple-100 dark:bg-dark-bg-secondary">
-      <h1 className="text-sm font-bold bg-gradient-to-r from-purple-600 to-purple-800 dark:from-dark-purple-glow dark:to-purple-400 bg-clip-text text-transparent">
+    <div className="flex items-center justify-center h-9 p-3 bg-purple-100 dark:bg-dark-bg-secondary">
+      <h1 className="text-lg font-bold bg-gradient-to-r from-purple-600 to-purple-800 dark:from-dark-purple-glow dark:to-purple-400 bg-clip-text text-transparent">
         {pageTitle}
       </h1>
     </div>

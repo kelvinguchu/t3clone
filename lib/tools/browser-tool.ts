@@ -197,7 +197,7 @@ export const googleSearchTool = tool({
 
       const evaluationModelId: ModelId =
         (modelId as ModelId) || "llama3-70b-8192";
-      const model = getModel(evaluationModelId);
+      const model = await getModel(evaluationModelId);
 
       const response = await generateText({
         model,
@@ -269,7 +269,7 @@ export const duckDuckGoSearchTool = tool({
 
       const evaluationModelId: ModelId =
         (modelId as ModelId) || "llama3-70b-8192";
-      const model = getModel(evaluationModelId);
+      const model = await getModel(evaluationModelId);
 
       const summary = await generateText({
         model,
@@ -341,7 +341,7 @@ export const getPageContentTool = tool({
 
       const evaluationModelId: ModelId =
         (modelId as ModelId) || "llama3-70b-8192";
-      const model = getModel(evaluationModelId);
+      const model = await getModel(evaluationModelId);
 
       const response = await generateText({
         model,
