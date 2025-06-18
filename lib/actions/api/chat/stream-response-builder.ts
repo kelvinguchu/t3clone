@@ -43,24 +43,8 @@ export function buildStreamResponseConfig(
     baseHeaders["X-RateLimit-Limit"] = "10";
   }
 
-  // For Groq reasoning models, use data stream to send reasoning separately
-  if (modelConfig.provider === "groq" && supportsReasoning) {
-    return {
-      responseType: "data",
-      sendReasoning: true,
-      headers: baseHeaders,
-    };
-  }
-
-  // For non-reasoning Groq models, use text stream
-  if (modelConfig.provider === "groq") {
-    return {
-      responseType: "text",
-      headers: baseHeaders,
-    };
-  }
-
-  // Use data stream for other providers (Gemini, OpenAI)
+  // Always use data stream for consistency with frontend configuration
+  // This ensures proper tool calls, usage info, and finish reasons
   return {
     responseType: "data",
     sendReasoning: supportsReasoning,

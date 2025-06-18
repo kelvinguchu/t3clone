@@ -1,6 +1,9 @@
 import type { ModelId } from "@/lib/ai-providers";
 import type { Id } from "@/convex/_generated/dataModel";
-import { generateThreadTitle, shouldUpdateTitle } from "@/lib/title-generator";
+import {
+  generateThreadTitleClient,
+  shouldUpdateTitle,
+} from "@/lib/title-generator";
 
 export interface AttachmentPreview {
   id: string;
@@ -74,6 +77,15 @@ export async function handleMessageSend(
     return;
   }
 
+  console.log("[MessageSendHandler] Processing message send:", {
+    messageLength: message.trim().length,
+    attachmentCount: attachmentIds?.length || 0,
+    enableWebBrowsing: options?.enableWebBrowsing,
+    selectedModel,
+    threadId: threadId || initialThreadId,
+    timestamp: new Date().toISOString(),
+  });
+
   try {
     // Convert attachment previews to experimental_attachments format for AI SDK
     const experimentalAttachments = attachmentPreviews?.map((preview) => ({
@@ -81,6 +93,12 @@ export async function handleMessageSend(
       contentType: preview.contentType,
       url: preview.url,
     }));
+
+    console.log("[MessageSendHandler] Calling AI SDK sendMessage:", {
+      enableWebBrowsing: options?.enableWebBrowsing,
+      experimentalAttachmentsCount: experimentalAttachments?.length || 0,
+      timestamp: new Date().toISOString(),
+    });
 
     // Use AI SDK's sendMessage for optimistic updates and proper streaming
     sendMessage(message, attachmentIds, {
@@ -90,6 +108,10 @@ export async function handleMessageSend(
 
     // Store browsing flag for UI indicator
     setPendingBrowsing(!!options?.enableWebBrowsing);
+    console.log("[MessageSendHandler] Set pending browsing state:", {
+      pendingBrowsing: !!options?.enableWebBrowsing,
+      timestamp: new Date().toISOString(),
+    });
 
     // Auto-detect thinking models and set thinking flag
     const reasoningModels = ["deepseek-r1-distill-llama-70b", "qwen/qwen3-32b"];
@@ -126,7 +148,7 @@ export async function handleMessageSend(
     // Auto-update thread title if it's still "New Chat" (background operation)
     if (threadId && threadMeta && shouldUpdateTitle(threadMeta.title)) {
       // Don't await - update title in background
-      generateThreadTitle(message)
+      generateThreadTitleClient(message)
         .then((newTitle) => {
           return updateThreadMutation({
             threadId: threadId as Id<"threads">,

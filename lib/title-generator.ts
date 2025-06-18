@@ -3,6 +3,7 @@ import { getModel } from "@/lib/ai-providers";
 
 /**
  * Generate a meaningful thread title using AI from user input or AI response
+ * This function should only be called server-side (in API routes)
  */
 export async function generateThreadTitle(
   text: string,
@@ -29,7 +30,7 @@ export async function generateThreadTitle(
 
   try {
     // Use AI to generate a smart title
-    const model = getModel("llama3-70b-8192");
+    const model = await getModel("llama3-70b-8192");
 
     const result = await generateText({
       model,
@@ -83,6 +84,35 @@ Examples:
     return cleaned.length <= maxLength
       ? cleaned
       : cleaned.slice(0, maxLength - 3) + "...";
+  }
+}
+
+/**
+ * Client-side helper to generate thread title via API route
+ * Use this function from React components/hooks
+ */
+export async function generateThreadTitleClient(
+  text: string,
+  maxLength = 50,
+): Promise<string> {
+  try {
+    const response = await fetch("/api/title-generation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, maxLength }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const { title } = await response.json();
+    return title;
+  } catch (error) {
+    console.warn("Client-side title generation failed, using fallback:", error);
+
+    // Fallback: use simple title generation
+    return generateSimpleTitle(text, maxLength);
   }
 }
 

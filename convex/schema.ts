@@ -188,7 +188,7 @@ export default defineSchema({
     enableWebSearch: v.optional(v.boolean()),
     enableImageGeneration: v.optional(v.boolean()),
 
-    // API keys (encrypted, user-provided)
+    // API keys (encrypted, user-provided) - deprecated, use apiKeys table
     hasCustomOpenAI: v.optional(v.boolean()),
     hasCustomAnthropic: v.optional(v.boolean()),
 
@@ -196,4 +196,36 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  // Encrypted API Keys - End-to-End Encrypted Storage
+  apiKeys: defineTable({
+    userId: v.string(), // Clerk user ID - owner of the keys
+
+    // Provider identification - ONLY AI model providers
+    provider: v.union(
+      v.literal("groq"), // Llama, DeepSeek, Qwen models
+      v.literal("google"), // Gemini models
+    ),
+
+    // Encrypted key data (client-side encrypted)
+    encryptedData: v.string(), // Base64 encoded encrypted API key
+    iv: v.string(), // Base64 encoded initialization vector
+    salt: v.string(), // Base64 encoded salt for key derivation
+    algorithm: v.string(), // Encryption algorithm used (e.g., "AES-GCM")
+    iterations: v.number(), // PBKDF2 iterations used
+
+    // Key metadata (not encrypted)
+    keyName: v.optional(v.string()), // User-friendly name for the key
+    keyPrefix: v.optional(v.string()), // First few characters for identification (e.g., "sk-...")
+    isActive: v.boolean(), // Whether this key is currently active
+    lastUsed: v.optional(v.number()), // Timestamp of last usage
+
+    // Security metadata
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    expiresAt: v.optional(v.number()), // Optional expiration for the key
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_provider", ["userId", "provider"])
+    .index("by_user_active", ["userId", "isActive"]),
 });

@@ -75,11 +75,22 @@ export async function POST(req: NextRequest) {
       messages,
       modelId,
       threadId,
+      temperature = 0.5,
+      maxTokens = 4096,
+      attachmentIds = [],
+      enableWebBrowsing = false,
+    } = data!;
+
+    console.log(`[${requestId}] CHAT_API - Request processed:`, {
+      modelId,
+      threadId,
+      enableWebBrowsing,
+      messagesCount: messages.length,
+      attachmentIdsCount: attachmentIds.length,
       temperature,
       maxTokens,
-      attachmentIds,
-      enableWebBrowsing,
-    } = data!;
+      timestamp: new Date().toISOString(),
+    });
 
     // ----------------------------------------------------
     // OPTIMIZATION: Only load conversation from Convex for actual retry operations
@@ -189,8 +200,8 @@ export async function POST(req: NextRequest) {
         fetchOptions,
       );
 
-      // Use the processed core messages directly - they're already in the correct format for streamText
-      // The multimodal processor has already filtered out blob URLs and converted to CoreMessage[]
+      // Use the processed core messages directly - they're already in CoreMessage format
+      // The multimodal processor has already converted and filtered messages properly
       messagesForAI = processedCoreMessages;
     }
 
@@ -220,11 +231,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Setup model configuration
-    const { model, modelConfig, tools, toolChoice } = setupModelConfiguration(
-      modelId,
-      enableWebBrowsing,
-      requestId,
-    );
+    const { model, modelConfig, tools, toolChoice } =
+      await setupModelConfiguration(
+        modelId,
+        enableWebBrowsing,
+        userId ?? undefined,
+        fetchOptions,
+        requestId,
+      );
 
     // ------------------------------------------------------------------
     // IMMEDIATE STREAMING: Start AI response immediately
@@ -238,7 +252,7 @@ export async function POST(req: NextRequest) {
       maxTokens: Math.min(maxTokens, modelConfig.maxTokens),
       ...(tools && { tools }),
       ...(toolChoice && { toolChoice }),
-      ...(tools && { maxSteps: 5 }),
+      ...(tools && { maxSteps: 10 }),
       ...(tools && { experimental_toolCallStreaming: true }),
       // Add provider options for Groq reasoning models
       ...(modelConfig.provider === "groq" &&
@@ -251,6 +265,33 @@ export async function POST(req: NextRequest) {
         }),
       // Forward abort signal from client to AI provider
       abortSignal: req.signal,
+
+      // Handle each step completion for multi-step tool calls
+      onStepFinish: async ({
+        text,
+        toolCalls,
+        toolResults,
+        finishReason,
+        usage,
+      }) => {
+        // CRITICAL: Make this callback completely non-blocking to prevent stream interruption
+        // Use setImmediate to defer all operations to the next tick
+        setImmediate(() => {
+          console.log(`[${requestId}] CHAT_API - Step finished:`, {
+            stepText:
+              text?.substring(0, 100) +
+              (text && text.length > 100 ? "..." : ""),
+            toolCallsCount: toolCalls?.length || 0,
+            toolResultsCount: toolResults?.length || 0,
+            finishReason,
+            usage,
+            timestamp: new Date().toISOString(),
+          });
+
+          // All database operations moved to onFinish callback
+          // This callback should ONLY be used for logging/monitoring
+        });
+      },
 
       onFinish: async (result) => {
         // Background: Handle session management for anonymous users

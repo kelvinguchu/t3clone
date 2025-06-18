@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as apiKeys from "../apiKeys.js";
 import type * as attachments from "../attachments.js";
 import type * as messages from "../messages.js";
 import type * as sessionStats from "../sessionStats.js";
@@ -30,6 +31,7 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  apiKeys: typeof apiKeys;
   attachments: typeof attachments;
   messages: typeof messages;
   sessionStats: typeof sessionStats;

@@ -165,17 +165,17 @@ export function AuthCallbackHandler({ token, action, userId }: Props) {
   if (status === "loading") {
     return (
       <div className="w-full max-w-md mx-auto">
-        <Card className="border-purple-200 dark:border-purple-700 bg-white/80 dark:bg-purple-900/40 backdrop-blur-sm">
+        <Card className="border-purple-200 dark:border-dark-purple-accent bg-white/80 dark:bg-dark-bg-secondary backdrop-blur-sm">
           <CardHeader className="text-center pb-4">
-            <div className="mx-auto mb-4 p-3 bg-purple-100 dark:bg-purple-800/50 rounded-full w-fit">
-              <Loader2 className="h-8 w-8 animate-spin text-purple-600 dark:text-purple-400" />
+            <div className="mx-auto mb-4 p-3 bg-purple-100 dark:bg-dark-bg rounded-full w-fit">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-600 dark:text-purple-300" />
             </div>
             <CardTitle className="text-xl font-bold text-purple-800 dark:text-purple-200">
               {action === "clone"
                 ? "Cloning Conversation"
                 : "Processing Request"}
             </CardTitle>
-            <CardDescription className="text-purple-600 dark:text-purple-400">
+            <CardDescription className="text-purple-600 dark:text-purple-300">
               {action === "clone"
                 ? "Creating your personal copy of this conversation..."
                 : "Please wait while we process your request..."}
@@ -184,13 +184,13 @@ export function AuthCallbackHandler({ token, action, userId }: Props) {
           <CardContent className="pt-0">
             <div className="flex items-center justify-center">
               <div className="flex space-x-1">
-                <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-purple-400 dark:bg-purple-300 rounded-full animate-bounce"></div>
                 <div
-                  className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"
+                  className="w-2 h-2 bg-purple-400 dark:bg-purple-300 rounded-full animate-bounce"
                   style={{ animationDelay: "0.1s" }}
                 ></div>
                 <div
-                  className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"
+                  className="w-2 h-2 bg-purple-400 dark:bg-purple-300 rounded-full animate-bounce"
                   style={{ animationDelay: "0.2s" }}
                 ></div>
               </div>
@@ -204,9 +204,9 @@ export function AuthCallbackHandler({ token, action, userId }: Props) {
   if (status === "error") {
     return (
       <div className="w-full max-w-md mx-auto">
-        <Card className="border-red-200 dark:border-red-700 bg-white/80 dark:bg-red-900/20 backdrop-blur-sm">
+        <Card className="border-red-200 dark:border-red-700 bg-white/80 dark:bg-dark-bg-secondary backdrop-blur-sm">
           <CardHeader className="text-center pb-4">
-            <div className="mx-auto mb-4 p-3 bg-red-100 dark:bg-red-800/50 rounded-full w-fit">
+            <div className="mx-auto mb-4 p-3 bg-red-100 dark:bg-red-900/50 rounded-full w-fit">
               <XCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
             </div>
             <CardTitle className="text-xl font-bold text-red-800 dark:text-red-200">
@@ -227,7 +227,7 @@ export function AuthCallbackHandler({ token, action, userId }: Props) {
             <Button
               onClick={() => router.push("/")}
               variant="secondary"
-              className="w-full cursor-pointer bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
+              className="w-full cursor-pointer bg-gray-100 dark:bg-dark-bg hover:bg-gray-200 dark:hover:bg-gray-700"
             >
               Go to Dashboard
             </Button>
@@ -240,9 +240,9 @@ export function AuthCallbackHandler({ token, action, userId }: Props) {
   if (status === "success" && action === "clone") {
     return (
       <div className="w-full max-w-md mx-auto">
-        <Card className="border-green-200 dark:border-green-700 bg-white/80 dark:bg-green-900/20 backdrop-blur-sm">
+        <Card className="border-green-200 dark:border-green-700 bg-white/80 dark:bg-dark-bg-secondary backdrop-blur-sm">
           <CardHeader className="text-center pb-6">
-            <div className="mx-auto mb-4 p-3 bg-green-100 dark:bg-green-800/50 rounded-full w-fit">
+            <div className="mx-auto mb-4 p-3 bg-green-100 dark:bg-green-900/50 rounded-full w-fit">
               <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
             </div>
             <CardTitle className="text-xl font-bold text-green-800 dark:text-green-200 mb-2">
@@ -269,7 +269,7 @@ export function AuthCallbackHandler({ token, action, userId }: Props) {
                 onClick={handleBackToOriginal}
                 variant="outline"
                 size="sm"
-                className="cursor-pointer border-purple-300 dark:border-purple-600 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30"
+                className="cursor-pointer border-purple-300 dark:border-dark-purple-accent text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-dark-bg"
               >
                 View Original
               </Button>
@@ -277,7 +277,7 @@ export function AuthCallbackHandler({ token, action, userId }: Props) {
                 onClick={() => router.push("/")}
                 variant="outline"
                 size="sm"
-                className="cursor-pointer border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900/30"
+                className="cursor-pointer border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-bg"
               >
                 Dashboard
               </Button>

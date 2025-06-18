@@ -128,11 +128,13 @@ const CodeBlock = ({ children, className, ...props }: CodeBlockProps) => {
 
   return (
     <div className="relative group">
-      <div className="flex items-center justify-between bg-gray-800 px-4 py-2 text-sm">
-        <span className="text-gray-300 font-mono">{language}</span>
+      <div className="flex items-center justify-between bg-gray-800 dark:bg-gray-900 px-4 py-2 text-sm">
+        <span className="text-gray-300 dark:text-gray-400 font-mono">
+          {language}
+        </span>
         <button
           onClick={copyToClipboard}
-          className="flex items-center gap-1 text-gray-400 hover:text-white transition-colors"
+          className="flex items-center gap-1 text-gray-400 hover:text-white dark:text-gray-500 dark:hover:text-gray-200 transition-colors"
         >
           {copied ? <Check size={16} /> : <Copy size={16} />}
           {copied ? "Copied!" : "Copy"}
@@ -168,7 +170,7 @@ export function Markdown({
 
   return (
     <div
-      className={`prose prose-gray dark:prose-invert max-w-none prose-code:!bg-transparent prose-code:!text-inherit prose-code:!p-0 prose-code:!rounded-none prose-code:!border-0 ${thinkingClasses}`}
+      className={`prose prose-gray dark:prose-invert max-w-none prose-code:!bg-transparent prose-code:!text-inherit prose-code:!p-0 prose-code:!rounded-none prose-code:!border-0 dark:prose-headings:text-purple-100 dark:prose-p:text-purple-100 dark:prose-li:text-purple-100 dark:prose-strong:text-purple-100 dark:prose-em:text-purple-100 ${thinkingClasses}`}
     >
       <MarkdownToJsx
         options={{

@@ -2,7 +2,10 @@ import { useEffect } from "react";
 import type { Message } from "@ai-sdk/react";
 import type { ModelId } from "@/lib/ai-providers";
 import type { Id } from "@/convex/_generated/dataModel";
-import { generateThreadTitle, shouldUpdateTitle } from "@/lib/title-generator";
+import {
+  generateThreadTitleClient,
+  shouldUpdateTitle,
+} from "@/lib/title-generator";
 
 export interface AssistantMessageCacherParams {
   isLoading: boolean;
@@ -64,7 +67,9 @@ export function useAssistantMessageCaching({
               shouldUpdateTitle(threadMeta.title)
             ) {
               try {
-                const newTitle = await generateThreadTitle(lastMessage.content);
+                const newTitle = await generateThreadTitleClient(
+                  lastMessage.content,
+                );
                 await updateThreadMutation({
                   threadId: threadId as Id<"threads">,
                   title: newTitle,

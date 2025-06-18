@@ -187,20 +187,14 @@ export function useChat({
   const chat = useVercelAIChat({
     id: threadId ?? undefined,
     api: "/api/chat",
-    // Use text protocol for Groq models to fix streaming hangs
-    // But use data protocol for reasoning models to enable reasoning extraction
-    streamProtocol:
-      modelId === "llama3-70b-8192"
-        ? "text"
-        : modelId === "deepseek-r1-distill-llama-70b" ||
-            modelId === "qwen/qwen3-32b"
-          ? "data" // reasoning models need data protocol for reasoning extraction
-          : "data",
+    // Use 'data' protocol for tool calls and reasoning support
+    // The backend will handle the appropriate response format
+    streamProtocol: "data",
     initialMessages,
     body: requestBody,
     headers: requestHeaders,
-    // Enable multi-step tool execution
-    maxSteps: 5,
+    // Enable multi-step tool execution (increased for complex tool chains)
+    maxSteps: 10,
     // Performance optimizations
     experimental_throttle, // Throttle UI updates to prevent excessive re-renders
     sendExtraMessageFields, // Only send essential fields for performance
@@ -358,6 +352,15 @@ export function useChat({
         enableWebBrowsing?: boolean;
       },
     ) => {
+      console.log("[useChat] sendMessage called:", {
+        contentLength: content.trim().length,
+        attachmentIdsCount: attachmentIds?.length || 0,
+        enableWebBrowsing: options?.enableWebBrowsing,
+        experimentalAttachmentsCount:
+          options?.experimental_attachments?.length || 0,
+        timestamp: new Date().toISOString(),
+      });
+
       if (
         !content.trim() &&
         (!attachmentIds || attachmentIds.length === 0) &&
@@ -400,6 +403,11 @@ export function useChat({
             appendOptions.body.enableWebBrowsing = true;
           }
 
+          console.log("[useChat] Appending message with attachments:", {
+            appendOptionsBody: appendOptions.body,
+            timestamp: new Date().toISOString(),
+          });
+
           chat.append(
             {
               role: "user",
@@ -422,6 +430,11 @@ export function useChat({
           if (options?.enableWebBrowsing) {
             appendOptions.body.enableWebBrowsing = true;
           }
+
+          console.log("[useChat] Appending regular message:", {
+            appendOptionsBody: appendOptions.body,
+            timestamp: new Date().toISOString(),
+          });
 
           chat.append(
             {

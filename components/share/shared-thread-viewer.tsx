@@ -95,16 +95,16 @@ export function SharedThreadViewer({ shareToken }: Props) {
   // Loading state
   if (sharedThread === undefined || messages === undefined) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white dark:from-purple-950 dark:to-purple-900">
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white dark:bg-dark-bg">
         <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="bg-white/70 dark:bg-purple-900/40 rounded-lg p-6 border border-purple-200 dark:border-purple-700 backdrop-blur-sm">
+          <div className="bg-white/70 dark:bg-dark-bg-secondary/70 rounded-lg p-6 border border-purple-200 dark:border-dark-purple-accent backdrop-blur-sm">
             <div className="animate-pulse space-y-4">
-              <div className="h-6 bg-purple-200 dark:bg-purple-700 rounded w-3/4"></div>
-              <div className="h-4 bg-purple-100 dark:bg-purple-800 rounded w-1/2"></div>
+              <div className="h-6 bg-purple-200 dark:bg-dark-bg rounded w-3/4"></div>
+              <div className="h-4 bg-purple-100 dark:bg-gray-800 rounded w-1/2"></div>
               <div className="space-y-3 mt-6">
-                <div className="h-4 bg-purple-100 dark:bg-purple-800 rounded"></div>
-                <div className="h-4 bg-purple-100 dark:bg-purple-800 rounded w-5/6"></div>
-                <div className="h-4 bg-purple-100 dark:bg-purple-800 rounded w-4/6"></div>
+                <div className="h-4 bg-purple-100 dark:bg-gray-800 rounded"></div>
+                <div className="h-4 bg-purple-100 dark:bg-gray-800 rounded w-5/6"></div>
+                <div className="h-4 bg-purple-100 dark:bg-gray-800 rounded w-4/6"></div>
               </div>
             </div>
           </div>
@@ -116,7 +116,7 @@ export function SharedThreadViewer({ shareToken }: Props) {
   // Error state - thread not found or expired
   if (sharedThread === null) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white dark:from-purple-950 dark:to-purple-900 flex items-center justify-center px-4">
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white dark:bg-dark-bg flex items-center justify-center px-4">
         <div className="max-w-md mx-auto text-center space-y-4">
           <Alert className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
             <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
@@ -128,7 +128,7 @@ export function SharedThreadViewer({ shareToken }: Props) {
           <Button
             onClick={() => router.push("/")}
             variant="outline"
-            className="cursor-pointer border-purple-300 dark:border-purple-600 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800"
+            className="cursor-pointer border-purple-300 dark:border-dark-purple-accent text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-dark-bg"
           >
             Go to T3 Chat
           </Button>
@@ -138,9 +138,9 @@ export function SharedThreadViewer({ shareToken }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white dark:from-purple-950 dark:to-purple-900">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white dark:bg-dark-bg">
       {/* Compact Header */}
-      <div className="sticky top-0 z-10 bg-white/80 dark:bg-purple-900/80 backdrop-blur-md border-b border-purple-200 dark:border-purple-700">
+      <div className="sticky top-0 z-10 bg-white/80 dark:bg-dark-bg-secondary/80 backdrop-blur-md border-b border-purple-200 dark:border-dark-purple-accent">
         <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             {/* Left: App branding */}
@@ -161,7 +161,7 @@ export function SharedThreadViewer({ shareToken }: Props) {
                 onClick={handleShareClick}
                 variant="outline"
                 size="sm"
-                className="cursor-pointer border-purple-300 dark:border-purple-600 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-800 px-2 sm:px-3"
+                className="cursor-pointer border-purple-300 dark:border-dark-purple-accent text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-dark-bg px-2 sm:px-3"
               >
                 <Share2 className="h-4 w-4" />
                 <span className="hidden md:inline ml-1">Share</span>
@@ -187,7 +187,7 @@ export function SharedThreadViewer({ shareToken }: Props) {
       {/* Content */}
       <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Thread Info Card */}
-        <div className="bg-white/70 dark:bg-purple-900/40 rounded-lg p-4 mb-6 border border-purple-200 dark:border-purple-700 backdrop-blur-sm">
+        <div className="bg-white/70 dark:bg-dark-bg-secondary/70 rounded-lg p-4 mb-6 border border-purple-200 dark:border-dark-purple-accent backdrop-blur-sm">
           <div className="space-y-3">
             <h2 className="text-xl font-bold text-purple-800 dark:text-purple-200 line-clamp-2">
               {sharedThread.title}
@@ -195,26 +195,26 @@ export function SharedThreadViewer({ shareToken }: Props) {
 
             {/* Metadata */}
             <div className="flex flex-wrap items-center gap-3 text-sm">
-              <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
+              <div className="flex items-center gap-1 text-purple-600 dark:text-purple-300">
                 <Clock className="h-3 w-3" />
                 {new Date(sharedThread.createdAt).toLocaleDateString()}
               </div>
               {sharedThread.shareMetadata?.viewCount && (
-                <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
+                <div className="flex items-center gap-1 text-purple-600 dark:text-purple-300">
                   <Eye className="h-3 w-3" />
                   {sharedThread.shareMetadata.viewCount} views
                 </div>
               )}
               <Badge
                 variant="secondary"
-                className="bg-purple-100 dark:bg-purple-800/50 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-600"
+                className="bg-purple-100 dark:bg-dark-bg text-purple-700 dark:text-purple-300 border-purple-300 dark:border-dark-purple-accent"
               >
                 {sharedThread.model}
               </Badge>
               {sharedThread.allowCloning && (
                 <Badge
                   variant="outline"
-                  className="border-green-300 text-green-700 dark:text-green-300"
+                  className="border-green-300 dark:border-green-600 text-green-700 dark:text-green-300"
                 >
                   Cloning Enabled
                 </Badge>
@@ -234,9 +234,9 @@ export function SharedThreadViewer({ shareToken }: Props) {
 
             {/* Clone prompt for unauthenticated users */}
             {!isSignedIn && sharedThread.allowCloning && (
-              <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 sm:p-4">
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:bg-gradient-to-r dark:from-dark-bg-secondary dark:to-dark-bg-secondary border border-blue-200 dark:border-dark-purple-accent rounded-lg p-3 sm:p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
+                  <div className="flex items-center gap-2 text-blue-800 dark:text-purple-300">
                     <Copy className="h-4 w-4 flex-shrink-0" />
                     <span className="text-sm font-medium">
                       Continue this conversation
@@ -257,7 +257,7 @@ export function SharedThreadViewer({ shareToken }: Props) {
         </div>
 
         {/* Messages */}
-        <div className="bg-white/50 dark:bg-purple-900/30 rounded-lg border border-purple-200 dark:border-purple-700 backdrop-blur-sm">
+        <div className="bg-white/50 dark:bg-dark-bg-secondary/50 rounded-lg border border-purple-200 dark:border-dark-purple-accent backdrop-blur-sm">
           <ChatMessages
             messages={displayMessages}
             isLoading={false}

@@ -467,6 +467,16 @@ const ChatArea = memo(function ChatArea({
       }>,
       options?: { enableWebBrowsing?: boolean },
     ) => {
+      console.log("[ChatArea] handleSend called:", {
+        messageLength: message.length,
+        attachmentIdsCount: attachmentIds?.length || 0,
+        attachmentPreviewsCount: attachmentPreviews?.length || 0,
+        enableWebBrowsing: options?.enableWebBrowsing,
+        selectedModel,
+        threadId,
+        timestamp: new Date().toISOString(),
+      });
+
       await handleMessageSend(
         message,
         attachmentIds,
@@ -540,10 +550,9 @@ const ChatArea = memo(function ChatArea({
           : "md:border-2 md:border-t-transparent md:border-l-transparent md:border-r-transparent md:rounded-t-[0]"
       }`}
     >
-      {/* Scrollable Messages Area - Account for fixed mobile header */}
+      {/* Scrollable Messages Area - Account for fixed mobile header and input */}
       <div
-        className="flex-1 overflow-y-auto min-h-0 pt-12 md:pt-0"
-        style={{ paddingBottom: `${Math.max(inputHeight * 0.2, 8)}px` }}
+        className="flex-1 overflow-y-auto min-h-0 pt-12 md:pt-0 pb-32 md:pb-4"
         ref={messagesContainerRef}
       >
         {hasMessages ? (
@@ -602,6 +611,7 @@ const ChatArea = memo(function ChatArea({
           onHeightChange={setInputHeight}
           onStop={stop}
           status={status}
+          isLoaded={!!user}
           isSavingPartial={isSavingPartial}
         />
       </div>

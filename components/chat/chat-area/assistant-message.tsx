@@ -178,16 +178,38 @@ export function AssistantMessage({
 
         {/* Only show content if we have actual content or not in pure thinking phase */}
         {(msg.content.trim() || !isThinkingPhase || hasStartedResponding) && (
-          <div className="whitespace-pre-wrap break-words text-gray-900 dark:text-gray-100 text-sm sm:text-base">
-            <Markdown content={msg.content} />
-            {/* Show streaming cursor for the last assistant message during streaming */}
-            {isLoading &&
-              msg.role === "assistant" &&
-              index === messagesLength - 1 &&
-              !isThinkingPhase && ( // Don't show cursor during thinking phase
-                <span className="inline-block w-1.5 sm:w-2 h-4 sm:h-5 bg-purple-500 animate-pulse ml-1" />
-              )}
-          </div>
+          <>
+            {/* Tool calls display - show only final completed state */}
+            {msg.hasToolCalls && (
+              <div className="mb-4">
+                <div className="flex items-start gap-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                  <Globe className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 bg-emerald-600 rounded-full" />
+                      <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                        ✅ Web browsing completed
+                      </span>
+                    </div>
+                    <div className="text-xs text-emerald-600 dark:text-emerald-400 ml-4 mt-1">
+                      Data retrieved successfully
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="whitespace-pre-wrap break-words text-gray-900 dark:text-gray-100 text-sm sm:text-base">
+              <Markdown content={msg.content} />
+              {/* Show streaming cursor for the last assistant message during streaming */}
+              {isLoading &&
+                msg.role === "assistant" &&
+                index === messagesLength - 1 &&
+                !isThinkingPhase && ( // Don't show cursor during thinking phase
+                  <span className="inline-block w-1.5 sm:w-2 h-4 sm:h-5 bg-purple-500 animate-pulse ml-1" />
+                )}
+            </div>
+          </>
         )}
 
         {/* Assistant message attachments */}
@@ -250,7 +272,7 @@ export function AssistantMessage({
                 )}
                 {/* Only show model name for assistant messages, and only if we have the actual model */}
                 {msg.role === "assistant" && msg.model && (
-                  <span className="hidden sm:inline">{msg.model}</span>
+                  <span>{msg.model}</span>
                 )}
               </div>
             </span>
