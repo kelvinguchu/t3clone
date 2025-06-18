@@ -30,10 +30,31 @@ const notoSansMono = Noto_Sans_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "T3 Chat- AI Conversations",
+  title: "T3 Chat - AI Conversations",
   description: "Modern AI chat interface with all models.",
   icons: {
     icon: "/logo.svg",
+  },
+  manifest: "/manifest.json",
+  themeColor: "#4c0fd0",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "T3 Chat",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  openGraph: {
+    type: "website",
+    siteName: "T3 Chat",
+    title: "T3 Chat - AI Conversations",
+    description: "Modern AI chat interface with all models.",
+  },
+  twitter: {
+    card: "summary",
+    title: "T3 Chat - AI Conversations",
+    description: "Modern AI chat interface with all models.",
   },
 };
 
@@ -45,6 +66,16 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <meta name="application-name" content="T3 Chat" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="T3 Chat" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="msapplication-TileColor" content="#4c0fd0" />
+        <meta name="msapplication-tap-highlight" content="no" />
+        <link rel="apple-touch-icon" href="/icon512_rounded.png" />
+        <link rel="mask-icon" href="/logo.svg" color="#4c0fd0" />
         <Script src="https://unpkg.com/react-scan/dist/auto.global.js" />
       </head>
       <body
@@ -70,9 +101,9 @@ export default function RootLayout({
               <FilePreviewProvider>
                 <AnonymousSessionProvider>
                   <HotkeyProvider>
-                  {children}
+                    {children}
                     <GlobalChatSearch />
-                  <Toaster />
+                    <Toaster />
                   </HotkeyProvider>
                 </AnonymousSessionProvider>
               </FilePreviewProvider>

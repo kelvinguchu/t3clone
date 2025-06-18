@@ -1,1 +1,42 @@
-{"theme_color":"#4c0fd0","background_color":"#f3f1fe","icons":[{"purpose":"maskable","sizes":"512x512","src":"icon512_maskable.png","type":"image/png"},{"purpose":"any","sizes":"512x512","src":"icon512_rounded.png","type":"image/png"}],"orientation":"any","display":"standalone","dir":"auto","lang":"en-US","name":"T3 Chat","short_name":"T3 Chat"}
+{
+  "name": "T3 Chat - AI Conversations",
+  "short_name": "T3 Chat",
+  "description": "Modern AI chat interface with all models",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f1fe",
+  "theme_color": "#4c0fd0",
+  "orientation": "portrait-primary",
+  "dir": "auto",
+  "lang": "en-US",
+  "scope": "/",
+  "categories": ["productivity", "communication", "utilities"],
+  "icons": [
+    {
+      "src": "icon512_maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon512_rounded.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Chat",
+      "short_name": "New Chat",
+      "description": "Start a new conversation",
+      "url": "/chat",
+      "icons": [
+        {
+          "src": "icon512_rounded.png",
+          "sizes": "512x512"
+        }
+      ]
+    }
+  ]
+}

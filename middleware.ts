@@ -12,6 +12,9 @@ const isPublicRoute = createRouteMatcher([
   "/share/(.*)", // All share routes are public
   "/auth/callback/(.*)", // Authentication callback routes must be public
   "/api/uploadthing", // UploadThing callbacks must be public
+  "/api/session", // Session API must be public for anonymous users
+  "/api/anonymous", // Anonymous chat API must be public
+  "/api/chat", // Chat API must be public for anonymous users
 ]);
 
 // Define chat routes for special handling

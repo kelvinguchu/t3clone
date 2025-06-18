@@ -45,3 +45,8 @@ package-lock.json
 
 # clerk configuration (can include secrets)
 /.clerk/
+
+# PWA files
+**/public/workbox-*.js
+**/public/sw.js
+**/public/worker-*.js

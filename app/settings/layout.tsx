@@ -10,13 +10,9 @@ import {
   ArrowLeft,
   Sun,
   LogOut,
-  User,
-  Palette,
-  History,
   Bot,
   Key,
   Paperclip,
-  Mail,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useState, useEffect } from "react";
@@ -37,21 +33,21 @@ import { SettingsHeader } from "@/components/settings/settings-header";
 import { SettingsContentWrapper } from "@/components/settings/shared/settings-content-wrapper";
 
 const settingsNavigation = [
-  {
-    name: "Account",
-    href: "/settings/account",
-    icon: User,
-  },
-  {
-    name: "Customization",
-    href: "/settings/customization",
-    icon: Palette,
-  },
-  {
-    name: "History",
-    href: "/settings/history",
-    icon: History,
-  },
+  // {
+  //   name: "Account",
+  //   href: "/settings/account",
+  //   icon: User,
+  // },
+  // {
+  //   name: "Customization",
+  //   href: "/settings/customization",
+  //   icon: Palette,
+  // },
+  // {
+  //   name: "History",
+  //   href: "/settings/history",
+  //   icon: History,
+  // },
   {
     name: "Models",
     href: "/settings/models",
@@ -67,11 +63,11 @@ const settingsNavigation = [
     href: "/settings/attachments",
     icon: Paperclip,
   },
-  {
-    name: "Contact Us",
-    href: "/settings/contact",
-    icon: Mail,
-  },
+  // {
+  //   name: "Contact Us",
+  //   href: "/settings/contact",
+  //   icon: Mail,
+  // },
 ];
 
 interface SettingsLayoutProps {
