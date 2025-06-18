@@ -101,26 +101,26 @@ export function ApiKeysPage() {
   };
 
   return (
-    <div className="h-full w-full space-y-6 px-4">
+    <div className="h-full w-full space-y-4 sm:space-y-6 px-0 sm:px-4">
       {/* Pro Feature Notice */}
-      <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-6 text-center">
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-lg font-semibold text-purple-900 dark:text-purple-100">
-                Pro Feature
-              </h3>
-              <p className="text-purple-700 dark:text-purple-300 mt-2">
-                Upgrade to Pro to access this feature.
-              </p>
-            </div>
-            <Button className="bg-purple-600 hover:bg-purple-700 text-white">
-              Upgrade to Pro - $8/month
-            </Button>
+      <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-4 sm:p-6 text-center border border-purple-200/60 dark:border-purple-800/50 shadow-sm">
+        <div className="space-y-3 sm:space-y-4">
+          <div>
+            <h3 className="text-base sm:text-lg font-semibold text-purple-900 dark:text-purple-100">
+              Pro Feature
+            </h3>
+            <p className="text-purple-700 dark:text-purple-300 mt-2 text-sm sm:text-base">
+              Upgrade to Pro to access this feature.
+            </p>
           </div>
+          <Button className="bg-purple-600 hover:bg-purple-700 text-white text-sm sm:text-base px-4 sm:px-6 py-2 shadow-lg">
+            Upgrade to Pro - $8/month
+          </Button>
+        </div>
       </div>
 
       {/* API Providers List */}
-      <div className="space-y-4">
+      <div className="space-y-3 sm:space-y-4">
         {SUPPORTED_PROVIDERS.map((provider) => {
           const keyData = getUserKeyData(provider);
 

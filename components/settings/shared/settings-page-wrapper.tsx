@@ -16,7 +16,7 @@ export function SettingsPageWrapper({
   className = '',
 }: SettingsPageWrapperProps) {
   return (
-    <div className={`space-y-6 ${className}`}>
+    <div className={`space-y-6  ${className}`}>
       {/* Page Header */}
       <div className="space-y-2">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-slate-100">

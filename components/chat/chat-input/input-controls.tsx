@@ -25,6 +25,7 @@ import {
   getModelInfo,
   type ModelId,
 } from "@/lib/ai-providers";
+import { useModelStore } from "@/lib/stores/model-store";
 
 export interface InputControlsProps {
   // Model selection
@@ -70,7 +71,14 @@ export function InputControls({
   handleSendOrStop,
   getButtonTitle,
 }: Readonly<InputControlsProps>) {
-  const availableModels = getAvailableModels();
+  const { enabledModels } = useModelStore();
+  const allAvailableModels = getAvailableModels();
+
+  // Filter available models by enabled models from store
+  const availableModels = allAvailableModels.filter((modelId) =>
+    enabledModels.has(modelId),
+  );
+
   const currentModelInfo = getModelInfo(selectedModel);
 
   return (
@@ -198,27 +206,27 @@ export function InputControls({
 
         {/* Web Browsing Button - Only show if model supports tools */}
         {currentModelInfo.capabilities.tools && (
-        <Button
-          size="icon"
-          variant="ghost"
-          className={`h-8 w-8 sm:h-9 sm:w-9 cursor-pointer rounded-lg transition-all duration-200 flex-shrink-0 ${
-            enableWebBrowsing
-              ? "text-emerald-600 hover:text-emerald-700 bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-800/40"
-              : "text-gray-600 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300 hover:bg-gray-100 dark:hover:bg-dark-bg-secondary"
-          }`}
-          title={
-            enableWebBrowsing
-              ? "Web browsing enabled - AI will browse the web for information"
-              : "Enable web browsing - AI will search and browse websites when needed"
-          }
-          disabled={isDisabled}
-          onClick={() => {
-            const newState = !enableWebBrowsing;
-            setEnableWebBrowsing(newState);
-          }}
-        >
-          <Globe className="h-4 w-4 sm:h-5 sm:w-5" />
-        </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className={`h-8 w-8 sm:h-9 sm:w-9 cursor-pointer rounded-lg transition-all duration-200 flex-shrink-0 ${
+              enableWebBrowsing
+                ? "text-emerald-600 hover:text-emerald-700 bg-emerald-100 dark:bg-emerald-900/30 hover:bg-emerald-200 dark:hover:bg-emerald-800/40"
+                : "text-gray-600 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-300 hover:bg-gray-100 dark:hover:bg-dark-bg-secondary"
+            }`}
+            title={
+              enableWebBrowsing
+                ? "Web browsing enabled - AI will browse the web for information"
+                : "Enable web browsing - AI will search and browse websites when needed"
+            }
+            disabled={isDisabled}
+            onClick={() => {
+              const newState = !enableWebBrowsing;
+              setEnableWebBrowsing(newState);
+            }}
+          >
+            <Globe className="h-4 w-4 sm:h-5 sm:w-5" />
+          </Button>
         )}
       </div>
 

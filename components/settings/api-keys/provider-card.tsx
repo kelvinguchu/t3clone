@@ -79,26 +79,26 @@ export function ProviderCard({
   };
 
   return (
-    <div className="bg-purple-50 dark:bg-dark-bg-secondary rounded-xl p-6 space-y-4">
+    <div className="bg-purple-50 dark:bg-dark-bg-secondary rounded-xl p-4 sm:p-6 space-y-3 sm:space-y-4">
       {/* Provider Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 sm:gap-4">
         <img
           src={config.icon}
           alt={config.name}
-          className="w-10 h-10 rounded-lg"
+          className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg shrink-0"
         />
         <div className="flex-1 min-w-0">
-          <h3 className="text-xl font-semibold text-purple-900 dark:text-purple-100">
+          <h3 className="text-lg sm:text-xl font-semibold text-purple-900 dark:text-purple-100">
             {config.name}
           </h3>
-          <p className="text-purple-700 dark:text-purple-300">
+          <p className="text-purple-700 dark:text-purple-300 text-sm sm:text-base">
             {config.description}
           </p>
         </div>
         {hasKey && (
           <Badge
             variant="secondary"
-            className="bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200"
+            className="bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200 text-xs sm:text-sm shrink-0"
           >
             <Key className="w-3 h-3 mr-1" />
             Configured
@@ -108,13 +108,13 @@ export function ProviderCard({
 
       {/* Existing Key Display */}
       {hasKey && keyPrefix && (
-        <div className="bg-white dark:bg-dark-bg rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <Label className="text-sm font-medium text-purple-800 dark:text-purple-200 shrink-0">
+        <div className="bg-white dark:bg-dark-bg rounded-lg p-3 sm:p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+              <Label className="text-xs sm:text-sm font-medium text-purple-800 dark:text-purple-200 shrink-0">
                 Current API Key:
               </Label>
-              <code className="text-sm font-mono text-purple-700 dark:text-purple-300 truncate bg-purple-50 dark:bg-dark-bg-tertiary px-2 py-1 rounded">
+              <code className="text-xs sm:text-sm font-mono text-purple-700 dark:text-purple-300 truncate bg-purple-50 dark:bg-dark-bg-tertiary px-2 py-1 rounded">
                 {keyPrefix}
               </code>
             </div>
@@ -123,7 +123,7 @@ export function ProviderCard({
                 variant="ghost"
                 size="sm"
                 onClick={handleDelete}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 h-8 w-8 p-0"
               >
                 <Trash2 className="w-4 h-4" />
               </Button>
@@ -138,14 +138,14 @@ export function ProviderCard({
       )}
 
       {/* API Key Input */}
-      <div className="space-y-3">
+      <div className="space-y-2 sm:space-y-3">
         <Label
           htmlFor={`api-key-${provider}`}
-          className="text-purple-800 dark:text-purple-200 font-medium"
+          className="text-purple-800 dark:text-purple-200 font-medium text-sm sm:text-base"
         >
           {hasKey ? "Update API Key" : "Enter API Key"}
         </Label>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <div className="relative flex-1">
             <Input
               id={`api-key-${provider}`}
@@ -153,7 +153,7 @@ export function ProviderCard({
               placeholder={config.keyFormat}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              className="font-mono bg-white dark:bg-dark-bg border-purple-200 dark:border-purple-700 focus:border-purple-500 dark:focus:border-purple-400 pr-10"
+              className="font-mono bg-white dark:bg-dark-bg border-purple-200 dark:border-purple-700 focus:border-purple-500 dark:focus:border-purple-400 pr-10 text-sm"
             />
             <Button
               type="button"
@@ -169,38 +169,40 @@ export function ProviderCard({
               )}
             </Button>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleTest}
-            disabled={!apiKey || isTesting}
-            className="shrink-0 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-dark-bg-tertiary"
-          >
-            {isTesting ? (
-              <div className="w-4 h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
-            ) : (
-              <TestTube className="w-4 h-4" />
-            )}
-            Test
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!apiKey || isSaving}
-            className="shrink-0 bg-purple-600 hover:bg-purple-700 text-white"
-          >
-            {isSaving ? (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <Save className="w-4 h-4 mr-2" />
-            )}
-            Save
-          </Button>
+          <div className="flex gap-2 sm:gap-3">
+            <Button
+              variant="outline"
+              onClick={handleTest}
+              disabled={!apiKey || isTesting}
+              className="shrink-0 border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-dark-bg-tertiary text-sm px-3 sm:px-4"
+            >
+              {isTesting ? (
+                <div className="w-4 h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
+              ) : (
+                <TestTube className="w-4 h-4" />
+              )}
+              <span className="ml-1 sm:ml-2">Test</span>
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={!apiKey || isSaving}
+              className="shrink-0 bg-purple-600 hover:bg-purple-700 text-white text-sm px-3 sm:px-4"
+            >
+              {isSaving ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 mr-1 sm:mr-2" />
+              )}
+              Save
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Test Result */}
       {testResult !== null && (
         <div
-          className={`text-sm p-3 rounded-lg ${
+          className={`text-xs sm:text-sm p-3 rounded-lg ${
             testResult
               ? "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200"
               : "bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200"
@@ -213,7 +215,7 @@ export function ProviderCard({
       )}
 
       {/* Help Text */}
-      <p className="text-sm text-purple-600 dark:text-purple-400">
+      <p className="text-xs sm:text-sm text-purple-600 dark:text-purple-400 leading-relaxed">
         Your API key is encrypted and stored securely. It&apos;s only used to
         make requests to {config.name} on your behalf.
       </p>

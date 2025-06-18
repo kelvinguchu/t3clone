@@ -8,10 +8,14 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/sign-in(.*)",
   "/sign-up(.*)",
+  "/chat(.*)",
   "/share/(.*)", // All share routes are public
   "/auth/callback/(.*)", // Authentication callback routes must be public
   "/api/uploadthing", // UploadThing callbacks must be public
 ]);
+
+// Define chat routes for special handling
+const isChatRoute = createRouteMatcher(["/chat(.*)"]);
 
 // Define share-specific routes for additional handling if needed
 const isShareRoute = createRouteMatcher(["/share/(.*)"]);
@@ -34,6 +38,12 @@ export default clerkMiddleware(async (auth, req) => {
   if (isAuthCallbackRoute(req)) {
     // Auth callback routes must be public to complete OAuth flow
     // This is essential for Clerk's OAuth redirect flow to work properly
+    return;
+  }
+
+  // Allow public access to chat routes (supports anonymous sessions)
+  if (isChatRoute(req)) {
+    // Chat routes support both authenticated and anonymous access
     return;
   }
 

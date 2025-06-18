@@ -7,6 +7,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { getAvailableModels, getModelInfo } from "@/lib/ai-providers";
+import { useModelStore } from "@/lib/stores/model-store";
 import { GitBranch } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";
 
@@ -33,6 +34,13 @@ export function BranchingPopover({
 }: BranchingPopoverProps) {
   const router = useRouter();
   const branchThread = useMutation(api.threads.branchThread);
+  const { enabledModels } = useModelStore();
+
+  // Filter available models by enabled models from store
+  const allAvailableModels = getAvailableModels();
+  const availableModels = allAvailableModels.filter((modelId) =>
+    enabledModels.has(modelId),
+  );
 
   return (
     <Popover open={isOpen} onOpenChange={onOpenChange}>
@@ -51,7 +59,7 @@ export function BranchingPopover({
           Choose model to branch with
         </p>
         <div className="space-y-1 sm:space-y-1.5">
-          {getAvailableModels().map((mId) => {
+          {availableModels.map((mId) => {
             const info = getModelInfo(mId);
             return (
               <button

@@ -233,12 +233,12 @@ export async function POST(req: NextRequest) {
     // Setup model configuration
     const { model, modelConfig, tools, toolChoice } =
       await setupModelConfiguration(
-        modelId,
-        enableWebBrowsing,
+      modelId,
+      enableWebBrowsing,
         userId ?? undefined,
         fetchOptions,
-        requestId,
-      );
+      requestId,
+    );
 
     // ------------------------------------------------------------------
     // IMMEDIATE STREAMING: Start AI response immediately

@@ -136,11 +136,10 @@ export const FilePreview = memo(
     // Check if file IDs are the same (shallow comparison)
     for (let i = 0; i < prevProps.files.length; i++) {
       if (prevProps.files[i].id !== nextProps.files[i].id) {
-        return false; // Re-render
+        return false; 
       }
     }
 
-    // onRemove function comparison (should be stable with useCallback)
-    return prevProps.onRemove === nextProps.onRemove; // Don't re-render if same
+    return prevProps.onRemove === nextProps.onRemove;
   },
 );

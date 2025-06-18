@@ -14,6 +14,7 @@ import type * as messages from "../messages.js";
 import type * as sessionStats from "../sessionStats.js";
 import type * as streams from "../streams.js";
 import type * as threads from "../threads.js";
+import type * as userPreferences from "../userPreferences.js";
 import type * as users from "../users.js";
 
 import type {
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   sessionStats: typeof sessionStats;
   streams: typeof streams;
   threads: typeof threads;
+  userPreferences: typeof userPreferences;
   users: typeof users;
 }>;
 declare const fullApiWithMounts: typeof fullApi;

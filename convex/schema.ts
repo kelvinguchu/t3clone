@@ -177,6 +177,7 @@ export default defineSchema({
     // AI preferences
     defaultModel: v.string(),
     defaultSystemPrompt: v.optional(v.string()),
+    enabledModels: v.optional(v.array(v.string())),
 
     // UI preferences
     theme: v.optional(
