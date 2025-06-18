@@ -43,6 +43,7 @@ export const AI_MODELS = {
       vision: false,
       thinking: false,
       tools: true,
+      fileAttachments: false,
       imageGeneration: false,
       multimodal: false,
       fastResponse: true,
@@ -63,6 +64,7 @@ export const AI_MODELS = {
       vision: false,
       thinking: true,
       tools: true,
+      fileAttachments: false,
       imageGeneration: false,
       multimodal: false,
       fastResponse: true,
@@ -83,6 +85,7 @@ export const AI_MODELS = {
       vision: false,
       thinking: true,
       tools: true,
+      fileAttachments: false,
       imageGeneration: false,
       multimodal: false,
       fastResponse: true,
@@ -104,6 +107,7 @@ export const AI_MODELS = {
       vision: true,
       thinking: true,
       tools: true,
+      fileAttachments: true,
       imageGeneration: false,
       multimodal: true,
       fastResponse: false,
@@ -123,7 +127,8 @@ export const AI_MODELS = {
     capabilities: {
       vision: true,
       thinking: true,
-      tools: true,
+      tools: false,
+      fileAttachments: true,
       imageGeneration: true,
       multimodal: true,
       fastResponse: false,
@@ -152,6 +157,7 @@ export interface ModelConfig {
     vision: boolean;
     thinking: boolean;
     tools: boolean;
+    fileAttachments: boolean;
     imageGeneration: boolean;
     multimodal: boolean;
     fastResponse: boolean;

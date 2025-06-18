@@ -542,6 +542,27 @@ const ChatArea = memo(function ChatArea({
     updateThreadMutation,
   });
 
+  // Extract thread-level attachments for model filtering
+  const threadAttachments = useMemo(() => {
+    if (!historicalMessages) return [];
+
+    const attachments: Array<{
+      id: string;
+      name: string;
+      contentType: string;
+      url: string;
+      size: number;
+    }> = [];
+
+    for (const message of historicalMessages) {
+      if (message.attachments) {
+        attachments.push(...message.attachments);
+      }
+    }
+
+    return attachments;
+  }, [historicalMessages]);
+
   return (
     <div
       className={`flex-1 flex flex-col h-full min-h-0 bg-purple-50 dark:bg-dark-bg duration-1000 transition-all ${modelThemeClasses} relative ${
@@ -589,7 +610,7 @@ const ChatArea = memo(function ChatArea({
             error={chatError}
             onRetry={() => {
               setChatError(null);
-              handleRetryWithCleanup();
+              reload();
             }}
             onDismiss={() => setChatError(null)}
             retryable={true}
@@ -613,6 +634,7 @@ const ChatArea = memo(function ChatArea({
           status={status}
           isLoaded={!!user}
           isSavingPartial={isSavingPartial}
+          threadAttachments={threadAttachments}
         />
       </div>
 

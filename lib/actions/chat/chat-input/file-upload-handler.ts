@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState } from "react";
 import { useUploadThing } from "@/lib/uploadthing";
 import { useFilePreview } from "@/lib/contexts/file-preview-context";
 
@@ -11,13 +11,21 @@ export interface AttachmentPreview {
   isUploading?: boolean;
 }
 
+export interface FileUploadError {
+  title: string;
+  message: string;
+  type: "unsupported_files" | "model_incompatible" | "upload_error";
+}
+
 export interface FileUploadHandlerParams {
   attachmentIds: string[];
   setAttachmentIds: React.Dispatch<React.SetStateAction<string[]>>;
   modelCapabilities?: {
     vision: boolean;
     multimodal: boolean;
+    fileAttachments: boolean;
   };
+  onError?: (error: FileUploadError) => void;
 }
 
 export interface FileUploadHandlerReturn {
@@ -32,6 +40,10 @@ export interface FileUploadHandlerReturn {
 
   // File preview data
   attachmentPreviews: AttachmentPreview[];
+
+  // Error state
+  error: FileUploadError | null;
+  clearError: () => void;
 }
 
 /**
@@ -42,8 +54,10 @@ export function useFileUploadHandler({
   attachmentIds,
   setAttachmentIds,
   modelCapabilities,
+  onError,
 }: FileUploadHandlerParams): FileUploadHandlerReturn {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<FileUploadError | null>(null);
 
   // File upload hook from UploadThing with optimized settings
   const { startUpload, isUploading } = useUploadThing("chatAttachment", {
@@ -53,6 +67,13 @@ export function useFileUploadHandler({
     },
     onUploadError: (error) => {
       console.error("Upload error:", error);
+      const uploadError: FileUploadError = {
+        title: "Upload Failed",
+        message: "Failed to upload files. Please try again.",
+        type: "upload_error",
+      };
+      setError(uploadError);
+      onError?.(uploadError);
     },
   });
 
@@ -63,6 +84,11 @@ export function useFileUploadHandler({
   const attachmentPreviews = Array.from(fileData.values()).filter((file) =>
     attachmentIds.includes(file.id),
   );
+
+  // Clear error state
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
 
   // Utility to temporarily change accept attribute and open file picker
   const triggerFileSelect = useCallback((accept: string) => {
@@ -82,6 +108,22 @@ export function useFileUploadHandler({
       const files = Array.from(event.target.files || []);
 
       if (files.length === 0) return;
+
+      // Clear any previous errors
+      clearError();
+
+      // Check if model supports file attachments at all
+      if (!modelCapabilities?.fileAttachments) {
+        const noAttachmentsError: FileUploadError = {
+          title: "File Attachments Not Supported",
+          message:
+            "The current model does not support file attachments. Please switch to a model that supports file uploads.",
+          type: "model_incompatible",
+        };
+        setError(noAttachmentsError);
+        onError?.(noAttachmentsError);
+        return;
+      }
 
       // Filter for supported file types based on model capabilities
       const supportsImages =
@@ -105,12 +147,26 @@ export function useFileUploadHandler({
           f.type.startsWith("image/"),
         );
 
+        let errorMessage: string;
         if (hasImages && !supportsImages) {
-          alert(
-            "Images are not supported by the current model. Only PDFs and text files are allowed.",
-          );
+          errorMessage =
+            "Images are not supported by the current model. Please switch to a model that supports image files, or upload only PDFs and text files.";
         } else {
-          alert("Only images, PDFs, and text files are supported.");
+          errorMessage =
+            "Some files are not supported. Only images, PDFs, and text files are allowed.";
+        }
+
+        const unsupportedError: FileUploadError = {
+          title: "Unsupported File Types",
+          message: errorMessage,
+          type: "unsupported_files",
+        };
+        setError(unsupportedError);
+        onError?.(unsupportedError);
+
+        // Continue with supported files if any
+        if (supportedFiles.length === 0) {
+          return;
         }
       }
 
@@ -268,6 +324,15 @@ export function useFileUploadHandler({
               "[FileUploadHandler] UPLOAD_ERROR - Upload failed:",
               error,
             );
+
+            const uploadError: FileUploadError = {
+              title: "Upload Failed",
+              message: "Failed to upload files. Please try again.",
+              type: "upload_error",
+            };
+            setError(uploadError);
+            onError?.(uploadError);
+
             // Clean up temporary previews on error
             immediatePreview.forEach((preview) => {
               // Clean up blob URL to prevent memory leaks
@@ -285,7 +350,15 @@ export function useFileUploadHandler({
           });
       }
     },
-    [startUpload, addFilePreview, removeFilePreview, setAttachmentIds],
+    [
+      startUpload,
+      addFilePreview,
+      removeFilePreview,
+      setAttachmentIds,
+      modelCapabilities,
+      clearError,
+      onError,
+    ],
   );
 
   // Remove attachment by index
@@ -315,6 +388,10 @@ export function useFileUploadHandler({
 
     // File preview data
     attachmentPreviews,
+
+    // Error state
+    error,
+    clearError,
   };
 }
 
@@ -323,11 +400,20 @@ export function useFileUploadHandler({
  */
 export function isSupportedFileType(
   file: File,
-  modelCapabilities?: { vision: boolean; multimodal: boolean },
+  modelCapabilities?: {
+    vision: boolean;
+    multimodal: boolean;
+    fileAttachments: boolean;
+  },
 ): boolean {
   const isImage = file.type.startsWith("image/");
   const isPdf = file.type === "application/pdf";
   const isText = file.type.startsWith("text/");
+
+  // First check if model supports file attachments at all
+  if (!modelCapabilities?.fileAttachments) {
+    return false;
+  }
 
   const supportsImages =
     modelCapabilities?.vision || modelCapabilities?.multimodal;
@@ -345,7 +431,13 @@ export function isSupportedFileType(
 export function getSupportedFileTypes(modelCapabilities?: {
   vision: boolean;
   multimodal: boolean;
+  fileAttachments: boolean;
 }): string {
+  // First check if model supports file attachments at all
+  if (!modelCapabilities?.fileAttachments) {
+    return "";
+  }
+
   const supportsImages =
     modelCapabilities?.vision || modelCapabilities?.multimodal;
 
@@ -361,7 +453,11 @@ export function getSupportedFileTypes(modelCapabilities?: {
  */
 export function filterSupportedFiles(
   files: File[],
-  modelCapabilities?: { vision: boolean; multimodal: boolean },
+  modelCapabilities?: {
+    vision: boolean;
+    multimodal: boolean;
+    fileAttachments: boolean;
+  },
 ): {
   supportedFiles: File[];
   hasUnsupportedFiles: boolean;

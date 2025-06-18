@@ -47,6 +47,7 @@ export interface ChatInputProps {
   sessionData?: SessionData;
   isLoaded: boolean;
   isSavingPartial?: boolean;
+  threadAttachments?: AttachmentPreview[]; // Thread-level attachments for model filtering
 }
 
 export function ChatInput({
@@ -58,6 +59,7 @@ export function ChatInput({
   sessionData,
   isLoaded,
   isSavingPartial = false,
+  threadAttachments = [],
 }: Readonly<ChatInputProps>) {
   const { isLoaded: userIsLoaded } = useUser();
 
@@ -77,6 +79,12 @@ export function ChatInput({
     modelCapabilities: {
       vision: currentModelInfo.capabilities.vision,
       multimodal: currentModelInfo.capabilities.multimodal,
+      fileAttachments: currentModelInfo.capabilities.fileAttachments,
+    },
+    onError: (error) => {
+      console.error("File upload error:", error);
+      // Error is handled by the FileUpload hook's internal state
+      // and displayed via the FilePreview component
     },
   });
 
@@ -147,12 +155,12 @@ export function ChatInput({
       />
 
       {/* File Attachments Preview */}
-      {fileUpload.attachmentPreviews.length > 0 && (
-        <FilePreview
-          files={fileUpload.attachmentPreviews}
-          onRemove={fileUpload.removeAttachment}
-        />
-      )}
+      <FilePreview
+        files={fileUpload.attachmentPreviews}
+        onRemove={fileUpload.removeAttachment}
+        error={fileUpload.error}
+        onClearError={fileUpload.clearError}
+      />
 
       {/* Clean Chat Input Area */}
       <div
@@ -166,10 +174,12 @@ export function ChatInput({
             type="file"
             multiple
             accept={
-              currentModelInfo.capabilities.vision ||
-              currentModelInfo.capabilities.multimodal
-                ? "image/*,application/pdf,text/*"
-                : "application/pdf,text/*"
+              currentModelInfo.capabilities.fileAttachments
+                ? currentModelInfo.capabilities.vision ||
+                  currentModelInfo.capabilities.multimodal
+                  ? "image/*,application/pdf,text/*"
+                  : "application/pdf,text/*"
+                : ""
             }
             onChange={fileUpload.handleFileSelect}
             className="hidden"
@@ -201,6 +211,8 @@ export function ChatInput({
             isSavingPartial={isSavingPartial}
             enableWebBrowsing={inputState.enableWebBrowsing}
             setEnableWebBrowsing={inputState.setEnableWebBrowsing}
+            attachmentPreviews={fileUpload.attachmentPreviews}
+            threadAttachments={threadAttachments}
             triggerFileSelect={fileUpload.triggerFileSelect}
             handleSendOrStop={inputActions.handleSendOrStop}
             getButtonTitle={inputActions.getButtonTitle}

@@ -191,6 +191,16 @@ export async function POST(req: NextRequest) {
     }
     remainingMessages = rateLimitResult.remainingMessages;
 
+    // Setup model configuration early to get capabilities for multimodal processing
+    const { model, modelConfig, tools, toolChoice } =
+      await setupModelConfiguration(
+        modelId,
+        enableWebBrowsing,
+        userId ?? undefined,
+        fetchOptions,
+        requestId,
+      );
+
     // Process multimodal messages for all new messages (not retries)
     // This handles blob URL filtering and proper CoreMessage conversion
     if (!isRetryFromConvex) {
@@ -198,6 +208,11 @@ export async function POST(req: NextRequest) {
         originalMessages,
         attachmentIds,
         fetchOptions,
+        {
+          vision: modelConfig.capabilities.vision,
+          multimodal: modelConfig.capabilities.multimodal,
+          fileAttachments: modelConfig.capabilities.fileAttachments,
+        },
       );
 
       // Use the processed core messages directly - they're already in CoreMessage format
@@ -230,15 +245,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Setup model configuration
-    const { model, modelConfig, tools, toolChoice } =
-      await setupModelConfiguration(
-      modelId,
-      enableWebBrowsing,
-        userId ?? undefined,
-        fetchOptions,
-      requestId,
-    );
+    // Model configuration was already set up earlier for multimodal processing
 
     // ------------------------------------------------------------------
     // IMMEDIATE STREAMING: Start AI response immediately

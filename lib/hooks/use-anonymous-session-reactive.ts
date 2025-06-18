@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useQuery, useMutation } from "convex/react";
 import { api as convexApi } from "@/convex/_generated/api";
 import {
   formatRemainingTime,
-  getStoredSessionId,
-  removeStoredSessionId,
-  storeSessionId,
   type AnonymousSessionData,
 } from "@/lib/utils/session";
+import {
+  getBrowserFingerprint,
+  getBehaviorTracker,
+} from "@/lib/utils/browser-fingerprint";
 
 // Enhanced hook return type with Convex integration
 export interface UseAnonymousSessionReactiveReturn {
@@ -37,6 +38,10 @@ export interface UseAnonymousSessionReactiveReturn {
   // Convex integration
   sessionId: string | null;
   threadCount: number;
+
+  // Trust and behavior
+  trustLevel?: string;
+  behaviorScore?: number;
 }
 
 // API helper functions for server-side session management
@@ -55,6 +60,49 @@ async function fetchSession(sessionId?: string): Promise<AnonymousSessionData> {
   }
 
   return response.json();
+}
+
+// Enhanced session creation with fingerprint data
+async function createSessionWithFingerprint(
+  sessionId?: string,
+): Promise<AnonymousSessionData> {
+  try {
+    // Collect browser fingerprint
+    const fingerprint = await getBrowserFingerprint();
+
+    // Get behavioral data
+    const behaviorTracker = getBehaviorTracker();
+    const behaviorData = behaviorTracker.getBehaviorData();
+
+    // Send to server with fingerprint data
+    const response = await fetch("/api/session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sessionId,
+        fingerprint,
+        behaviorData,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response
+        .json()
+        .catch(() => ({ error: "Unknown error" }));
+      throw new Error(errorData.error ?? `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.warn(
+      "Failed to create session with fingerprint, falling back to basic session:",
+      error,
+    );
+    // Fallback to basic session creation
+    return fetchSession(sessionId);
+  }
 }
 
 export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn {
@@ -89,15 +137,13 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
 
   const threadCount = sessionStats?.threadCount ?? fallbackThreadCount ?? 0;
 
-  // Derive counts – prefer live stats, fall back to KV session data while loading
-  const messageCount =
-    sessionStats?.messageCount ?? sessionData?.messageCount ?? 0;
-  const remainingMessages =
-    sessionStats?.remainingMessages ?? sessionData?.remainingMessages ?? 0;
+  // Prioritize Convex data over KV data for message counts (more reliable)
+  const messageCount = sessionStats?.messageCount ?? 0;
+  const remainingMessages = sessionStats?.remainingMessages ?? 10; // Default to full quota
 
   const canSendMessage = remainingMessages > 0 && !sessionData?.isExpired;
 
-  // Initialize session for anonymous users
+  // Initialize session for anonymous users with enhanced fingerprinting
   const initializeSession = useCallback(async () => {
     if (isAuthenticated || sessionInitialized.current) {
       setIsLoading(false);
@@ -107,15 +153,8 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
     try {
       setIsLoading(true);
 
-      // Try to get existing session from localStorage first
-      const storedSessionId = getStoredSessionId();
-
-      const session = await fetchSession(storedSessionId ?? undefined);
-
-      // Store session ID if it's new
-      if (session.sessionId !== storedSessionId) {
-        storeSessionId(session.sessionId);
-      }
+      // Create session with fingerprint data for enhanced security
+      const session = await createSessionWithFingerprint();
 
       setSessionData(session);
       sessionInitialized.current = true;
@@ -126,7 +165,7 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
     }
   }, [isAuthenticated]);
 
-  // Refresh session data from server
+  // Refresh session data from server (more resilient to temporary failures)
   const refreshSession = useCallback(async () => {
     if (isAuthenticated || !sessionData) {
       return;
@@ -135,11 +174,13 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
     try {
       const refreshedSession = await fetchSession(sessionData.sessionId);
       setSessionData(refreshedSession);
-    } catch {
-      // If session is invalid, clear it
-      setSessionData(null);
-      removeStoredSessionId();
-      sessionInitialized.current = false;
+    } catch (error) {
+      // Don't clear session on temporary failures - just log and keep existing session
+      console.warn(
+        "[Session] Refresh failed, keeping existing session:",
+        error,
+      );
+      // Only clear if session is actually expired (not just network issues)
     }
   }, [isAuthenticated, sessionData]);
 
@@ -158,9 +199,8 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
       }
     }
 
-    // Clear local state and storage
+    // Clear local state
     setSessionData(null);
-    removeStoredSessionId();
     sessionInitialized.current = false;
   }, [sessionData]);
 
@@ -191,25 +231,19 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
     if (userLoaded && isAnonymous && !sessionInitialized.current) {
       initializeSession();
     } else if (userLoaded && isAuthenticated) {
-      if (!migrated) {
-        const sid = sessionData?.sessionId ?? getStoredSessionId();
-        if (sid) {
-          (async () => {
-            try {
-              await claimThreads({
-                sessionId: sid,
-                ...(sessionData?.ipHash ? { ipHash: sessionData.ipHash } : {}),
-              });
-            } catch {
-              // Failed to claim anon threads
-            } finally {
-              // Keep the anonymous sessionId in localStorage so that if the user
-              // signs out within 24 h, we can continue tracking their remaining
-              // anonymous message quota instead of resetting it to a fresh 10.
-              setMigrated(true);
-            }
-          })();
-        }
+      if (!migrated && sessionData?.sessionId) {
+        (async () => {
+          try {
+            await claimThreads({
+              sessionId: sessionData.sessionId,
+              ...(sessionData?.ipHash ? { ipHash: sessionData.ipHash } : {}),
+            });
+          } catch {
+            // Failed to claim anon threads
+          } finally {
+            setMigrated(true);
+          }
+        })();
       }
       setIsLoading(false);
     }
@@ -218,103 +252,44 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
     isAnonymous,
     isAuthenticated,
     initializeSession,
-    sessionData,
-    clearSession,
+    sessionData?.sessionId,
+    sessionData?.ipHash,
     claimThreads,
     migrated,
   ]);
 
-  // Check for existing session on mount (from localStorage)
-  useEffect(() => {
-    if (userLoaded && isAnonymous && !sessionInitialized.current) {
-      const storedSessionId = getStoredSessionId();
-      if (storedSessionId) {
-        // Try to restore session from server
-        fetchSession(storedSessionId)
-          .then((session) => {
-            if (session) {
-              setSessionData(session);
-              sessionInitialized.current = true;
-            } else {
-              // Session expired, create new one
-              initializeSession();
-            }
-          })
-          .catch(() => {
-            // Error fetching session, create new one
-            initializeSession();
-          })
-          .finally(() => {
-            setIsLoading(false);
-          });
-      } else {
-        // No stored session, create new one
-        initializeSession();
-      }
-    }
-  }, [userLoaded, isAnonymous, initializeSession]);
-
-  // Auto-refresh session data every 10 seconds for anonymous users
+  // Periodic session refresh (reduced frequency to 5 minutes)
   useEffect(() => {
     if (!isAnonymous || !sessionData) {
       return;
     }
 
-    const refreshInterval = setInterval(() => {
-      refreshSession();
-    }, 10000); // 10 seconds for more responsive updates
+    const interval = setInterval(
+      () => {
+        refreshSession();
+      },
+      5 * 60 * 1000,
+    ); // 5 minutes
 
-    return () => clearInterval(refreshInterval);
+    return () => clearInterval(interval);
   }, [isAnonymous, sessionData, refreshSession]);
 
-  // Reset migration flag whenever anonymous sessionId changes
-  useEffect(() => {
-    setMigrated(false);
-  }, [sessionId]);
-
-  const memoizedReturn = useMemo(
-    () => ({
-      // Session state
-      sessionData,
-      isAnonymous,
-      isAuthenticated,
-      isLoading,
-
-      // Rate limiting
-      canSendMessage,
-      remainingMessages,
-      messageCount,
-
-      // Actions
-      initializeSession,
-      refreshSession,
-      clearSession,
-
-      // Utilities
-      formatRemainingTime: formatTimeRemaining,
-      checkCanSendMessage,
-
-      // Convex integration
-      sessionId,
-      threadCount,
-    }),
-    [
-      sessionData,
-      isAnonymous,
-      isAuthenticated,
-      isLoading,
-      canSendMessage,
-      remainingMessages,
-      messageCount,
-      initializeSession,
-      refreshSession,
-      clearSession,
-      formatTimeRemaining,
-      checkCanSendMessage,
-      sessionId,
-      threadCount,
-    ],
-  );
-
-  return memoizedReturn;
+  return {
+    sessionData,
+    isAnonymous,
+    isAuthenticated,
+    isLoading,
+    canSendMessage,
+    remainingMessages,
+    messageCount,
+    initializeSession,
+    refreshSession,
+    clearSession,
+    formatRemainingTime: formatTimeRemaining,
+    checkCanSendMessage,
+    sessionId,
+    threadCount,
+    trustLevel: sessionData?.trustLevel,
+    behaviorScore: sessionData?.behaviorScore,
+  };
 }

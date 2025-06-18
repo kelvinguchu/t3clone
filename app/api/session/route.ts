@@ -8,13 +8,14 @@ import {
   hashIP,
   type AnonymousSessionData,
   getOrCreateAnonymousSession,
+  generateFingerprintHash,
+  type BrowserFingerprint,
 } from "@/lib/utils/session";
 
 // GET /api/session - Get or create anonymous session
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    // Session ID can come from query param, cookie, or header
     const cookiesStore = await cookies();
     const cookieSessionId = cookiesStore.get("anon_session_id")?.value;
 
@@ -29,6 +30,21 @@ export async function GET(request: NextRequest) {
     const ip = forwarded.split(",")[0] ?? realIp ?? "unknown";
     const ipHash = hashIP(ip);
 
+    // Try to get browser fingerprint from request body (for POST-like behavior)
+    let fingerprintHash: string | undefined;
+    const fingerprintParam = searchParams.get("fingerprint");
+    if (fingerprintParam) {
+      try {
+        const fingerprint: BrowserFingerprint = JSON.parse(
+          decodeURIComponent(fingerprintParam),
+        );
+        fingerprintHash = generateFingerprintHash(fingerprint);
+      } catch {
+        // Invalid fingerprint data, continue without it
+        console.warn("Invalid fingerprint data received");
+      }
+    }
+
     let sessionData: AnonymousSessionData;
 
     if (sessionId) {
@@ -38,11 +54,19 @@ export async function GET(request: NextRequest) {
         sessionData = existingSession;
       } else {
         // Fallback: attempt fingerprint lookup or create new
-        sessionData = await getOrCreateAnonymousSession(userAgent, ipHash);
+        sessionData = await getOrCreateAnonymousSession(
+          userAgent,
+          ipHash,
+          fingerprintHash,
+        );
       }
     } else {
       // No session ID provided, do fingerprint lookup or create new
-      sessionData = await getOrCreateAnonymousSession(userAgent, ipHash);
+      sessionData = await getOrCreateAnonymousSession(
+        userAgent,
+        ipHash,
+        fingerprintHash,
+      );
     }
 
     // Always refresh the cookie so it stays valid for the full TTL window
@@ -64,8 +88,83 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/session/increment - Increment message count
+// POST /api/session - Create/update session with fingerprint data
 export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { sessionId, fingerprint } = body;
+
+    // Get client info
+    const headersList = await headers();
+    const userAgent = headersList.get("user-agent") ?? "unknown";
+    const forwarded = headersList.get("x-forwarded-for") ?? "unknown";
+    const realIp = headersList.get("x-real-ip") ?? "unknown";
+    const ip = forwarded.split(",")[0] ?? realIp ?? "unknown";
+    const ipHash = hashIP(ip);
+
+    // Generate fingerprint hash if provided
+    let fingerprintHash: string | undefined;
+    if (fingerprint) {
+      try {
+        fingerprintHash = generateFingerprintHash(
+          fingerprint as BrowserFingerprint,
+        );
+      } catch {
+        console.warn("Invalid fingerprint data in POST request");
+      }
+    }
+
+    let sessionData: AnonymousSessionData;
+
+    if (sessionId) {
+      // Try to get existing session and update it
+      const existingSession = await getAnonymousSession(sessionId);
+      if (existingSession) {
+        // Update fingerprint if provided
+        if (fingerprintHash) {
+          existingSession.fingerprintHash = fingerprintHash;
+          existingSession.lastFingerprintUpdate = Date.now();
+        }
+        await updateAnonymousSession(existingSession);
+        sessionData = existingSession;
+      } else {
+        // Session not found, create new one
+        sessionData = await getOrCreateAnonymousSession(
+          userAgent,
+          ipHash,
+          fingerprintHash,
+        );
+      }
+    } else {
+      // Create new session
+      sessionData = await getOrCreateAnonymousSession(
+        userAgent,
+        ipHash,
+        fingerprintHash,
+      );
+    }
+
+    // Set cookie for the session
+    const response = NextResponse.json(sessionData);
+    response.cookies.set("anon_session_id", sessionData.sessionId, {
+      httpOnly: false,
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24, // 24h
+      path: "/",
+    });
+
+    return response;
+  } catch (error) {
+    console.error("Error in session POST API:", error);
+    return NextResponse.json(
+      { error: "Failed to create/update session" },
+      { status: 500 },
+    );
+  }
+}
+
+// PUT /api/session/increment - Increment message count
+export async function PUT(request: NextRequest) {
   try {
     const { sessionId } = await request.json();
 
@@ -106,8 +205,8 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT /api/session - Update session
-export async function PUT(request: NextRequest) {
+// PATCH /api/session - Update session
+export async function PATCH(request: NextRequest) {
   try {
     const sessionData: AnonymousSessionData = await request.json();
 

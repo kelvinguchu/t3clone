@@ -11,6 +11,11 @@ export async function processMultimodalMessages(
   messages: Message[],
   attachmentIds?: string[],
   fetchOptions?: { token: string },
+  modelCapabilities?: {
+    vision: boolean;
+    multimodal: boolean;
+    fileAttachments: boolean;
+  },
 ): Promise<CoreMessage[]> {
   // First, filter out any messages that have blob URLs in experimental_attachments
   // Blob URLs can't be processed on the server side
@@ -115,6 +120,26 @@ export async function processMultimodalMessages(
             }
 
             if (attachment.contentType?.startsWith("image/")) {
+              // Check if model supports file attachments and vision/multimodal content
+              if (!modelCapabilities?.fileAttachments) {
+                console.warn(
+                  "[processMultimodalMessages] Skipping image attachment - model does not support file attachments:",
+                  { contentType: attachment.contentType, modelCapabilities },
+                );
+                continue;
+              }
+
+              if (
+                !modelCapabilities?.vision &&
+                !modelCapabilities?.multimodal
+              ) {
+                console.warn(
+                  "[processMultimodalMessages] Skipping image attachment - model does not support vision:",
+                  { contentType: attachment.contentType, modelCapabilities },
+                );
+                continue;
+              }
+
               try {
                 let imageData;
                 if (attachment.url.startsWith("data:")) {
@@ -150,6 +175,15 @@ export async function processMultimodalMessages(
                 );
               }
             } else if (attachment.contentType === "application/pdf") {
+              // Check if model supports file attachments
+              if (!modelCapabilities?.fileAttachments) {
+                console.warn(
+                  "[processMultimodalMessages] Skipping PDF attachment - model does not support file attachments:",
+                  { contentType: attachment.contentType, modelCapabilities },
+                );
+                continue;
+              }
+
               // For PDFs, fetch the content if it's a URL
               try {
                 if (attachment.url.startsWith("data:")) {
@@ -254,11 +288,40 @@ export async function processMultimodalMessages(
             }
 
             if (attachment.mimeType.startsWith("image/")) {
+              // Check if model supports file attachments and vision/multimodal content
+              if (!modelCapabilities?.fileAttachments) {
+                console.warn(
+                  "[processMultimodalMessages] Skipping image attachment - model does not support file attachments:",
+                  { mimeType: attachment.mimeType, modelCapabilities },
+                );
+                continue;
+              }
+
+              if (
+                !modelCapabilities?.vision &&
+                !modelCapabilities?.multimodal
+              ) {
+                console.warn(
+                  "[processMultimodalMessages] Skipping image attachment - model does not support vision:",
+                  { mimeType: attachment.mimeType, modelCapabilities },
+                );
+                continue;
+              }
+
               multimodalContent.push({
                 type: "image",
                 image: new URL(attachment.fileUrl),
               });
             } else if (attachment.mimeType === "application/pdf") {
+              // Check if model supports file attachments
+              if (!modelCapabilities?.fileAttachments) {
+                console.warn(
+                  "[processMultimodalMessages] Skipping PDF attachment - model does not support file attachments:",
+                  { mimeType: attachment.mimeType, modelCapabilities },
+                );
+                continue;
+              }
+
               // For PDFs, fetch the content and convert to file part
               try {
                 const response = await fetch(attachment.fileUrl);

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Noto_Sans_Mono, Rubik } from "next/font/google";
 import "./globals.css";
@@ -32,11 +32,10 @@ const notoSansMono = Noto_Sans_Mono({
 export const metadata: Metadata = {
   title: "T3 Chat - AI Conversations",
   description: "Modern AI chat interface with all models.",
+  manifest: "/manifest.json",
   icons: {
     icon: "/logo.svg",
   },
-  manifest: "/manifest.json",
-  themeColor: "#4c0fd0",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -58,6 +57,12 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: "#4c0fd0",
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -66,7 +71,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
         <meta name="application-name" content="T3 Chat" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -75,6 +79,12 @@ export default function RootLayout({
         <meta name="msapplication-TileColor" content="#4c0fd0" />
         <meta name="msapplication-tap-highlight" content="no" />
         <link rel="apple-touch-icon" href="/icon512_rounded.png" />
+        <link
+          rel="apple-touch-icon"
+          sizes="192x192"
+          href="/icon512_rounded.png"
+        />
+        <link rel="apple-touch-startup-image" href="/icon512_rounded.png" />
         <link rel="mask-icon" href="/logo.svg" color="#4c0fd0" />
         <Script src="https://unpkg.com/react-scan/dist/auto.global.js" />
       </head>
