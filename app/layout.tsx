@@ -8,6 +8,9 @@ import { FilePreviewProvider } from "@/lib/contexts/file-preview-context";
 import { AnonymousSessionProvider } from "@/lib/contexts/anonymous-session-context";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "next-themes";
+import { NextSSRPlugin } from "@uploadthing/react/next-ssr-plugin";
+import { extractRouterConfig } from "uploadthing/server";
+import { ourFileRouter } from "@/app/api/uploadthing/core";
 
 const rubik = Rubik({
   variable: "--font-rubik",
@@ -45,6 +48,15 @@ export default function RootLayout({
       <body
         className={`${rubik.className} font-mono antialiased bg-purple-100 dark:bg-dark-bg`}
       >
+        <NextSSRPlugin
+          /**
+           * The `extractRouterConfig` will extract **only** the route configs
+           * from the router to prevent additional information from being
+           * leaked to the client. The data passed to the client is the same
+           * as if you were to fetch `/api/uploadthing` directly.
+           */
+          routerConfig={extractRouterConfig(ourFileRouter)}
+        />
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

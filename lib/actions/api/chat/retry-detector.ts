@@ -14,10 +14,7 @@ export async function detectRetryOperation(
   messages: Message[],
   finalThreadId: string | null,
   fetchOptions?: { token: string },
-  requestId?: string,
 ): Promise<RetryDetectionResult> {
-  const logPrefix = requestId ? `[${requestId}]` : "[detectRetryOperation]";
-
   // If no thread ID, this is a new conversation
   if (!finalThreadId) {
     return {
@@ -51,6 +48,14 @@ export async function detectRetryOperation(
       fetchOptions,
     );
 
+    // Handle null response from fetchQuery
+    if (!existingMessages) {
+      return {
+        isRetryOperation: false,
+        shouldSaveUserMessage: true,
+      };
+    }
+
     // FIXED: Check if this is the LAST user message that's being retried
     // Only consider it a retry if the most recent user message matches exactly
     const lastUserMessageInDB = existingMessages
@@ -61,28 +66,6 @@ export async function detectRetryOperation(
       lastUserMessageInDB &&
       lastUserMessageInDB.content === lastUserMessage!.content;
 
-    if (isRetry) {
-      console.log(
-        `${logPrefix} CHAT_API - Last user message matches, this is a retry operation`,
-        {
-          messageContent: lastUserMessage.content.substring(0, 100) + "...",
-          existingMessagesCount: existingMessages.length,
-          lastUserMessageInDB:
-            lastUserMessageInDB.content.substring(0, 100) + "...",
-        },
-      );
-    } else {
-      console.log(
-        `${logPrefix} CHAT_API - New user message, will save to database`,
-        {
-          newMessageContent: lastUserMessage.content.substring(0, 100) + "...",
-          lastDBUserMessage:
-            lastUserMessageInDB?.content.substring(0, 100) + "..." || "none",
-          existingMessagesCount: existingMessages.length,
-        },
-      );
-    }
-
     return {
       isRetryOperation: isRetry || false,
       shouldSaveUserMessage: !isRetry,
@@ -90,10 +73,6 @@ export async function detectRetryOperation(
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
-    console.warn(
-      `${logPrefix} CHAT_API - Could not check for existing messages, proceeding with save:`,
-      error,
-    );
 
     // If we can't check for existing messages, proceed with saving (fail safe)
     return {

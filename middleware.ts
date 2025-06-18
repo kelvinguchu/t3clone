@@ -10,6 +10,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
   "/share/(.*)", // All share routes are public
   "/auth/callback/(.*)", // Authentication callback routes must be public
+  "/api/uploadthing", // UploadThing callbacks must be public
 ]);
 
 // Define share-specific routes for additional handling if needed
@@ -18,7 +19,17 @@ const isShareRoute = createRouteMatcher(["/share/(.*)"]);
 // Define auth callback routes for special handling
 const isAuthCallbackRoute = createRouteMatcher(["/auth/callback/(.*)"]);
 
+// Define UploadThing routes that should bypass all middleware
+const isUploadThingRoute = createRouteMatcher(["/api/uploadthing"]);
+
 export default clerkMiddleware(async (auth, req) => {
+  // Allow UploadThing callbacks to bypass all middleware
+  if (isUploadThingRoute(req)) {
+    // UploadThing callbacks must not be processed by Clerk middleware
+    // This is essential for upload callbacks to work properly
+    return;
+  }
+
   // Allow public access to auth callback routes (critical for OAuth flow)
   if (isAuthCallbackRoute(req)) {
     // Auth callback routes must be public to complete OAuth flow
@@ -53,7 +64,9 @@ export const config = {
   matcher: [
     // Skip Next.js internals and all static files, unless found in search params
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    // Always run for API routes
-    "/(api|trpc)(.*)",
+    // Run for API routes, but exclude UploadThing
+    "/api/((?!uploadthing).*)",
+    // Include trpc routes
+    "/trpc/(.*)",
   ],
 };

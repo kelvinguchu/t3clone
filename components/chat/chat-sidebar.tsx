@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { useUser, useClerk } from "@clerk/nextjs";
 import { Sidebar, useSidebar } from "@/components/ui/sidebar";
 import { usePathname, useRouter } from "next/navigation";
-import { ChatSidebarHeader } from "./chat-sidebar-header";
-import { ChatSidebarContent } from "./chat-sidebar-content";
-import { ChatSidebarFooter } from "./chat-sidebar-footer";
+import { ChatSidebarHeader } from "./chat-sidebar/chat-sidebar-header";
+import { ChatSidebarContent } from "./chat-sidebar/chat-sidebar-content";
+import { ChatSidebarFooter } from "./chat-sidebar/chat-sidebar-footer";
 import {
   useThreadCreator,
   useNewChatHandler,

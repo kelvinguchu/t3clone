@@ -14,7 +14,7 @@ import {
   MessageSquare,
   AlertCircle,
 } from "lucide-react";
-import { ChatMessages } from "@/components/chat/chat-messages";
+import { ChatMessages } from "@/components/chat/chat-area/chat-messages";
 import { useRouter } from "next/navigation";
 import { useAuth, useClerk } from "@clerk/nextjs";
 

@@ -77,7 +77,8 @@ export const FilePreview = memo(
                         fill
                         sizes="32px"
                         className="object-cover"
-                        unoptimized // For UploadThing URLs and blob URLs
+                        priority={false}
+                        quality={75}
                       />
                       {file.isUploading && (
                         <div className="absolute inset-0 bg-black/50 flex items-center justify-center">

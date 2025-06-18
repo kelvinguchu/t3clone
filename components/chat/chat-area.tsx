@@ -3,9 +3,9 @@
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { ChatInput } from "./chat-input";
-import { ChatWelcomeScreen } from "./chat-welcome-screen";
-import { ChatMessages } from "./chat-messages";
-import { ErrorDisplay } from "./error-display";
+import { ChatWelcomeScreen } from "./chat-area/chat-welcome-screen";
+import { ChatMessages } from "./chat-area/chat-messages";
+import { ErrorDisplay } from "./chat-area/error-display";
 import { useAnonymousSession } from "@/lib/contexts/anonymous-session-context";
 import { useChat } from "@/lib/hooks/use-chat";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -623,6 +623,7 @@ const ChatArea = memo(function ChatArea({
             onClick={scrollToBottom}
             transparency={10}
             noise={50}
+            className="dark:shadow-none"
           >
             Scroll to bottom
           </LiquidGlassButton>

@@ -51,11 +51,11 @@ export function ChatHeader() {
     <>
       {/* Fixed positioned controls in top-left - Desktop only */}
       <div className="hidden md:flex fixed top-2 left-2 z-[60] items-center gap-1">
-        <SidebarTrigger className="text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent" />
+        <SidebarTrigger className="text-purple-900 cursor-pointer dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent" />
 
         {/* Settings and Theme buttons - always visible on desktop */}
         <button
-          className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center"
+          className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center cursor-pointer"
           title="Settings"
         >
           <Settings className="h-4 w-4" />
@@ -67,7 +67,7 @@ export function ChatHeader() {
             onClick={() =>
               setTheme(resolvedTheme === "dark" ? "light" : "dark")
             }
-            className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center"
+            className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center cursor-pointer"
             title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
           >
             {resolvedTheme === "dark" ? (
@@ -95,7 +95,7 @@ export function ChatHeader() {
               >
                 <motion.button
                   onClick={() => setSearchDialogOpen(true)}
-                  className="h-7 px-3 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center gap-1"
+                  className="h-7 px-3 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center gap-1 cursor-pointer"
                   title="Search conversations"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -114,7 +114,7 @@ export function ChatHeader() {
               >
                 <motion.button
                   onClick={handleNewChat}
-                  className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center"
+                  className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center cursor-pointer"
                   title="Start new chat"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -151,7 +151,7 @@ export function ChatHeader() {
         <div className="md:hidden">
           <button
             onClick={() => setMobileMenuOpen(true)}
-            className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center"
+            className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center cursor-pointer"
             title="Menu"
           >
             <MoreVertical className="h-4 w-4" />
@@ -187,7 +187,7 @@ export function ChatHeader() {
                 </h2>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
-                  className="size-8 text-purple-600 dark:text-slate-400 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary rounded-lg flex items-center justify-center transition-colors"
+                  className="size-8 text-purple-600 dark:text-slate-400 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary rounded-lg flex items-center justify-center transition-colors cursor-pointer"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -197,7 +197,7 @@ export function ChatHeader() {
               <div className="p-4 space-y-3">
                 {/* Settings button */}
                 <button
-                  className="w-full flex items-center gap-3 p-3 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary rounded-lg transition-colors"
+                  className="w-full flex items-center gap-3 p-3 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary rounded-lg transition-colors cursor-pointer"
                   onClick={() => {
                     // Handle settings
                     setMobileMenuOpen(false);
@@ -210,7 +210,7 @@ export function ChatHeader() {
                 {/* Theme toggle button */}
                 {mounted ? (
                   <button
-                    className="w-full flex items-center gap-3 p-3 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary rounded-lg transition-colors"
+                    className="w-full flex items-center gap-3 p-3 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary rounded-lg transition-colors cursor-pointer"
                     onClick={() => {
                       setTheme(resolvedTheme === "dark" ? "light" : "dark");
                       setMobileMenuOpen(false);

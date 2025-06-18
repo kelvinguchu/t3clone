@@ -12,10 +12,50 @@ export async function processMultimodalMessages(
   attachmentIds?: string[],
   fetchOptions?: { token: string },
 ): Promise<CoreMessage[]> {
-  const coreMessages = convertToCoreMessages(messages);
+  // First, filter out any messages that have blob URLs in experimental_attachments
+  // Blob URLs can't be processed on the server side
+  const filteredMessages = messages.map((msg) => {
+    const experimentalAttachments = (
+      msg as { experimental_attachments?: unknown[] }
+    ).experimental_attachments;
+
+    if (experimentalAttachments && Array.isArray(experimentalAttachments)) {
+      const filteredAttachments = experimentalAttachments.filter(
+        (att: unknown) => {
+          const attachment = att as { url?: string; name?: string };
+          if (
+            attachment?.url &&
+            typeof attachment.url === "string" &&
+            attachment.url.startsWith("blob:")
+          ) {
+            console.warn(
+              "[processMultimodalMessages] Skipping blob URL attachment (server-side processing not supported):",
+              {
+                name: attachment.name,
+                url: attachment.url.substring(0, 50) + "...",
+              },
+            );
+            return false;
+          }
+          return true;
+        },
+      );
+
+      // Return message with filtered attachments
+      return {
+        ...msg,
+        experimental_attachments:
+          filteredAttachments.length > 0 ? filteredAttachments : undefined,
+      } as Message;
+    }
+
+    return msg;
+  });
+
+  const coreMessages = convertToCoreMessages(filteredMessages);
 
   // Check if messages already have experimental_attachments (from AI SDK)
-  const hasExperimentalAttachments = messages.some((msg) => {
+  const hasExperimentalAttachments = filteredMessages.some((msg) => {
     const attachments = (msg as { experimental_attachments?: unknown[] })
       .experimental_attachments;
     return attachments && attachments.length > 0;
@@ -23,8 +63,8 @@ export async function processMultimodalMessages(
 
   // If messages have experimental_attachments, process them
   if (hasExperimentalAttachments) {
-    for (let i = 0; i < messages.length; i++) {
-      const message = messages[i];
+    for (let i = 0; i < filteredMessages.length; i++) {
+      const message = filteredMessages[i];
       const coreMessage = coreMessages[i];
       const experimentalAttachments = (
         message as {
@@ -65,6 +105,15 @@ export async function processMultimodalMessages(
         // Process experimental_attachments
         for (const attachment of experimentalAttachments) {
           try {
+            // Skip blob URLs - they can't be fetched from server context
+            if (attachment.url.startsWith("blob:")) {
+              console.warn(
+                "[processMultimodalMessages] Skipping blob URL (not accessible from server):",
+                attachment.url.substring(0, 50) + "...",
+              );
+              continue;
+            }
+
             if (attachment.contentType?.startsWith("image/")) {
               try {
                 let imageData;
@@ -73,11 +122,20 @@ export async function processMultimodalMessages(
                   const base64Data = attachment.url.split(",")[1];
                   const binary = Buffer.from(base64Data, "base64");
                   imageData = new Uint8Array(binary);
-                } else {
-                  // Fetch the image bytes and embed directly
+                } else if (attachment.url.startsWith("http")) {
+                  // Only fetch HTTP/HTTPS URLs
                   const res = await fetch(attachment.url);
+                  if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                  }
                   const arrayBuf = await res.arrayBuffer();
                   imageData = new Uint8Array(arrayBuf);
+                } else {
+                  console.warn(
+                    "[processMultimodalMessages] Unsupported URL protocol for image:",
+                    attachment.url,
+                  );
+                  continue;
                 }
 
                 multimodalContent.push({
@@ -88,7 +146,7 @@ export async function processMultimodalMessages(
               } catch (err) {
                 console.error(
                   "[processMultimodalMessages] Failed to fetch/convert image:",
-                  err,
+                  { url: attachment.url, error: err },
                 );
               }
             } else if (attachment.contentType === "application/pdf") {
@@ -107,20 +165,31 @@ export async function processMultimodalMessages(
                     data: uint8Array,
                     mimeType: attachment.contentType,
                   });
-                } else {
-                  // Handle regular URL
+                } else if (attachment.url.startsWith("http")) {
+                  // Only fetch HTTP/HTTPS URLs
                   const response = await fetch(attachment.url);
+                  if (!response.ok) {
+                    throw new Error(
+                      `HTTP ${response.status}: ${response.statusText}`,
+                    );
+                  }
                   const arrayBuffer = await response.arrayBuffer();
                   multimodalContent.push({
                     type: "file",
                     data: new Uint8Array(arrayBuffer),
                     mimeType: attachment.contentType,
                   });
+                } else {
+                  console.warn(
+                    "[processMultimodalMessages] Unsupported URL protocol for PDF:",
+                    attachment.url,
+                  );
+                  continue;
                 }
               } catch (error) {
                 console.error(
                   "[processMultimodalMessages] Error processing PDF attachment:",
-                  error,
+                  { url: attachment.url, error },
                 );
                 continue;
               }
@@ -128,7 +197,7 @@ export async function processMultimodalMessages(
           } catch (error) {
             console.error(
               "[processMultimodalMessages] Error processing experimental attachment:",
-              error,
+              { url: attachment.url, error },
             );
             continue;
           }

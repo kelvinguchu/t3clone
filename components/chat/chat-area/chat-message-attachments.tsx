@@ -132,7 +132,8 @@ export function ChatMessageAttachments({
                   fill
                   sizes={`${imageDimensions.width}px`}
                   className="object-cover"
-                  unoptimized // For UploadThing URLs
+                  priority={false}
+                  quality={85}
                   onError={() => handleImageError(attachment.id)}
                 />
 

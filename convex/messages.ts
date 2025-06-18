@@ -687,3 +687,60 @@ export const removeLastAssistantMessage = mutation({
     return lastAssistantMessage._id;
   },
 });
+
+// Check if a message is the latest assistant message in its thread
+export const isLatestAssistantMessage = query({
+  args: {
+    messageId: v.id("messages"),
+    sessionId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const message = await ctx.db.get(args.messageId);
+      if (!message) {
+        return false;
+      }
+
+      // Check thread access
+      const thread = await ctx.db.get(message.threadId);
+      if (!thread) {
+        return false;
+      }
+
+      const identity = await ctx.auth.getUserIdentity();
+
+      // Check access permissions
+      if (thread.isAnonymous && args.sessionId) {
+        if (thread.sessionId !== args.sessionId) {
+          return false;
+        }
+      } else if (thread.userId) {
+        if (thread.userId !== identity?.subject && !thread.isPublic) {
+          return false;
+        }
+      } else {
+        return false;
+      }
+
+      // Only check for assistant messages
+      if (message.role !== "assistant") {
+        return false;
+      }
+
+      // Find the latest assistant message in this thread
+      const latestAssistantMessage = await ctx.db
+        .query("messages")
+        .withIndex("by_thread", (q) => q.eq("threadId", message.threadId))
+        .filter((q) => q.eq(q.field("role"), "assistant"))
+        .order("desc")
+        .first();
+
+      // Return true if this message is the latest assistant message
+      return latestAssistantMessage?._id === args.messageId;
+    } catch (error) {
+      // Log error for debugging but don't throw to avoid breaking the UI
+      console.error("Error checking if message is latest assistant:", error);
+      return false;
+    }
+  },
+});

@@ -1,4 +1,4 @@
-import { streamText, type CoreMessage, convertToCoreMessages } from "ai";
+import { streamText, type CoreMessage } from "ai";
 import { NextRequest } from "next/server";
 
 import { getOrCreateAnonymousSession } from "@/lib/utils/session";
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     // OPTIMIZATION: Only load conversation from Convex for actual retry operations
     // New messages should use client messages to ensure proper processing
     // ----------------------------------------------------
-    let messagesForAI: CoreMessage[] = convertToCoreMessages(messages);
+    let messagesForAI: CoreMessage[] = [];
     let isRetryFromConvex = false;
     const originalMessages = messages; // Keep original messages for functions that need Message[]
 
@@ -180,7 +180,8 @@ export async function POST(req: NextRequest) {
     }
     remainingMessages = rateLimitResult.remainingMessages;
 
-    // Process multimodal messages if needed (only for new messages, not retries)
+    // Process multimodal messages for all new messages (not retries)
+    // This handles blob URL filtering and proper CoreMessage conversion
     if (!isRetryFromConvex) {
       const processedCoreMessages = await processMultimodalMessages(
         originalMessages,
@@ -189,7 +190,7 @@ export async function POST(req: NextRequest) {
       );
 
       // Use the processed core messages directly - they're already in the correct format for streamText
-      // No need to convert back to Message[] since streamText accepts CoreMessage[]
+      // The multimodal processor has already filtered out blob URLs and converted to CoreMessage[]
       messagesForAI = processedCoreMessages;
     }
 
@@ -306,7 +307,6 @@ export async function POST(req: NextRequest) {
                 messages,
                 finalThreadId,
                 fetchOptions,
-                requestId,
               );
               shouldSaveUserMessage = retryResult.shouldSaveUserMessage;
 
