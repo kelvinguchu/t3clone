@@ -95,7 +95,7 @@ export function SharedThreadViewer({ shareToken }: Props) {
   // Loading state
   if (sharedThread === undefined || messages === undefined) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white dark:bg-dark-bg">
+      <div className="min-h-screen bg-purple-50 dark:bg-dark-bg">
         <div className="max-w-4xl mx-auto px-4 py-6">
           <div className="bg-white/70 dark:bg-dark-bg-secondary/70 rounded-lg p-6 border border-purple-200 dark:border-dark-purple-accent backdrop-blur-sm">
             <div className="animate-pulse space-y-4">
@@ -116,7 +116,7 @@ export function SharedThreadViewer({ shareToken }: Props) {
   // Error state - thread not found or expired
   if (sharedThread === null) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white dark:bg-dark-bg flex items-center justify-center px-4">
+      <div className="min-h-screen bg-purple-50 dark:bg-dark-bg flex items-center justify-center px-4">
         <div className="max-w-md mx-auto text-center space-y-4">
           <Alert className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
             <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
@@ -138,7 +138,7 @@ export function SharedThreadViewer({ shareToken }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white dark:bg-dark-bg">
+    <div className="min-h-screen bg-purple-50 dark:bg-dark-bg">
       {/* Compact Header */}
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-dark-bg-secondary/80 backdrop-blur-md border-b border-purple-200 dark:border-dark-purple-accent">
         <div className="max-w-4xl mx-auto px-4 py-3">

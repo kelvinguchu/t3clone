@@ -53,6 +53,7 @@ import {
 } from "@/lib/actions/chat/chat-area/model-theme-manager";
 import { useModelStore } from "@/lib/stores/model-store";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePlanLimits } from "@/lib/hooks/use-plan-limits";
 
 type DisplayMessage = {
   role: "user" | "assistant" | "system";
@@ -136,6 +137,9 @@ const ChatArea = memo(function ChatArea({
     remainingMessages,
     messageCount,
   } = useAnonymousSession();
+
+  // Plan-based rate limiting for authenticated users
+  const planLimits = usePlanLimits();
 
   // Always include anonSessionId if we have it. This allows freshly auth'd
   // users to access their just-promoted anonymous threads before the
@@ -475,7 +479,28 @@ const ChatArea = memo(function ChatArea({
         selectedModel,
         threadId,
         timestamp: new Date().toISOString(),
+        isAnonymous,
+        planLimits: isAnonymous
+          ? null
+          : { canSend: planLimits.canSend, remaining: planLimits.remaining },
       });
+
+      // Check plan limits for authenticated users
+      if (!isAnonymous && !planLimits.canSend) {
+        console.warn("[ChatArea] Message blocked: Plan limit exceeded");
+        return;
+      }
+
+      // Increment usage for authenticated users before sending
+      if (!isAnonymous) {
+        const incrementSuccess = await planLimits.incrementUsage();
+        if (!incrementSuccess) {
+          console.warn(
+            "[ChatArea] Message blocked: Failed to increment usage or limit exceeded",
+          );
+          return;
+        }
+      }
 
       await handleMessageSend(
         message,
@@ -509,6 +534,8 @@ const ChatArea = memo(function ChatArea({
       setPendingBrowsing,
       setPendingThinking,
       setPrefillMessage,
+      planLimits.canSend,
+      planLimits.incrementUsage,
     ],
   );
 
@@ -592,7 +619,6 @@ const ChatArea = memo(function ChatArea({
             mounted={mounted}
             isLoaded={!!user}
             isAnonymous={isAnonymous}
-            remainingMessages={remainingMessages}
             canSendMessage={canSendMessage}
             isLoading={isLoading}
             floatingColors={floatingColors}
@@ -625,9 +651,11 @@ const ChatArea = memo(function ChatArea({
           onSend={handleSend}
           sessionData={{
             isAnonymous,
-            canSendMessage,
-            remainingMessages,
-            messageCount,
+            canSendMessage: isAnonymous ? canSendMessage : planLimits.canSend,
+            remainingMessages: isAnonymous
+              ? remainingMessages
+              : planLimits.remaining,
+            messageCount: isAnonymous ? messageCount : planLimits.used,
           }}
           onHeightChange={setInputHeight}
           onStop={stop}

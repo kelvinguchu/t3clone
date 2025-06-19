@@ -922,3 +922,29 @@ export const getAnonymousThreadsPaginated = query({
     };
   },
 });
+
+// Get all shared threads for a user (for settings/history page)
+export const getUserSharedThreads = query({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || identity.subject !== args.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    const sharedThreads = await ctx.db
+      .query("threads")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .filter((q) => q.eq(q.field("isPublic"), true))
+      .collect();
+
+    // Sort by most recently shared first
+    return sharedThreads.sort((a, b) => {
+      const aTime = a.updatedAt ?? a._creationTime;
+      const bTime = b.updatedAt ?? b._creationTime;
+      return bTime - aTime;
+    });
+  },
+});

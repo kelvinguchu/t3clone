@@ -4,7 +4,9 @@ interface Props {
 }
 
 export default async function ShareLayout({ children }: Readonly<Props>) {
-  return <>{children}</>;
+  return (
+    <div className="min-h-screen bg-purple-50 dark:bg-dark-bg">{children}</div>
+  );
 }
 
 export function generateMetadata() {

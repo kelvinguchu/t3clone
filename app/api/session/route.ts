@@ -11,10 +11,23 @@ import {
   generateFingerprintHash,
   type BrowserFingerprint,
 } from "@/lib/utils/session";
+import { auth } from "@clerk/nextjs/server";
 
-// GET /api/session - Get or create anonymous session
+// GET /api/session - Get or create anonymous session OR check authenticated user status
 export async function GET(request: NextRequest) {
   try {
+    // Check if user is authenticated
+    const { userId } = await auth();
+
+    if (userId) {
+      // For authenticated users, just return that they are authenticated
+      // Plan limiting is handled by Convex in the usePlanLimits hook
+      return NextResponse.json({
+        isAnonymous: false,
+        userId,
+      });
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const cookiesStore = await cookies();
     const cookieSessionId = cookiesStore.get("anon_session_id")?.value;
@@ -70,7 +83,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Always refresh the cookie so it stays valid for the full TTL window
-    const response = NextResponse.json(sessionData);
+    const response = NextResponse.json({
+      ...sessionData,
+      isAnonymous: true,
+    });
     response.cookies.set("anon_session_id", sessionData.sessionId, {
       httpOnly: false, // readable by browser JS so hooks can still use localStorage fallback
       sameSite: "lax",

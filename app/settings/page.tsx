@@ -3,6 +3,6 @@
 import { redirect } from "next/navigation";
 
 export default function Home() {
-  redirect("/settings/api-keys");
+  redirect("/settings/history");
   return null;
 }

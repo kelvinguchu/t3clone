@@ -58,7 +58,6 @@ export type ChatWelcomeScreenProps = {
   mounted: boolean;
   isLoaded: boolean;
   isAnonymous: boolean;
-  remainingMessages: number;
   canSendMessage: boolean;
   isLoading: boolean;
   floatingColors: {
@@ -74,7 +73,6 @@ export function ChatWelcomeScreen({
   mounted,
   isLoaded,
   isAnonymous,
-  remainingMessages,
   canSendMessage,
   isLoading,
   floatingColors,
@@ -133,19 +131,6 @@ export function ChatWelcomeScreen({
           >
             {getUserSubtext()}
           </p>
-
-          {/* Sign up prompt for anonymous users with low messages */}
-          {mounted && isAnonymous && remainingMessages <= 3 && (
-            <div className="mb-3 sm:mb-4 md:mb-6 p-2 sm:p-3 md:p-4 mx-1 sm:mx-2 md:mx-0 rounded-md sm:rounded-lg md:rounded-xl bg-gradient-to-r from-orange-50 to-red-50 dark:from-dark-bg-tertiary/50 dark:to-dark-bg-tertiary/70 border border-orange-200 dark:border-orange-500/50">
-              <p className="text-xs sm:text-sm text-orange-800 dark:text-orange-200 font-medium mb-1 sm:mb-2">
-                ⚡ Running low on messages!
-              </p>
-              <p className="text-xs text-orange-600 dark:text-orange-400">
-                Sign up to get unlimited conversations, message history, and
-                access to all features.
-              </p>
-            </div>
-          )}
 
           {/* Category Selection */}
           <div className="w-full max-w-2xl px-1 sm:px-2 md:px-0">

@@ -25,10 +25,12 @@ export default function OAuthCallbackPage() {
   }, [token, action, router]);
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
+    <div className="min-h-screen bg-background dark:bg-dark-bg flex items-center justify-center">
       <div className="flex flex-col items-center gap-4 p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        <p className="text-muted-foreground">Completing authentication...</p>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary dark:border-purple-400"></div>
+        <p className="text-muted-foreground dark:text-purple-300">
+          Completing authentication...
+        </p>
 
         {/* This component handles the final step of Clerk's OAuth flow */}
         <AuthenticateWithRedirectCallback />

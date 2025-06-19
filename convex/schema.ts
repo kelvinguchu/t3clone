@@ -189,10 +189,6 @@ export default defineSchema({
     enableWebSearch: v.optional(v.boolean()),
     enableImageGeneration: v.optional(v.boolean()),
 
-    // API keys (encrypted, user-provided) - deprecated, use apiKeys table
-    hasCustomOpenAI: v.optional(v.boolean()),
-    hasCustomAnthropic: v.optional(v.boolean()),
-
     // Timestamps
     createdAt: v.number(),
     updatedAt: v.number(),

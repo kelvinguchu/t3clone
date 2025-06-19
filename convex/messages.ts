@@ -443,6 +443,43 @@ export const getMessageCount = query({
   },
 });
 
+// Get message counts for multiple threads (bulk query for efficiency)
+export const getBulkMessageCounts = query({
+  args: {
+    threadIds: v.array(v.id("threads")),
+    userId: v.string(), // User ID for authorization
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || identity.subject !== args.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    const counts: Record<string, number> = {};
+
+    // Process threads in batches to avoid overwhelming the database
+    for (const threadId of args.threadIds) {
+      // Verify thread ownership
+      const thread = await ctx.db.get(threadId);
+      if (!thread || thread.userId !== args.userId) {
+        // Skip threads that don't exist or don't belong to the user
+        counts[threadId] = 0;
+        continue;
+      }
+
+      // Get message count for this thread
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_thread", (q) => q.eq("threadId", threadId))
+        .collect();
+
+      counts[threadId] = messages.length;
+    }
+
+    return counts;
+  },
+});
+
 // Set message streaming status (for real-time updates)
 export const setMessageStreamingStatus = mutation({
   args: {

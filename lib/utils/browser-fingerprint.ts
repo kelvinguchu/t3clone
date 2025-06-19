@@ -295,3 +295,168 @@ export function getBehaviorTracker(): BehaviorTracker {
   }
   return behaviorTracker;
 }
+
+// Plan abuse detection utilities
+export interface UserPattern {
+  fingerprintHash: string;
+  userAgent: string;
+  ipHash?: string;
+  accountCreationTime: number;
+  messagePatterns: number[];
+  suspiciousActivity: string[];
+}
+
+export class PlanAbuseDetector {
+  private static instance: PlanAbuseDetector;
+  private patterns: Map<string, UserPattern> = new Map();
+
+  static getInstance(): PlanAbuseDetector {
+    if (!PlanAbuseDetector.instance) {
+      PlanAbuseDetector.instance = new PlanAbuseDetector();
+    }
+    return PlanAbuseDetector.instance;
+  }
+
+  // Track user patterns for abuse detection
+  async trackUserPattern(
+    userId: string,
+    fingerprint: BrowserFingerprint,
+    ipHash?: string,
+  ): Promise<void> {
+    const fingerprintHash = generateFingerprintHash(fingerprint);
+
+    const existing = this.patterns.get(userId);
+    const now = Date.now();
+
+    if (existing) {
+      // Update existing pattern
+      existing.messagePatterns.push(now);
+
+      // Keep only last 100 message timestamps
+      if (existing.messagePatterns.length > 100) {
+        existing.messagePatterns = existing.messagePatterns.slice(-100);
+      }
+
+      // Check for fingerprint changes (potential account sharing)
+      if (existing.fingerprintHash !== fingerprintHash) {
+        existing.suspiciousActivity.push(`fingerprint_change_${now}`);
+      }
+
+      // Check for rapid messaging patterns
+      if (this.detectRapidMessaging(existing.messagePatterns)) {
+        existing.suspiciousActivity.push(`rapid_messaging_${now}`);
+      }
+    } else {
+      // Create new pattern
+      this.patterns.set(userId, {
+        fingerprintHash,
+        userAgent: fingerprint.userAgent,
+        ipHash,
+        accountCreationTime: now,
+        messagePatterns: [now],
+        suspiciousActivity: [],
+      });
+    }
+  }
+
+  // Detect rapid messaging patterns (potential bot behavior)
+  private detectRapidMessaging(timestamps: number[]): boolean {
+    if (timestamps.length < 5) return false;
+
+    const recent = timestamps.slice(-5);
+    const intervals = recent.slice(1).map((time, i) => time - recent[i]);
+    const avgInterval =
+      intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
+
+    // Flag if average interval between messages is less than 10 seconds
+    return avgInterval < 10000;
+  }
+
+  // Check if user shows suspicious patterns
+  isSuspiciousUser(userId: string): {
+    suspicious: boolean;
+    reasons: string[];
+    riskScore: number;
+  } {
+    const pattern = this.patterns.get(userId);
+    if (!pattern) {
+      return { suspicious: false, reasons: [], riskScore: 0 };
+    }
+
+    const reasons: string[] = [];
+    let riskScore = 0;
+
+    // Check for multiple fingerprint changes
+    const fingerprintChanges = pattern.suspiciousActivity.filter((activity) =>
+      activity.startsWith("fingerprint_change_"),
+    ).length;
+    if (fingerprintChanges > 2) {
+      reasons.push(`Multiple device/browser changes (${fingerprintChanges})`);
+      riskScore += fingerprintChanges * 10;
+    }
+
+    // Check for rapid messaging
+    const rapidMessaging = pattern.suspiciousActivity.filter((activity) =>
+      activity.startsWith("rapid_messaging_"),
+    ).length;
+    if (rapidMessaging > 3) {
+      reasons.push(
+        `Potential bot behavior detected (${rapidMessaging} instances)`,
+      );
+      riskScore += rapidMessaging * 15;
+    }
+
+    // Check message frequency
+    const now = Date.now();
+    const recentMessages = pattern.messagePatterns.filter(
+      (timestamp) => now - timestamp < 24 * 60 * 60 * 1000, // Last 24 hours
+    ).length;
+
+    if (recentMessages > 50) {
+      // More than 50 messages in 24h might be suspicious
+      reasons.push(`High message frequency (${recentMessages} in 24h)`);
+      riskScore += Math.floor(recentMessages / 10);
+    }
+
+    return {
+      suspicious: riskScore > 30,
+      reasons,
+      riskScore: Math.min(100, riskScore),
+    };
+  }
+
+  // Get user pattern data
+  getUserPattern(userId: string): UserPattern | null {
+    return this.patterns.get(userId) || null;
+  }
+
+  // Clear old patterns (cleanup)
+  clearOldPatterns(olderThanDays: number = 30): number {
+    const cutoff = Date.now() - olderThanDays * 24 * 60 * 60 * 1000;
+    let cleared = 0;
+
+    for (const [userId, pattern] of this.patterns.entries()) {
+      if (pattern.accountCreationTime < cutoff) {
+        this.patterns.delete(userId);
+        cleared++;
+      }
+    }
+
+    return cleared;
+  }
+
+  // Export patterns for persistence (if needed)
+  exportPatterns(): Record<string, UserPattern> {
+    return Object.fromEntries(this.patterns.entries());
+  }
+
+  // Import patterns from persistence
+  importPatterns(patterns: Record<string, UserPattern>): void {
+    this.patterns = new Map(Object.entries(patterns));
+  }
+}
+
+// Singleton instance getter
+export function getPlanAbuseDetector(): PlanAbuseDetector {
+  return PlanAbuseDetector.getInstance();
+}

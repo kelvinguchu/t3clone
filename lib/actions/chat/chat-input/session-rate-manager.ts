@@ -85,20 +85,39 @@ export function useSessionRateManager({
 
   // Get warning level - memoized to prevent re-renders
   const warningLevel = useMemo(() => {
-    if (!isAnonymous || !isLoaded) return null;
+    if (!isLoaded) return null;
 
-    const used = messageCount;
-    const total = 10; // Total allowed messages
-    const percentage = (used / total) * 100;
+    if (isAnonymous) {
+      // Anonymous user warnings (10 message limit)
+      const remaining = remainingMessages;
+      const total = 10;
 
-    if (percentage >= 90)
-      return { color: "red" as const, level: "critical" as const };
-    if (percentage >= 70)
-      return { color: "orange" as const, level: "warning" as const };
-    if (percentage >= 50)
-      return { color: "yellow" as const, level: "caution" as const };
-    return null;
-  }, [isAnonymous, isLoaded, messageCount]);
+      if (remaining <= 2) {
+        return { color: "red" as const, level: "critical" as const };
+      }
+      if (remaining <= total / 2) {
+        // 5 messages or less
+        return { color: "orange" as const, level: "warning" as const };
+      }
+      return null;
+    } else {
+      // Authenticated user warnings (plan-based limits)
+      const remaining = remainingMessages;
+      const used = messageCount;
+      const total = used + remaining;
+
+      if (total <= 0) return null; // No limit or invalid data
+
+      if (remaining <= 2) {
+        return { color: "red" as const, level: "critical" as const };
+      }
+      if (remaining <= total / 2) {
+        // Half of plan limit
+        return { color: "orange" as const, level: "warning" as const };
+      }
+      return null;
+    }
+  }, [isAnonymous, isLoaded, messageCount, remainingMessages]);
 
   return {
     // Session state
@@ -140,26 +159,44 @@ export function canPerformAction(
 export function getRateLimitMessage(
   warningLevel: { level: string } | null,
   remainingMessages: number,
+  isAnonymous: boolean = true,
 ): string {
   if (!warningLevel) return "";
 
-  switch (warningLevel.level) {
-    case "critical":
-      return `Only ${remainingMessages} messages left! Sign up for unlimited access.`;
-    case "warning":
-      return `${remainingMessages} messages remaining. Consider signing up.`;
-    case "caution":
-      return `${remainingMessages} of 10 messages remaining.`;
-    default:
-      return "";
+  if (isAnonymous) {
+    // Anonymous user messages
+    switch (warningLevel.level) {
+      case "critical":
+        return `Only ${remainingMessages} messages left! Sign up for unlimited access.`;
+      case "warning":
+        return `${remainingMessages} messages remaining. Consider signing up.`;
+      default:
+        return "";
+    }
+  } else {
+    // Authenticated user messages
+    switch (warningLevel.level) {
+      case "critical":
+        return `Only ${remainingMessages} messages left in your plan!`;
+      case "warning":
+        return `${remainingMessages} messages remaining in your plan.`;
+      default:
+        return "";
+    }
   }
 }
 
 /**
  * Utility function to get rate limit exceeded message
  */
-export function getRateLimitExceededMessage(): string {
-  return "Message limit reached! Sign up to continue chatting or wait 24 hours for reset.";
+export function getRateLimitExceededMessage(
+  isAnonymous: boolean = true,
+): string {
+  if (isAnonymous) {
+    return "Message limit reached! Sign up to continue chatting or wait 24 hours for reset.";
+  } else {
+    return "Plan limit reached! Upgrade your plan or wait for reset to continue chatting.";
+  }
 }
 
 /**

@@ -18,7 +18,7 @@ const getPageTitle = (pathname: string) => {
     case "customization":
       return "Customization";
     case "history":
-      return "History & Sync";
+      return "History";
     case "models":
       return "Models";
     case "api-keys":
@@ -61,7 +61,7 @@ export function SettingsHeader() {
   };
 
   return (
-    <div className="flex items-center h-9 sm:h-12 p-3 bg-purple-100 dark:bg-dark-bg-secondary ">
+    <div className="sticky top-0 z-50 flex items-center h-9 sm:h-12 p-3 bg-purple-100 dark:bg-dark-bg-secondary border-b border-purple-200/60 dark:border-purple-800/50">
       <Button
         variant="ghost"
         size="sm"

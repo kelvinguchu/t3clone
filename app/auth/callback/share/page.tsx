@@ -40,7 +40,7 @@ export default async function AuthCallbackPage({ searchParams }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white dark:from-purple-950 dark:to-purple-900 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-white dark:from-dark-bg dark:to-purple-900 flex items-center justify-center px-4">
       <div className="w-full max-w-lg">
         <Suspense fallback={<AuthCallbackSkeleton />}>
           <AuthCallbackHandler token={token} action={action} userId={userId} />

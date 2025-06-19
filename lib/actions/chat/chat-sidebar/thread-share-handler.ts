@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -76,7 +76,7 @@ export function useThreadShare({
   const toggleShareMutation = useMutation(api.threads.toggleThreadShare);
 
   // Sync state with thread stats when available
-  useState(() => {
+  useEffect(() => {
     if (threadStats) {
       setIsPublic(threadStats.isPublic);
       setAllowCloning(threadStats.allowCloning);
@@ -86,7 +86,7 @@ export function useThreadShare({
         setShareUrl(`${baseUrl}/share/${threadStats.shareToken}`);
       }
     }
-  });
+  }, [threadStats]);
 
   // Actions
   const openDialog = useCallback(() => {

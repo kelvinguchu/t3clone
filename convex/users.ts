@@ -47,8 +47,6 @@ export const createUserSettings = mutation({
       theme: "system",
       enableWebSearch: false,
       enableImageGeneration: false,
-      hasCustomOpenAI: false,
-      hasCustomAnthropic: false,
       createdAt: now,
       updatedAt: now,
     });
@@ -67,8 +65,6 @@ export const updateUserSettings = mutation({
     codeTheme: v.optional(v.string()),
     enableWebSearch: v.optional(v.boolean()),
     enableImageGeneration: v.optional(v.boolean()),
-    hasCustomOpenAI: v.optional(v.boolean()),
-    hasCustomAnthropic: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -93,8 +89,6 @@ export const updateUserSettings = mutation({
         codeTheme: args.codeTheme,
         enableWebSearch: args.enableWebSearch || false,
         enableImageGeneration: args.enableImageGeneration || false,
-        hasCustomOpenAI: args.hasCustomOpenAI || false,
-        hasCustomAnthropic: args.hasCustomAnthropic || false,
         createdAt: now,
         updatedAt: now,
       });
@@ -109,8 +103,6 @@ export const updateUserSettings = mutation({
         codeTheme?: string;
         enableWebSearch?: boolean;
         enableImageGeneration?: boolean;
-        hasCustomOpenAI?: boolean;
-        hasCustomAnthropic?: boolean;
       } = {
         updatedAt: now,
       };
@@ -125,10 +117,6 @@ export const updateUserSettings = mutation({
         updates.enableWebSearch = args.enableWebSearch;
       if (args.enableImageGeneration !== undefined)
         updates.enableImageGeneration = args.enableImageGeneration;
-      if (args.hasCustomOpenAI !== undefined)
-        updates.hasCustomOpenAI = args.hasCustomOpenAI;
-      if (args.hasCustomAnthropic !== undefined)
-        updates.hasCustomAnthropic = args.hasCustomAnthropic;
 
       await ctx.db.patch(userSettings._id, updates);
       return userSettings._id;
@@ -316,5 +304,255 @@ export const checkUsageLimits = query({
       currentRequests: currentUsage.requestsCount,
       currentCostInCents: currentUsage.costInCents,
     };
+  },
+});
+
+// Plan-based rate limiting for authenticated users
+export const checkPlanLimit = query({
+  args: {
+    userId: v.string(),
+    plan: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || identity.subject !== args.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    const plan = args.plan || "free";
+    const limits = getPlanLimits(plan);
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
+    // For monthly limits, use month format YYYY-MM
+    const period =
+      limits.period === "monthly"
+        ? new Date().toISOString().slice(0, 7)
+        : today;
+
+    // Query existing usage for this period
+    const usage = await ctx.db
+      .query("usage")
+      .withIndex("by_user_month", (q) =>
+        q.eq("userId", args.userId).eq("month", period),
+      )
+      .first();
+
+    const currentCount = usage?.requestsCount || 0;
+    const remaining =
+      limits.daily === -1 ? -1 : Math.max(0, limits.daily - currentCount);
+
+    // Calculate reset time
+    let resetTime: number;
+    if (limits.period === "monthly") {
+      const nextMonth = new Date();
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      nextMonth.setDate(1);
+      nextMonth.setHours(0, 0, 0, 0);
+      resetTime = nextMonth.getTime();
+    } else {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      resetTime = tomorrow.getTime();
+    }
+
+    return {
+      canSend: limits.daily === -1 || remaining > 0,
+      remaining,
+      total: limits.daily,
+      resetTime,
+      used: currentCount,
+      percentage:
+        limits.daily === -1
+          ? 0
+          : Math.min(100, (currentCount / limits.daily) * 100),
+    };
+  },
+});
+
+// Increment user's message count for plan limiting
+export const incrementPlanUsage = mutation({
+  args: {
+    userId: v.string(),
+    plan: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || identity.subject !== args.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    const plan = args.plan || "free";
+    const limits = getPlanLimits(plan);
+
+    // For monthly limits, use month format YYYY-MM
+    const period =
+      limits.period === "monthly"
+        ? new Date().toISOString().slice(0, 7)
+        : new Date().toISOString().split("T")[0];
+
+    // Get existing usage
+    const existingUsage = await ctx.db
+      .query("usage")
+      .withIndex("by_user_month", (q) =>
+        q.eq("userId", args.userId).eq("month", period),
+      )
+      .first();
+
+    const currentCount = existingUsage?.requestsCount || 0;
+
+    // Check limit before incrementing
+    if (limits.daily !== -1 && currentCount >= limits.daily) {
+      return {
+        success: false,
+        remaining: 0,
+        total: limits.daily,
+        used: currentCount,
+      };
+    }
+
+    const now = Date.now();
+
+    if (existingUsage) {
+      // Update existing usage record
+      await ctx.db.patch(existingUsage._id, {
+        requestsCount: currentCount + 1,
+        updatedAt: now,
+      });
+    } else {
+      // Create new usage record
+      await ctx.db.insert("usage", {
+        userId: args.userId,
+        month: period,
+        tokensUsed: 0,
+        requestsCount: 1,
+        costInCents: 0,
+        providerUsage: {},
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const newCount = currentCount + 1;
+    const remaining =
+      limits.daily === -1 ? -1 : Math.max(0, limits.daily - newCount);
+
+    return {
+      success: true,
+      remaining,
+      total: limits.daily,
+      used: newCount,
+    };
+  },
+});
+
+// Get user's current usage stats for plan limiting
+export const getUserPlanStats = query({
+  args: {
+    userId: v.string(),
+    plan: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || identity.subject !== args.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    const plan = args.plan || "free";
+    const limits = getPlanLimits(plan);
+
+    // For monthly limits, use month format YYYY-MM
+    const period =
+      limits.period === "monthly"
+        ? new Date().toISOString().slice(0, 7)
+        : new Date().toISOString().split("T")[0];
+
+    const usage = await ctx.db
+      .query("usage")
+      .withIndex("by_user_month", (q) =>
+        q.eq("userId", args.userId).eq("month", period),
+      )
+      .first();
+
+    const used = usage?.requestsCount || 0;
+    const remaining =
+      limits.daily === -1 ? -1 : Math.max(0, limits.daily - used);
+
+    // Calculate reset time
+    let resetTime: number;
+    if (limits.period === "monthly") {
+      const nextMonth = new Date();
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      nextMonth.setDate(1);
+      nextMonth.setHours(0, 0, 0, 0);
+      resetTime = nextMonth.getTime();
+    } else {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      resetTime = tomorrow.getTime();
+    }
+
+    return {
+      used,
+      remaining,
+      total: limits.daily,
+      resetTime,
+      percentage:
+        limits.daily === -1 ? 0 : Math.min(100, (used / limits.daily) * 100),
+      plan,
+    };
+  },
+});
+
+// Helper function to get plan limits
+function getPlanLimits(plan: string): {
+  daily: number;
+  period: "daily" | "monthly";
+} {
+  const planLimits = {
+    free: { daily: 25, period: "daily" as const },
+    pro: { daily: 1500, period: "monthly" as const },
+  };
+
+  return planLimits[plan as keyof typeof planLimits] || planLimits.free;
+}
+
+// Reset user's usage (admin function)
+export const resetUserPlanUsage = mutation({
+  args: {
+    userId: v.string(),
+    plan: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || identity.subject !== args.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    const plan = args.plan || "free";
+    const limits = getPlanLimits(plan);
+
+    const period =
+      limits.period === "monthly"
+        ? new Date().toISOString().slice(0, 7)
+        : new Date().toISOString().split("T")[0];
+
+    const usage = await ctx.db
+      .query("usage")
+      .withIndex("by_user_month", (q) =>
+        q.eq("userId", args.userId).eq("month", period),
+      )
+      .first();
+
+    if (usage) {
+      await ctx.db.patch(usage._id, {
+        requestsCount: 0,
+        updatedAt: Date.now(),
+      });
+      return true;
+    }
+
+    return false;
   },
 });
