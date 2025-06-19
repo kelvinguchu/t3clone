@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -13,6 +13,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { CheckCircle, XCircle, Loader2, Copy } from "lucide-react";
+
+// Module-level cache to track in-flight clone requests across component remounts
+const inFlightCloneRequests = new Map<string, Promise<string>>();
 
 interface Props {
   token: string;
@@ -28,7 +31,6 @@ export function AuthCallbackHandler({ token, action, userId }: Props) {
   const [clonedThreadId, setClonedThreadId] = useState<string>("");
   const [hasProcessed, setHasProcessed] = useState(false);
   const [isExistingClone, setIsExistingClone] = useState(false);
-  const cloneRequestInFlight = useRef<Promise<string> | null>(null);
   const router = useRouter();
 
   // Get the shared thread to validate and display info
@@ -62,20 +64,19 @@ export function AuthCallbackHandler({ token, action, userId }: Props) {
       return;
     }
 
-    // If there's already a request in flight, wait for it instead of making a new one
-    if (cloneRequestInFlight.current) {
+    // Use module-level cache to handle Strict Mode remounts
+    if (inFlightCloneRequests.has(token)) {
       try {
-        const threadId = await cloneRequestInFlight.current;
+        const threadId = await inFlightCloneRequests.get(token)!;
         setClonedThreadId(threadId);
         setIsExistingClone(true); // Treat as existing since we reused the request
         setStatus("success");
         setHasProcessed(true);
-        // Cache the result
         localStorage.setItem(cacheKey, threadId);
         return;
       } catch {
         // If the in-flight request failed, we'll proceed with a new attempt
-        cloneRequestInFlight.current = null;
+        inFlightCloneRequests.delete(token);
       }
     }
 
@@ -117,13 +118,13 @@ export function AuthCallbackHandler({ token, action, userId }: Props) {
         newTitle: `${sharedThread.title} (Copy)`,
         idempotencyKey,
       });
-      cloneRequestInFlight.current = clonePromise;
+      inFlightCloneRequests.set(token, clonePromise);
 
       // Wait for the clone to complete
       const threadId = await clonePromise;
 
-      // Clear the in-flight request
-      cloneRequestInFlight.current = null;
+      // Clean up the in-flight request
+      inFlightCloneRequests.delete(token);
 
       setClonedThreadId(threadId);
       setIsExistingClone(false);
@@ -132,8 +133,8 @@ export function AuthCallbackHandler({ token, action, userId }: Props) {
       // Cache the successful result
       localStorage.setItem(cacheKey, threadId);
     } catch (error) {
-      // Clear the in-flight request on error
-      cloneRequestInFlight.current = null;
+      // Clean up the in-flight request on error
+      inFlightCloneRequests.delete(token);
 
       setStatus("error");
       // Handle different types of errors

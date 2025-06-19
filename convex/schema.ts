@@ -53,7 +53,7 @@ export default defineSchema({
     .index("by_updated", ["updatedAt"])
     .index("by_ip_hash", ["ipHash"])
     .index("by_original_thread", ["originalThreadId"]) // Index for finding clones of a thread
-    .index("by_user_original", ["userId", "originalThreadId"]), // Unique constraint for preventing duplicate clones
+    .index("by_user_original", ["userId", "originalThreadId"]),
 
   // Stream tracking for resumable streams
   streams: defineTable({

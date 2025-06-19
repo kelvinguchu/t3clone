@@ -231,6 +231,7 @@ function fingerprintKey(fingerprintHash: string) {
 export async function findSessionByFingerprint(
   fingerprintHash: string,
 ): Promise<AnonymousSessionData | null> {
+  if (!fingerprintHash) return null;
   try {
     const existingSessionId = await kv.get<string>(
       fingerprintKey(fingerprintHash),
@@ -239,8 +240,12 @@ export async function findSessionByFingerprint(
     if (!existingSessionId) return null;
 
     const session = await getAnonymousSession(existingSessionId);
-    return session;
-  } catch {
+    if (session && !session.isExpired) {
+      return session;
+    }
+    return null;
+  } catch (error) {
+    console.error("Error finding session by fingerprint:", error);
     return null;
   }
 }
@@ -253,47 +258,68 @@ export function getUserAgent(): string {
   return "unknown";
 }
 
-// Create new anonymous session in KV store
+// Create a new anonymous session, ensuring no race conditions
 export async function createAnonymousSession(
-  userAgent?: string,
-  ipHash?: string,
+  userAgent: string = "unknown",
+  ipHash: string = "unknown",
   fingerprintHash?: string,
 ): Promise<AnonymousSessionData> {
   const sessionId = generateSessionId();
   const now = Date.now();
 
-  const sessionData: AnonymousSessionData = {
+  const newSession: AnonymousSessionData = {
     sessionId,
     messageCount: 0,
     remainingMessages: SESSION_CONFIG.MAX_MESSAGES_PER_SESSION,
     createdAt: now,
     lastUsedAt: now,
-    userAgent: userAgent ?? getUserAgent(),
-    ipHash: ipHash ?? "unknown",
+    userAgent,
+    ipHash,
     isExpired: false,
-    fingerprintHash: fingerprintHash ?? "unknown",
-    trustScore: 25, // Start with low trust
+    fingerprintHash: fingerprintHash || "unknown",
+    trustScore: 10, // Start with a baseline trust
     trustLevel: "NEW",
-    behaviorScore: 50, // Neutral behavior score
+    behaviorScore: 0,
     lastFingerprintUpdate: now,
   };
 
-  // Store in KV with auto-expiration
-  await kv.set(`${SESSION_CONFIG.KV_PREFIX_SESSION}${sessionId}`, sessionData, {
-    ex: SESSION_CONFIG.EXPIRY_SECONDS,
-  });
+  try {
+    // Use a transaction to ensure atomicity if fingerprint is present
+    if (fingerprintHash) {
+      const key = fingerprintKey(fingerprintHash);
+      // SETNX: Set if not exists. If it returns 0, a session already exists.
+      const wasSet = await kv.set(key, sessionId, {
+        nx: true,
+        ex: SESSION_CONFIG.EXPIRY_SECONDS,
+      });
 
-  // Store fingerprint → sessionId mapping
-  if (fingerprintHash && fingerprintHash !== "unknown") {
-    await kv.set(fingerprintKey(fingerprintHash), sessionId, {
-      ex: SESSION_CONFIG.EXPIRY_SECONDS,
-    });
+      if (!wasSet) {
+        // A session for this fingerprint was created in another request.
+        // Fetch and return that session instead of creating a new one.
+        const existingSessionId = await kv.get<string>(key);
+        if (existingSessionId) {
+          const existingSession = await getAnonymousSession(existingSessionId);
+          if (existingSession) return existingSession;
+        }
+      }
+    }
+
+    // If we reach here, either no fingerprint or we won the race.
+    // Store the main session data.
+    await kv.set(
+      `${SESSION_CONFIG.KV_PREFIX_SESSION}${sessionId}`,
+      JSON.stringify(newSession),
+      { ex: SESSION_CONFIG.EXPIRY_SECONDS },
+    );
+    return newSession;
+  } catch (error) {
+    console.error("Error creating anonymous session:", error);
+    // In case of error, return a transient session object to avoid breaking the app
+    return { ...newSession, sessionId: `error_${uuidv4()}` };
   }
-
-  return sessionData;
 }
 
-// Get anonymous session from KV store
+// Get anonymous session data from KV store
 export async function getAnonymousSession(
   sessionId: string,
 ): Promise<AnonymousSessionData | null> {
@@ -326,29 +352,29 @@ export async function getAnonymousSession(
   }
 }
 
-// Update anonymous session in KV store
+// Update existing anonymous session data in KV store
 export async function updateAnonymousSession(
   sessionData: AnonymousSessionData,
 ): Promise<void> {
   try {
-    const updatedData = {
-      ...sessionData,
-      lastUsedAt: Date.now(),
-    };
-
-    // Update with fresh TTL
-    await kv.set(
-      `${SESSION_CONFIG.KV_PREFIX_SESSION}${sessionData.sessionId}`,
-      updatedData,
-      { ex: SESSION_CONFIG.EXPIRY_SECONDS },
-    );
+    const key = `${SESSION_CONFIG.KV_PREFIX_SESSION}${sessionData.sessionId}`;
+    // Check if the session still exists before updating
+    const sessionExists = await kv.exists(key);
+    if (!sessionExists) {
+      console.warn(
+        `Attempted to update a non-existent or expired session: ${sessionData.sessionId}`,
+      );
+      return;
+    }
+    await kv.set(key, JSON.stringify(sessionData), {
+      ex: SESSION_CONFIG.EXPIRY_SECONDS,
+    });
   } catch (error) {
     console.error("Error updating anonymous session:", error);
-    throw error;
   }
 }
 
-// Update behavior pattern for bot detection
+// Update user behavior patterns for bot detection
 export async function updateBehaviorPattern(
   sessionId: string,
   requestTime: number,
@@ -451,41 +477,41 @@ export async function updateTrustScore(
   }
 }
 
-// Increment message count for anonymous session
+// Increment message count and update session activity
 export async function incrementSessionMessageCount(
   sessionId: string,
 ): Promise<AnonymousSessionData | null> {
   try {
-    const sessionData = await getAnonymousSession(sessionId);
-    if (!sessionData) {
-      return null;
+    const session = await getAnonymousSession(sessionId);
+
+    if (!session) return null;
+
+    if (session.remainingMessages <= 0) {
+      console.warn(`Session ${sessionId} has no remaining messages.`);
+      return session; // No change if limit is reached
     }
 
-    if (sessionData.messageCount >= SESSION_CONFIG.MAX_MESSAGES_PER_SESSION) {
-      throw new Error("Message limit exceeded for anonymous session");
-    }
-
-    const updatedData = {
-      ...sessionData,
-      messageCount: sessionData.messageCount + 1,
-      remainingMessages:
-        SESSION_CONFIG.MAX_MESSAGES_PER_SESSION -
-        (sessionData.messageCount + 1),
+    const updatedSession = {
+      ...session,
+      messageCount: session.messageCount + 1,
+      remainingMessages: session.remainingMessages - 1,
       lastUsedAt: Date.now(),
     };
 
-    await updateAnonymousSession(updatedData);
+    await updateAnonymousSession(updatedSession);
+
+    // After updating, trigger behavior and trust analysis
     await updateBehaviorPattern(sessionId, Date.now());
     await updateTrustScore(sessionId);
 
-    return updatedData;
+    return updatedSession;
   } catch (error) {
     console.error("Error incrementing message count:", error);
-    throw error;
+    return null;
   }
 }
 
-// Delete anonymous session from KV store
+// Delete an anonymous session from all related KV keys
 export async function deleteAnonymousSession(sessionId: string): Promise<void> {
   try {
     await kv.del(`${SESSION_CONFIG.KV_PREFIX_SESSION}${sessionId}`);
@@ -497,97 +523,43 @@ export async function deleteAnonymousSession(sessionId: string): Promise<void> {
   }
 }
 
-// Multi-factor rate limiting without relying solely on IP
-export async function checkRateLimit(
-  sessionId: string,
-): Promise<{ allowed: boolean; reason?: string; trustLevel: string }> {
+// Check rate limit for an anonymous user
+export async function checkRateLimit(sessionId: string): Promise<{
+  allowed: boolean;
+  reason?: string;
+  trustLevel: keyof typeof SESSION_CONFIG.TRUST_LEVELS;
+}> {
   try {
     const session = await getAnonymousSession(sessionId);
-    if (!session) {
-      return { allowed: false, reason: "Session not found", trustLevel: "NEW" };
-    }
-
-    const trustKey = `${SESSION_CONFIG.KV_PREFIX_TRUST}${sessionId}`;
-    const trustData = await kv.get<TrustScore>(trustKey);
-    const trustLevel = trustData?.level || session.trustLevel;
+    const trustLevel = session?.trustLevel ?? "NEW";
     const limits = SESSION_CONFIG.TRUST_LEVELS[trustLevel];
 
     const key = `${SESSION_CONFIG.KV_PREFIX_RATE_LIMIT}${sessionId}`;
-    const now = Date.now();
-    const windowStart = now - limits.windowMs;
+    const pipeline = kv.pipeline();
+    pipeline.incr(key);
+    pipeline.expire(key, limits.windowMs / 1000);
+    const [count] = (await pipeline.exec()) as [number, number];
 
-    // Get current rate limit data
-    const rateLimitData = await kv.get<RateLimitData>(key);
-
-    if (!rateLimitData) {
-      // First request - create new rate limit entry
-      const newData: RateLimitData = {
-        count: 1,
-        windowStart: now,
-        lastRequest: now,
-        trustLevel,
-        behaviorScore: session.behaviorScore,
-      };
-
-      await kv.set(key, newData, { ex: Math.ceil(limits.windowMs / 1000) });
-      return { allowed: true, trustLevel };
-    }
-
-    // Check if we're in a new window
-    if (rateLimitData.windowStart < windowStart) {
-      // New window - reset count
-      const newData: RateLimitData = {
-        count: 1,
-        windowStart: now,
-        lastRequest: now,
-        trustLevel,
-        behaviorScore: session.behaviorScore,
-      };
-
-      await kv.set(key, newData, { ex: Math.ceil(limits.windowMs / 1000) });
-      return { allowed: true, trustLevel };
-    }
-
-    // Same window - check if under limit
-    if (rateLimitData.count >= limits.maxMessages) {
+    if (count > limits.maxMessages) {
       return {
         allowed: false,
-        reason: `Rate limit exceeded for trust level ${trustLevel}`,
+        reason: `Rate limit exceeded. Level: ${trustLevel}`,
         trustLevel,
       };
     }
 
-    // Check for suspicious behavior
-    const behaviorKey = `${SESSION_CONFIG.KV_PREFIX_BEHAVIOR}${sessionId}`;
-    const behaviorPattern = await kv.get<BehaviorPattern>(behaviorKey);
-
-    if (behaviorPattern && behaviorPattern.suspiciousActivities.length > 3) {
-      return {
-        allowed: false,
-        reason: "Suspicious behavior detected",
-        trustLevel,
-      };
-    }
-
-    // Increment count
-    const updatedData: RateLimitData = {
-      ...rateLimitData,
-      count: rateLimitData.count + 1,
-      lastRequest: now,
-      trustLevel,
-      behaviorScore: session.behaviorScore,
-    };
-
-    await kv.set(key, updatedData, { ex: Math.ceil(limits.windowMs / 1000) });
     return { allowed: true, trustLevel };
   } catch (error) {
     console.error("Error checking rate limit:", error);
-    // On error, allow the request (fail open) but with NEW trust level
-    return { allowed: true, trustLevel: "NEW" };
+    return {
+      allowed: false,
+      reason: "Rate limit check failed",
+      trustLevel: "NEW",
+    };
   }
 }
 
-// Client-side localStorage helpers for session identification
+// Helper to get session ID from browser storage
 export function getStoredSessionId(): string | null {
   if (typeof window === "undefined") return null;
 
@@ -604,7 +576,7 @@ export function storeSessionId(sessionId: string): void {
   try {
     localStorage.setItem("anonymous_session_id", sessionId);
   } catch {
-    // Ignore localStorage errors
+    console.error("Local storage is not available.");
   }
 }
 
@@ -614,11 +586,11 @@ export function removeStoredSessionId(): void {
   try {
     localStorage.removeItem("anonymous_session_id");
   } catch {
-    // Ignore localStorage errors
+    console.error("Local storage is not available.");
   }
 }
 
-// Format remaining time for display
+// Format remaining time for session expiry
 export function formatRemainingTime(sessionData: AnonymousSessionData): string {
   const now = Date.now();
   const expiresAt =
@@ -638,44 +610,20 @@ export function formatRemainingTime(sessionData: AnonymousSessionData): string {
   return `${minutes}m`;
 }
 
-// Main entry point for session management
+// Get or create an anonymous session
 export async function getOrCreateAnonymousSession(
   userAgent?: string,
   ipHash?: string,
   fingerprintHash?: string,
 ): Promise<AnonymousSessionData> {
-  // Try to get existing session ID from localStorage
-  const storedSessionId = getStoredSessionId();
-
-  if (storedSessionId) {
-    // Try to get existing session from KV
-    const existingSession = await getAnonymousSession(storedSessionId);
+  // 1. Try to find session by fingerprint first
+  if (fingerprintHash) {
+    const existingSession = await findSessionByFingerprint(fingerprintHash);
     if (existingSession) {
       return existingSession;
     }
-    // Session expired or not found, remove from localStorage
-    removeStoredSessionId();
   }
 
-  // Before creating, attempt fingerprint lookup (server only)
-  if (fingerprintHash && fingerprintHash !== "unknown") {
-    const fingerprintSession = await findSessionByFingerprint(fingerprintHash);
-    if (fingerprintSession) {
-      // Store in localStorage for future and return
-      storeSessionId(fingerprintSession.sessionId);
-      return fingerprintSession;
-    }
-  }
-
-  // Create new session
-  const newSession = await createAnonymousSession(
-    userAgent,
-    ipHash,
-    fingerprintHash,
-  );
-
-  // Store session ID in localStorage for client-side identification
-  storeSessionId(newSession.sessionId);
-
-  return newSession;
+  // 2. If not found, create a new session
+  return createAnonymousSession(userAgent, ipHash, fingerprintHash);
 }
