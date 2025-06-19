@@ -28,7 +28,7 @@ export function SharedThreadViewer({ shareToken }: Props) {
   const { isSignedIn, userId } = useAuth();
   const { redirectToSignIn } = useClerk();
 
-  // Get the shared thread
+  // Get the shared thread with error handling
   const sharedThread = useQuery(api.threads.getSharedThreadWithTracking, {
     shareToken,
     viewerId: userId || undefined,
@@ -92,8 +92,8 @@ export function SharedThreadViewer({ shareToken }: Props) {
       attachments: msg.attachments,
     })) || [];
 
-  // Loading state
-  if (sharedThread === undefined || messages === undefined) {
+  // Loading state - only show loading if we're still waiting for the thread data
+  if (sharedThread === undefined) {
     return (
       <div className="min-h-screen bg-purple-50 dark:bg-dark-bg">
         <div className="max-w-4xl mx-auto px-4 py-6">
@@ -132,6 +132,27 @@ export function SharedThreadViewer({ shareToken }: Props) {
           >
             Go to T3 Chat
           </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state for messages (when thread exists but messages are still loading)
+  if (messages === undefined) {
+    return (
+      <div className="min-h-screen bg-purple-50 dark:bg-dark-bg">
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="bg-white/70 dark:bg-dark-bg-secondary/70 rounded-lg p-6 border border-purple-200 dark:border-dark-purple-accent backdrop-blur-sm">
+            <div className="animate-pulse space-y-4">
+              <div className="h-6 bg-purple-200 dark:bg-dark-bg rounded w-3/4"></div>
+              <div className="h-4 bg-purple-100 dark:bg-gray-800 rounded w-1/2"></div>
+              <div className="space-y-3 mt-6">
+                <div className="h-4 bg-purple-100 dark:bg-gray-800 rounded"></div>
+                <div className="h-4 bg-purple-100 dark:bg-gray-800 rounded w-5/6"></div>
+                <div className="h-4 bg-purple-100 dark:bg-gray-800 rounded w-4/6"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );

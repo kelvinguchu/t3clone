@@ -291,17 +291,23 @@ export const toggleThreadShare = mutation({
     };
 
     if (args.isPublic) {
-      // Generate share token
-      updates.shareToken = crypto.randomUUID();
+      // Only generate a new share token if the thread is not already public
+      if (!thread.isPublic || !thread.shareToken) {
+        updates.shareToken = crypto.randomUUID();
+
+        // Initialize share metadata for new shares
+        updates.shareMetadata = {
+          viewCount: 0,
+          lastViewed: Date.now(),
+        };
+      } else {
+        // Keep existing token and metadata when just updating settings
+        updates.shareToken = thread.shareToken;
+        updates.shareMetadata = thread.shareMetadata;
+      }
 
       // Set cloning permission (default to true if not specified)
       updates.allowCloning = args.allowCloning ?? true;
-
-      // Initialize share metadata
-      updates.shareMetadata = {
-        viewCount: 0,
-        lastViewed: Date.now(),
-      };
 
       if (args.expiresInHours) {
         updates.shareExpiresAt =
@@ -334,16 +340,16 @@ export const getSharedThreadWithTracking = query({
       .unique();
 
     if (!thread) {
-      throw new Error("Shared thread not found");
+      return null;
     }
 
     // Check if share has expired
     if (thread.shareExpiresAt && thread.shareExpiresAt < Date.now()) {
-      throw new Error("Shared thread has expired");
+      return null;
     }
 
     if (!thread.isPublic) {
-      throw new Error("Thread is no longer public");
+      return null;
     }
 
     return thread;
