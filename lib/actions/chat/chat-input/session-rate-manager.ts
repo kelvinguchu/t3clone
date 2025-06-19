@@ -29,8 +29,8 @@ export interface SessionRateManagerReturn {
 
   // Warning levels
   warningLevel: {
-    color: "red" | "orange" | "yellow";
-    level: "critical" | "warning" | "caution";
+    color: "red" | "orange";
+    level: "critical" | "warning";
   } | null;
 
   // Button states

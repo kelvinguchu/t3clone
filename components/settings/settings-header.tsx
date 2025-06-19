@@ -61,7 +61,7 @@ export function SettingsHeader() {
   };
 
   return (
-    <div className="sticky top-0 z-50 flex items-center h-9 sm:h-12 p-3 bg-purple-100 dark:bg-dark-bg-secondary border-b border-purple-200/60 dark:border-purple-800/50">
+    <div className="sticky top-0 z-50 flex items-center h-9 sm:h-12 p-3 bg-purple-100 dark:bg-dark-bg-secondary">
       <Button
         variant="ghost"
         size="sm"
