@@ -11,6 +11,7 @@ import {
   useThreadCreator,
   useNewChatHandler,
 } from "@/lib/actions/chat/chat-sidebar";
+import { useInfiniteThreads } from "@/lib/hooks/use-infinite-threads";
 
 export function ChatSidebar() {
   const { isLoaded, user } = useUser();
@@ -27,16 +28,24 @@ export function ChatSidebar() {
   const { signOut } = useClerk();
   const router = useRouter();
 
+  // Lift useInfiniteThreads hook to the parent component
+  const { allThreads, refreshCache, ...infiniteThreadsData } =
+    useInfiniteThreads();
+
   // Use extracted thread creator
   const threadCreator = useThreadCreator(user);
 
-  // Use extracted new chat handler
+  // Use extracted new chat handler, now with refreshCache
   const handleNewChat = useNewChatHandler({
     user,
-    sessionId: null,
-    sessionData: null,
-    threadsData: [],
     threadCreator,
+    onNewThread: () => {
+      // Invalidate cache to show the new thread immediately
+      refreshCache();
+      if (isMobile) {
+        setOpenMobile(false);
+      }
+    },
   });
 
   const handleSignOut = async () => {
@@ -71,6 +80,11 @@ export function ChatSidebar() {
         user={user}
         isMobile={isMobile}
         setOpenMobile={setOpenMobile}
+        // Pass down all threads and the refresh function
+        allThreads={allThreads}
+        refreshCache={refreshCache}
+        // Pass down the rest of the infinite scroll data
+        {...infiniteThreadsData}
       />
 
       <ChatSidebarFooter

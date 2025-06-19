@@ -201,6 +201,7 @@ export function useInputStateManager({
   // Reset manual disable flag on thread change
   useEffect(() => {
     setUserManuallyDisabled(false);
+    setEnableWebBrowsing(false);
   }, [currentThreadKey]);
 
   // Initialize web browsing state from localStorage after mount

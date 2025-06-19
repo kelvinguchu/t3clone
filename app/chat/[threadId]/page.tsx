@@ -15,18 +15,24 @@ async function getThreadForMetadata(threadId: string) {
   try {
     const { userId, fetchOptions } = await getConvexFetchOptions();
     const cookieStore = await cookies();
+    const anonSessionId = cookieStore.get("anon_session_id")?.value;
 
     // For authenticated users, try to fetch the thread with Clerk token
     if (userId && fetchOptions) {
       return await fetchQuery(
         api.threads.getThread,
-        { threadId: threadId as Id<"threads"> },
+        {
+          threadId: threadId as Id<"threads">,
+          // ALSO pass sessionId if it exists. This covers the case where a user
+          // creates an anonymous thread and immediately signs in. The thread
+          // is still anonymous until claimed, but the metadata runs as authenticated.
+          ...(anonSessionId && { sessionId: anonSessionId }),
+        },
         fetchOptions,
       );
     }
 
     // For anonymous users, check if we have a session ID
-    const anonSessionId = cookieStore.get("anon_session_id")?.value;
     if (anonSessionId) {
       return await fetchQuery(
         api.threads.getThread,

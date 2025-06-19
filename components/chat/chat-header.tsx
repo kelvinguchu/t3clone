@@ -10,17 +10,19 @@ import {
   Plus,
   MoreVertical,
   X,
+  Download,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChatSearchDialog } from "./chat-search-dialog";
 import {
-  useThreadsFetcher,
   useThreadCreator,
   useNewChatHandler,
 } from "@/lib/actions/chat/chat-sidebar";
 import { useUser } from "@clerk/nextjs";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
+import { useThreadsCache } from "@/lib/contexts/threads-cache-context";
+import { usePWAInstall } from "@/hooks/use-pwa-install";
 
 export function ChatHeader() {
   const { open } = useSidebar();
@@ -31,6 +33,8 @@ export function ChatHeader() {
   // Theme functionality with safe mounting
   const [mounted, setMounted] = useState(false);
   const { setTheme, resolvedTheme } = useTheme();
+  const { invalidateCache } = useThreadsCache();
+  const { isInstallable, handleInstallClick } = usePWAInstall();
 
   // useEffect only runs on the client, so now we can safely show the UI
   useEffect(() => {
@@ -38,14 +42,14 @@ export function ChatHeader() {
   }, []);
 
   // Use extracted utilities for new chat functionality
-  const { threadsData, sessionId, sessionData } = useThreadsFetcher();
   const threadCreator = useThreadCreator(user);
   const handleNewChat = useNewChatHandler({
     user,
-    sessionId,
-    sessionData,
-    threadsData,
     threadCreator,
+    onNewThread: () => {
+      // Invalidate cache so sidebar updates immediately
+      invalidateCache();
+    },
   });
 
   return (
@@ -84,6 +88,17 @@ export function ChatHeader() {
           <div className="size-7 bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center">
             <div className="h-4 w-4 bg-purple-300 dark:bg-dark-purple-light rounded animate-pulse" />
           </div>
+        )}
+
+        {/* PWA Install button */}
+        {isInstallable && (
+          <button
+            className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center cursor-pointer"
+            title="Install App"
+            onClick={handleInstallClick}
+          >
+            <Download className="h-4 w-4" />
+          </button>
         )}
 
         {/* Search and New Chat buttons - animate in when sidebar is closed */}
@@ -203,13 +218,27 @@ export function ChatHeader() {
                 <button
                   className="w-full flex items-center gap-3 p-3 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary rounded-lg transition-colors cursor-pointer"
                   onClick={() => {
-                    // Handle settings
+                    router.push("/settings/account");
                     setMobileMenuOpen(false);
                   }}
                 >
                   <Settings className="h-5 w-5" />
                   <span className="font-medium">Settings</span>
                 </button>
+
+                {/* Install App button for mobile */}
+                {isInstallable && (
+                  <button
+                    className="w-full flex items-center gap-3 p-3 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary rounded-lg transition-colors cursor-pointer"
+                    onClick={() => {
+                      handleInstallClick();
+                      setMobileMenuOpen(false);
+                    }}
+                  >
+                    <Download className="h-5 w-5" />
+                    <span className="font-medium">Install App</span>
+                  </button>
+                )}
 
                 {/* Theme toggle button */}
                 {mounted ? (

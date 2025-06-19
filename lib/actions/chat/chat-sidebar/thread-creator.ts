@@ -3,6 +3,7 @@
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id, Doc } from "@/convex/_generated/dataModel";
+import { useAnonymousSession } from "@/lib/contexts/anonymous-session-context";
 
 export interface ThreadCreatorReturn {
   createThread: (args: {
@@ -12,9 +13,8 @@ export interface ThreadCreatorReturn {
   createAnonymousThread: (args: {
     title: string;
     model: string;
-    sessionId: string;
-    ipHash?: string;
   }) => Promise<Id<"threads">>;
+  isAnonymousSession: boolean;
 }
 
 /**
@@ -24,6 +24,8 @@ export interface ThreadCreatorReturn {
 export function useThreadCreator(
   user: { id: string } | null | undefined,
 ): ThreadCreatorReturn {
+  const { sessionId, isAnonymous } = useAnonymousSession();
+
   // Mutations with optimistic updates
   const createThread = useMutation(
     api.threads.createThread,
@@ -55,7 +57,7 @@ export function useThreadCreator(
     ]);
   });
 
-  const createAnonymousThread = useMutation(
+  const createAnonymousThreadMutation = useMutation(
     api.threads.createAnonymousThread,
   ).withOptimisticUpdate((localStore, args) => {
     const tempId = ("optimistic-" +
@@ -85,8 +87,19 @@ export function useThreadCreator(
     );
   });
 
+  const createAnonymousThread = async (args: {
+    title: string;
+    model: string;
+  }) => {
+    if (!sessionId) {
+      throw new Error("Session ID is required for anonymous thread creation.");
+    }
+    return createAnonymousThreadMutation({ ...args, sessionId });
+  };
+
   return {
     createThread,
     createAnonymousThread,
+    isAnonymousSession: isAnonymous,
   };
 }

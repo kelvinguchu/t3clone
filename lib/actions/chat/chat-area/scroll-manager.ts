@@ -4,7 +4,7 @@ export interface ScrollManagerState {
   isAtBottom: boolean;
   isSmoothScrolling: boolean;
   showScrollButton: boolean;
-  scrollToBottom: () => void;
+  scrollToBottom: (behavior?: "smooth" | "auto") => void;
   messagesContainerRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -19,20 +19,25 @@ export function useScrollManager(): ScrollManagerState {
   // Show scroll-to-bottom button when user is not at bottom (but hide during smooth scroll to prevent flicker)
   const showScrollButton = !isAtBottom && !isSmoothScrolling;
 
-  const scrollToBottom = useCallback(() => {
-    const el = messagesContainerRef.current;
-    if (!el) return;
+  const scrollToBottom = useCallback(
+    (behavior: "smooth" | "auto" = "smooth") => {
+      const el = messagesContainerRef.current;
+      if (!el) return;
 
-    // Set smooth scrolling state to prevent button flicker during animation
-    setIsSmoothScrolling(true);
-
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-
-    // Clear smooth scrolling state after animation completes
-    setTimeout(() => {
-      setIsSmoothScrolling(false);
-    }, 500); // Smooth scroll typically takes ~300-500ms
-  }, []);
+      if (behavior === "smooth") {
+        // Set smooth scrolling state to prevent button flicker during animation
+        setIsSmoothScrolling(true);
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+        // Clear smooth scrolling state after animation completes
+        setTimeout(() => {
+          setIsSmoothScrolling(false);
+        }, 500); // Smooth scroll typically takes ~300-500ms
+      } else {
+        el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+      }
+    },
+    [],
+  );
 
   // Attach scroll listener to toggle button visibility
   useEffect(() => {

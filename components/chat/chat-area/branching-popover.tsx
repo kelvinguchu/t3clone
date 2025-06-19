@@ -10,6 +10,7 @@ import { getAvailableModels, getModelInfo } from "@/lib/ai-providers";
 import { useModelStore } from "@/lib/stores/model-store";
 import { GitBranch } from "lucide-react";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useThreadsCache } from "@/lib/contexts/threads-cache-context";
 
 export interface BranchingPopoverProps {
   messageId: string;
@@ -35,6 +36,7 @@ export function BranchingPopover({
   const router = useRouter();
   const branchThread = useMutation(api.threads.branchThread);
   const { enabledModels, isReady } = useModelStore();
+  const { invalidateCache } = useThreadsCache();
 
   // Filter available models by enabled models from store
   const allAvailableModels = getAvailableModels();
@@ -86,6 +88,9 @@ export function BranchingPopover({
 
                       // Navigate to the new branched thread
                       router.push(`/chat/${newThreadId}`);
+
+                      // Invalidate the cache to show the new thread immediately
+                      invalidateCache();
 
                       // Close the popover
                       onOpenChange(false);

@@ -4,9 +4,9 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { SidebarMenu } from "@/components/ui/sidebar";
 import { Search, MessageSquare } from "lucide-react";
 import { ThreadItem } from "./thread-item";
-import { useInfiniteThreads } from "@/lib/hooks/use-infinite-threads";
 import { useThreadGrouping } from "@/lib/actions/chat/chat-sidebar";
 import type { GroupedThreads } from "./chat-sidebar-content";
+import type { Doc } from "@/convex/_generated/dataModel";
 
 export interface InfiniteThreadListProps {
   currentThreadId: string | null;
@@ -18,6 +18,16 @@ export interface InfiniteThreadListProps {
   hoveredThread: string | null;
   setHoveredThread: (threadId: string | null) => void;
   onThreadClick: () => void;
+  // Props from the lifted useInfiniteThreads hook
+  allThreads: Doc<"threads">[];
+  isLoading: boolean;
+  isLoadingMore: boolean;
+  hasNextPage: boolean;
+  loadMore: () => void;
+  error: Error | null;
+  isAnonymous: boolean;
+  sessionId: string | null;
+  refreshCache: () => void;
 }
 
 export function InfiniteThreadList({
@@ -29,6 +39,16 @@ export function InfiniteThreadList({
   hoveredThread,
   setHoveredThread,
   onThreadClick,
+  // Destructure the new props
+  allThreads,
+  isLoading,
+  isLoadingMore,
+  hasNextPage,
+  loadMore,
+  error,
+  isAnonymous,
+  sessionId,
+  refreshCache,
 }: Readonly<InfiniteThreadListProps>) {
   // Track if component has mounted to prevent SSR/client mismatch
   const [hasMounted, setHasMounted] = useState(false);
@@ -36,18 +56,6 @@ export function InfiniteThreadList({
   useEffect(() => {
     setHasMounted(true);
   }, []);
-
-  const {
-    allThreads,
-    isLoading,
-    isLoadingMore,
-    hasNextPage,
-    loadMore,
-    error,
-    isAnonymous,
-    sessionId,
-    refreshCache,
-  } = useInfiniteThreads();
 
   // Group threads for display
   const groupedThreads = useThreadGrouping(allThreads, searchQuery);

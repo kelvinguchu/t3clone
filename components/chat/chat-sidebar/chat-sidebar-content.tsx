@@ -20,6 +20,15 @@ export type ChatSidebarContentProps = {
   user: any;
   isMobile: boolean;
   setOpenMobile: (open: boolean) => void;
+  allThreads: Doc<"threads">[];
+  refreshCache: () => void;
+  isLoading: boolean;
+  isLoadingMore: boolean;
+  hasNextPage: boolean;
+  loadMore: () => void;
+  error: Error | null;
+  isAnonymous: boolean;
+  sessionId: string | null;
 };
 
 export function ChatSidebarContent({
@@ -28,6 +37,7 @@ export function ChatSidebarContent({
   user,
   isMobile,
   setOpenMobile,
+  ...infiniteThreadsData
 }: Readonly<ChatSidebarContentProps>) {
   const [hoveredThread, setHoveredThread] = useState<string | null>(null);
 
@@ -49,6 +59,7 @@ export function ChatSidebarContent({
         hoveredThread={hoveredThread}
         setHoveredThread={setHoveredThread}
         onThreadClick={handleThreadClick}
+        {...infiniteThreadsData}
       />
     </SidebarContent>
   );

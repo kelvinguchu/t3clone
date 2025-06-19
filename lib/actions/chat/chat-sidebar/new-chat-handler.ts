@@ -1,14 +1,11 @@
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { Doc } from "@/convex/_generated/dataModel";
 import type { ThreadCreatorReturn } from "./thread-creator";
 
 export interface NewChatHandlerParams {
   user: { id: string } | null | undefined;
-  sessionId: string | null;
-  sessionData: { ipHash?: string } | null;
-  threadsData: Doc<"threads">[];
   threadCreator: ThreadCreatorReturn;
+  onNewThread: () => void;
 }
 
 /**
@@ -17,16 +14,16 @@ export interface NewChatHandlerParams {
  */
 export function useNewChatHandler({
   user,
-  sessionId,
-  sessionData,
-  threadsData,
   threadCreator,
+  onNewThread,
 }: NewChatHandlerParams) {
   const router = useRouter();
   const { createThread, createAnonymousThread } = threadCreator;
 
   return useCallback(async () => {
-    if (!user && !sessionId) return;
+    // For anonymous users, the check now happens within useInfiniteThreads
+    // and the canSendMessage prop on the chat input, so we can simplify here.
+    if (!user && !threadCreator.isAnonymousSession) return;
 
     try {
       let threadId;
@@ -38,17 +35,8 @@ export function useNewChatHandler({
           model: "gemini-2.0-flash",
         });
       } else {
-        // Anonymous user
-        if ((threadsData?.length || 0) >= 5) {
-          alert(
-            "You've reached the conversation limit. Please sign in for unlimited chats.",
-          );
-          return;
-        }
-
+        // Anonymous user - rely on the session from threadCreator
         threadId = await createAnonymousThread({
-          sessionId: sessionId!,
-          ipHash: sessionData?.ipHash ?? "unknown",
           title: "New Chat",
           model: "gemini-2.0-flash",
         });
@@ -57,17 +45,18 @@ export function useNewChatHandler({
       // Navigate to the new thread
       if (threadId) {
         router.push(`/chat/${threadId}`);
+        // Call the callback to trigger cache invalidation
+        onNewThread();
       }
     } catch {
       // Failed to create new chat
     }
   }, [
     user,
-    sessionId,
-    sessionData,
-    threadsData,
+    threadCreator,
     createThread,
     createAnonymousThread,
     router,
+    onNewThread,
   ]);
 }

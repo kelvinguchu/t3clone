@@ -515,6 +515,20 @@ const ChatArea = memo(function ChatArea({
   const { messagesContainerRef, showScrollButton, scrollToBottom } =
     useScrollManager();
 
+  const initialScrollDone = useRef(false);
+
+  // When historical messages load for the first time, scroll to the bottom.
+  useEffect(() => {
+    if (historicalMessages && !initialScrollDone.current) {
+      scrollToBottom("auto");
+      initialScrollDone.current = true;
+    }
+    // Reset when navigating to a new thread
+    if (!initialThreadId) {
+      initialScrollDone.current = false;
+    }
+  }, [historicalMessages, initialThreadId, scrollToBottom]);
+
   // Track chat input height for dynamic scroll button positioning
   const [inputHeight, setInputHeight] = useState(140);
 
@@ -640,7 +654,7 @@ const ChatArea = memo(function ChatArea({
       >
         <div className="flex justify-center">
           <LiquidGlassButton
-            onClick={scrollToBottom}
+            onClick={() => scrollToBottom()}
             transparency={10}
             noise={50}
             className="dark:shadow-none"

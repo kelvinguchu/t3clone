@@ -45,10 +45,11 @@ export async function POST(req: NextRequest) {
   const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   try {
-    const { userId, fetchOptions } = await getConvexFetchOptions();
-    const body = await req.json();
+    const [{ userId, fetchOptions }, body] = await Promise.all([
+      getConvexFetchOptions(),
+      req.json(),
+    ]);
 
-    // Validate request and extract parameters
     const threadIdHeader =
       req.headers.get("x-thread-id") ?? req.headers.get("X-Thread-Id");
     const { validation, data } = validateChatRequest(body, threadIdHeader);
@@ -75,73 +76,56 @@ export async function POST(req: NextRequest) {
       attachmentIds = [],
       enableWebBrowsing = false,
     } = data!;
+    const originalMessages = messages;
 
-    // Request parameters extracted and validated
-
-    // Extract session info early (needed for Convex queries)
-    const { sessionId, remainingMessages: defaultRemainingMessages } =
+    const { sessionId /*, remainingMessages: defaultRemainingMessages */ } =
       await resolveSessionInfo(req, userId);
-    let remainingMessages = defaultRemainingMessages;
 
-    // Smart message handling: detect retries vs new messages
-    // Retries use database history, new messages use client data
-    let messagesForAI: CoreMessage[] = [];
-    let isRetryFromConvex = false;
-    const originalMessages = messages; // Keep original messages for functions that need Message[]
+    const [
+      rateLimitResult,
+      modelSetup,
+      dynamicSystemPrompt,
+      retryQueryData,
+      threadCreationData,
+    ] = await Promise.all([
+      checkAnonymousRateLimit(userId, sessionId),
 
-    // Only check for Convex history if this might be a retry AND we have an existing thread
-    if (threadId && messages.length > 1) {
-      try {
-        // Load recent conversation history from Convex (limited to last 10 messages for context)
-        const existingMessages = await fetchQuery(
-          api.messages.getRecentThreadMessages,
-          {
-            threadId: threadId as Id<"threads">,
-            limit: 10, // Only get last 10 messages for context injection
-            ...(sessionId && { sessionId }),
-          },
-          fetchOptions,
-        );
+      setupModelConfiguration(
+        modelId,
+        enableWebBrowsing,
+        userId ?? undefined,
+        fetchOptions,
+      ),
 
-        if (existingMessages && existingMessages.length > 0) {
-          // Check if this is actually a retry by comparing the last user message
-          const lastUserMessageFromClient = messages
-            .filter((msg) => msg.role === "user")
-            .pop();
+      import("@/lib/ai-providers")
+        .then((m) => m.getDynamicSystemPrompt(userId ?? undefined))
+        .catch(() => null), // Prevent rejection
 
-          const lastUserMessageFromDB = existingMessages
-            .filter((msg) => msg.role === "user")
-            .pop();
+      threadId && messages.length > 1
+        ? fetchQuery(
+            api.messages.getRecentThreadMessages,
+            {
+              threadId: threadId as Id<"threads">,
+              limit: 10,
+              ...(sessionId && { sessionId }),
+            },
+            fetchOptions,
+          ).catch(() => null) // Prevent rejection
+        : Promise.resolve(null),
 
-          // Only use Convex history if the last user messages match exactly (indicating a retry)
-          const isActualRetry =
-            lastUserMessageFromClient &&
-            lastUserMessageFromDB &&
-            lastUserMessageFromClient.content === lastUserMessageFromDB.content;
+      !threadId
+        ? createThreadIfNeeded(
+            null,
+            messages,
+            modelId,
+            userId,
+            sessionId,
+            fetchOptions,
+            requestId,
+          ).catch(() => ({ success: false, threadId: null })) // Prevent rejection
+        : Promise.resolve({ success: true, threadId }),
+    ]);
 
-          if (isActualRetry) {
-            // Retry detected: use conversation history from database
-            messagesForAI = existingMessages.map((msg) => ({
-              role: msg.role as "user" | "assistant" | "system",
-              content: msg.content,
-            }));
-
-            isRetryFromConvex = true;
-          } else {
-            // New message: use client-provided messages
-          }
-        } else if (existingMessages === null) {
-          // Thread was deleted: fall back to client messages
-        }
-      } catch {
-        // Convex query failed: fall back to client messages
-      }
-    }
-
-    // Session info already extracted earlier
-
-    // QUICK rate limit check for anonymous users (non-blocking)
-    const rateLimitResult = await checkAnonymousRateLimit(userId, sessionId);
     if (!rateLimitResult.allowed) {
       return new Response(
         JSON.stringify({
@@ -151,21 +135,43 @@ export async function POST(req: NextRequest) {
         { status: 429, headers: { "Content-Type": "application/json" } },
       );
     }
-    remainingMessages = rateLimitResult.remainingMessages;
+    const remainingMessages = rateLimitResult.remainingMessages;
 
-    // Setup model configuration early to get capabilities for multimodal processing
-    const { model, modelConfig, tools, toolChoice } =
-      await setupModelConfiguration(
-        modelId,
-        enableWebBrowsing,
-        userId ?? undefined,
-        fetchOptions,
-      );
+    const { model, modelConfig, tools, toolChoice } = modelSetup;
 
-    // Process multimodal messages for all new messages (not retries)
-    // This handles blob URL filtering and proper CoreMessage conversion
+    let earlyThreadId = threadId; // Start with the ID from the request
+    if (threadCreationData?.success && threadCreationData.threadId) {
+      earlyThreadId = threadCreationData.threadId;
+    }
+
+    let messagesForAI: CoreMessage[] = [];
+    let isRetryFromConvex = false;
+    const existingMessages = retryQueryData;
+
+    if (threadId && existingMessages && existingMessages.length > 0) {
+      const lastUserMessageFromClient = messages
+        .filter((msg) => msg.role === "user")
+        .pop();
+      const lastUserMessageFromDB = existingMessages
+        .filter((msg) => msg.role === "user")
+        .pop();
+
+      const isActualRetry =
+        lastUserMessageFromClient &&
+        lastUserMessageFromDB &&
+        lastUserMessageFromClient.content === lastUserMessageFromDB.content;
+
+      if (isActualRetry) {
+        messagesForAI = existingMessages.map((msg) => ({
+          role: msg.role as "user" | "assistant" | "system",
+          content: msg.content,
+        }));
+        isRetryFromConvex = true;
+      }
+    }
+
     if (!isRetryFromConvex) {
-      const processedCoreMessages = await processMultimodalMessages(
+      messagesForAI = await processMultimodalMessages(
         originalMessages,
         attachmentIds,
         fetchOptions,
@@ -175,45 +181,9 @@ export async function POST(req: NextRequest) {
           fileAttachments: modelConfig.capabilities.fileAttachments,
         },
       );
-
-      // Use the processed core messages directly - they're already in CoreMessage format
-      // The multimodal processor has already converted and filtered messages properly
-      messagesForAI = processedCoreMessages;
     }
 
-    // Early thread creation (needed for X-Thread-Id header)
-    let earlyThreadId: string | null = threadId ?? null;
-
-    if (!earlyThreadId) {
-      try {
-        const threadRes = await createThreadIfNeeded(
-          null,
-          messages,
-          modelId,
-          userId,
-          sessionId,
-          fetchOptions,
-          requestId,
-        );
-        if (threadRes.success && threadRes.threadId) {
-          earlyThreadId = threadRes.threadId;
-        }
-      } catch {
-        // Thread creation failed: continue without early ID
-      }
-    }
-
-    // Model configuration was already set up earlier for multimodal processing
-
-    // Get dynamic system prompt for the user (if customization preferences are set)
-    const { getDynamicSystemPrompt } = await import("@/lib/ai-providers");
-    const dynamicSystemPrompt = await getDynamicSystemPrompt(
-      userId ?? undefined,
-    );
-
-    // If we received a dynamic system prompt, prepend it as a system message
     if (dynamicSystemPrompt) {
-      // Avoid duplicating system messages if one already exists at the front
       if (
         messagesForAI.length === 0 ||
         messagesForAI[0].role !== "system" ||
@@ -225,9 +195,6 @@ export async function POST(req: NextRequest) {
         ];
       }
     }
-
-    // Start AI streaming immediately for optimal performance
-    // Database operations happen in background via onFinish callback
 
     const result = streamText({
       model,
@@ -262,7 +229,9 @@ export async function POST(req: NextRequest) {
       },
 
       onFinish: async (result) => {
-        // Background processing after stream completes
+        // Background processing after stream completes. This is now a blocking
+        // operation again to ensure message IDs are persisted before the
+        // stream finishes, preventing branching errors on the client.
         // Handle session management for anonymous users
         let finalThreadId = earlyThreadId ?? threadId;
         let finalSessionId = sessionId;
@@ -392,25 +361,23 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Cache conversation context
-        await cacheConversationContext(
-          finalThreadId,
-          originalMessages, // Use original Message[] format for caching
-          modelId,
-          requestId,
-        );
-
-        // Track usage for authenticated users
-        await trackUsage(
-          userId,
-          result.usage,
-          modelConfig,
-          fetchOptions,
-          requestId,
-        );
-
-        // Cleanup browser sessions
-        await cleanupBrowserSessions(requestId);
+        // After saving messages, run final independent operations in parallel
+        await Promise.all([
+          cacheConversationContext(
+            finalThreadId,
+            originalMessages, // Use original Message[] format for caching
+            modelId,
+            requestId,
+          ),
+          trackUsage(
+            userId,
+            result.usage,
+            modelConfig,
+            fetchOptions,
+            requestId,
+          ),
+          cleanupBrowserSessions(requestId),
+        ]);
       },
 
       onError: () => {
@@ -498,7 +465,6 @@ export async function POST(req: NextRequest) {
         message: userMessage,
         technical_message:
           error instanceof Error ? error.message : "Unknown error",
-        retryable: status !== 401, // Don't retry auth errors
       }),
       {
         status,

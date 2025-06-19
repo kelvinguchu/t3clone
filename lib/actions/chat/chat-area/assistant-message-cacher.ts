@@ -6,6 +6,7 @@ import {
   generateThreadTitleClient,
   shouldUpdateTitle,
 } from "@/lib/title-generator";
+import { useThreadsCache } from "@/lib/contexts/threads-cache-context";
 
 export interface AssistantMessageCacherParams {
   isLoading: boolean;
@@ -33,6 +34,8 @@ export function useAssistantMessageCaching({
   threadMeta,
   updateThreadMutation,
 }: AssistantMessageCacherParams): void {
+  const { invalidateCache } = useThreadsCache();
+
   useEffect(() => {
     const cacheAssistantMessages = async () => {
       if (!isLoading && threadId && effectiveMessages.length > 0) {
@@ -77,6 +80,8 @@ export function useAssistantMessageCaching({
                     ? { sessionId: anonSessionId }
                     : {}),
                 });
+                // Invalidate the threads cache to show the new title immediately
+                invalidateCache();
                 // Auto-updated thread title from AI response
               } catch {
                 // Failed to auto-update thread title from AI response
@@ -104,5 +109,6 @@ export function useAssistantMessageCaching({
     anonSessionId,
     threadMeta,
     updateThreadMutation,
+    invalidateCache,
   ]);
 }

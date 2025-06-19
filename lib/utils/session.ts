@@ -78,7 +78,7 @@ export interface AnonymousSessionData {
   createdAt: number;
   lastUsedAt: number;
   userAgent: string;
-  ipHash: string; 
+  ipHash: string;
   isExpired: boolean;
   fingerprintHash: string;
   trustScore: number;
