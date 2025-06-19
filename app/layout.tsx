@@ -13,6 +13,7 @@ import { ThemeProvider } from "next-themes";
 import { NextSSRPlugin } from "@uploadthing/react/next-ssr-plugin";
 import { extractRouterConfig } from "uploadthing/server";
 import { ourFileRouter } from "@/app/api/uploadthing/core";
+import { ModelStoreSync } from "@/components/ModelStoreSync";
 
 const rubik = Rubik({
   variable: "--font-rubik",
@@ -100,17 +101,19 @@ export default function RootLayout({
         >
           <ClerkProvider dynamic>
             <ConvexClientProvider>
-              <FilePreviewProvider>
-                <AnonymousSessionProvider>
-                  <ThreadsCacheProvider>
-                    <HotkeyProvider>
-                      {children}
-                      <GlobalChatSearch />
-                      <Toaster />
-                    </HotkeyProvider>
-                  </ThreadsCacheProvider>
-                </AnonymousSessionProvider>
-              </FilePreviewProvider>
+              <ModelStoreSync>
+                <FilePreviewProvider>
+                  <AnonymousSessionProvider>
+                    <ThreadsCacheProvider>
+                      <HotkeyProvider>
+                        {children}
+                        <GlobalChatSearch />
+                        <Toaster />
+                      </HotkeyProvider>
+                    </ThreadsCacheProvider>
+                  </AnonymousSessionProvider>
+                </FilePreviewProvider>
+              </ModelStoreSync>
             </ConvexClientProvider>
           </ClerkProvider>
         </ThemeProvider>
