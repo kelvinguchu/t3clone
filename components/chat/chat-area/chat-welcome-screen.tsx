@@ -55,7 +55,6 @@ const promptCategories = {
 };
 
 export type ChatWelcomeScreenProps = {
-  mounted: boolean;
   isLoaded: boolean;
   isAnonymous: boolean;
   canSendMessage: boolean;
@@ -70,7 +69,6 @@ export type ChatWelcomeScreenProps = {
 };
 
 export function ChatWelcomeScreen({
-  mounted,
   isLoaded,
   isAnonymous,
   canSendMessage,
@@ -105,7 +103,7 @@ export function ChatWelcomeScreen({
             <div className="p-1 sm:p-1.5 md:p-2 rounded-md sm:rounded-lg md:rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 shadow-lg shadow-blue-500/25 animate-bounce delay-300">
               <Brain className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5 lg:h-6 lg:w-6 text-white" />
             </div>
-            {mounted && isLoaded && isAnonymous && (
+            {isLoaded && isAnonymous && (
               <div className="p-1 sm:p-1.5 md:p-2 rounded-md sm:rounded-lg md:rounded-xl bg-gradient-to-br from-orange-500 to-red-500 shadow-lg shadow-orange-500/25 animate-bounce delay-500">
                 <UserIcon className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5 lg:h-6 lg:w-6 text-white" />
               </div>
@@ -121,7 +119,7 @@ export function ChatWelcomeScreen({
             </span>
           </h1>
           <p
-            className={`text-xs sm:text-sm md:text-base font-medium mb-3 sm:mb-4 md:mb-6 lg:mb-8 px-1 sm:px-2 ${
+            className={`text-xs sm:text-sm md:text-base font-medium mb-3 sm:mb-4 md:mb-6 lg:mb-8 px-1 sm:px-2 min-h-[1.5rem] ${
               isAnonymous && !canSendMessage
                 ? "text-red-600/80 dark:text-red-400/80"
                 : isAnonymous

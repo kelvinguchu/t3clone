@@ -14,6 +14,7 @@ import { NextSSRPlugin } from "@uploadthing/react/next-ssr-plugin";
 import { extractRouterConfig } from "uploadthing/server";
 import { ourFileRouter } from "@/app/api/uploadthing/core";
 import { ModelStoreSync } from "@/components/ModelStoreSync";
+import { IncognitoBlocker } from "@/components/incognito-blocker";
 
 const rubik = Rubik({
   variable: "--font-rubik",
@@ -99,7 +100,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <ClerkProvider dynamic>
+          <ClerkProvider>
             <ConvexClientProvider>
               <ModelStoreSync>
                 <FilePreviewProvider>
@@ -109,6 +110,7 @@ export default function RootLayout({
                         {children}
                         <GlobalChatSearch />
                         <Toaster />
+                        <IncognitoBlocker />
                       </HotkeyProvider>
                     </ThreadsCacheProvider>
                   </AnonymousSessionProvider>

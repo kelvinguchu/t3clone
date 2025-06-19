@@ -54,6 +54,7 @@ import {
 import { useModelStore } from "@/lib/stores/model-store";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePlanLimits } from "@/lib/hooks/use-plan-limits";
+import ErrorBoundary from "@/components/error-boundary";
 
 type DisplayMessage = {
   role: "user" | "assistant" | "system";
@@ -241,19 +242,23 @@ const ChatArea = memo(function ChatArea({
   const handleRetryWithCleanup = useCallback(async (): Promise<
     string | null | undefined
   > => {
-    await handleRetryMessage({
-      threadId,
-      status,
-      hookMessages: stableMessages, // Use stable messages
-      selectedModel,
-      data,
-      removeLastAssistantMessage,
-      isAnonymous,
-      anonSessionId,
-      setMessages,
-      reload,
-      sendMessage,
-    });
+    try {
+      await handleRetryMessage({
+        threadId,
+        status,
+        hookMessages: stableMessages, // Use stable messages
+        selectedModel,
+        data,
+        removeLastAssistantMessage,
+        isAnonymous,
+        anonSessionId,
+        setMessages,
+        reload,
+        sendMessage,
+      });
+    } catch (error) {
+      onChatError(error as Error);
+    }
     // Return undefined to match the expected signature
     return undefined;
   }, [
@@ -268,6 +273,7 @@ const ChatArea = memo(function ChatArea({
     setMessages,
     reload,
     sendMessage,
+    onChatError,
   ]);
 
   // Memoize useAutoResume configuration
@@ -395,35 +401,27 @@ const ChatArea = memo(function ChatArea({
 
   const hasMessages = displayMessages.length > 0;
 
-  // Memoize mounted state to prevent unnecessary re-renders
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   // Stable user display functions for welcome screen
   const getUserGreetingMemo = useCallback(
     () =>
       getUserGreeting({
         user,
-        mounted,
         isAnonymous,
         remainingMessages,
         canSendMessage,
       }),
-    [user, mounted, isAnonymous, remainingMessages, canSendMessage],
+    [user, isAnonymous, remainingMessages, canSendMessage],
   );
 
   const getUserSubtextMemo = useCallback(
     () =>
       getUserSubtext({
         user,
-        mounted,
         isAnonymous,
         canSendMessage,
         remainingMessages,
       }),
-    [user, mounted, isAnonymous, canSendMessage, remainingMessages],
+    [user, isAnonymous, canSendMessage, remainingMessages],
   );
 
   // Quick-prompt state for welcome screen interactions
@@ -452,38 +450,42 @@ const ChatArea = memo(function ChatArea({
       }>,
       options?: { enableWebBrowsing?: boolean },
     ) => {
-      // Check plan limits for authenticated users
-      if (!isAnonymous && !planLimits.canSend) {
-        return;
-      }
-
-      // Increment usage for authenticated users before sending
-      if (!isAnonymous) {
-        const incrementSuccess = await planLimits.incrementUsage();
-        if (!incrementSuccess) {
+      try {
+        // Check plan limits for authenticated users
+        if (!isAnonymous && !planLimits.canSend) {
           return;
         }
-      }
 
-      await handleMessageSend(
-        message,
-        attachmentIds,
-        attachmentPreviews,
-        options,
-        {
-          sendMessage,
-          selectedModel,
-          initialThreadId,
-          isAnonymous,
-          anonSessionId,
-          threadId,
-          threadMeta: threadMeta || null,
-          updateThreadMutation,
-          setPendingBrowsing,
-          setPendingThinking,
-          setPrefillMessage,
-        },
-      );
+        // Increment usage for authenticated users before sending
+        if (!isAnonymous) {
+          const incrementSuccess = await planLimits.incrementUsage();
+          if (!incrementSuccess) {
+            return;
+          }
+        }
+
+        await handleMessageSend(
+          message,
+          attachmentIds,
+          attachmentPreviews,
+          options,
+          {
+            sendMessage,
+            selectedModel,
+            initialThreadId,
+            isAnonymous,
+            anonSessionId,
+            threadId,
+            threadMeta: threadMeta || null,
+            updateThreadMutation,
+            setPendingBrowsing,
+            setPendingThinking,
+            setPrefillMessage,
+          },
+        );
+      } catch (error) {
+        onChatError(error as Error);
+      }
     },
     [
       sendMessage,
@@ -498,6 +500,7 @@ const ChatArea = memo(function ChatArea({
       setPendingThinking,
       setPrefillMessage,
       planLimits,
+      onChatError,
     ],
   );
 
@@ -578,30 +581,46 @@ const ChatArea = memo(function ChatArea({
         className="flex-1 overflow-y-auto min-h-0 pt-12 md:pt-0 pb-32 md:pb-4"
         ref={messagesContainerRef}
       >
-        {hasMessages ? (
-          <ChatMessages
-            messages={displayMessages}
-            isLoading={isLoading}
-            loadingStatusText={loadingStatusText}
-            threadId={initialThreadId}
-            reload={handleRetryWithCleanup}
-            isThinkingPhase={isThinkingPhase}
-            shouldShowThinkingDisplay={shouldShowThinkingDisplay}
-            hasStartedResponding={hasStartedResponding}
-          />
-        ) : (
-          <ChatWelcomeScreen
-            mounted={mounted}
-            isLoaded={!!user}
-            isAnonymous={isAnonymous}
-            canSendMessage={canSendMessage}
-            isLoading={isLoading}
-            floatingColors={floatingColors}
-            getUserGreeting={getUserGreetingMemo}
-            getUserSubtext={getUserSubtextMemo}
-            handleQuickPrompt={handleQuickPrompt}
-          />
-        )}
+        <ErrorBoundary
+          fallbackRender={({ error }) => (
+            <div className="p-4">
+              <ErrorDisplay
+                error={error}
+                onRetry={() => {
+                  router.refresh();
+                }}
+                onDismiss={() => {
+                  router.refresh();
+                }}
+                retryable={true}
+              />
+            </div>
+          )}
+        >
+          {hasMessages ? (
+            <ChatMessages
+              messages={displayMessages}
+              isLoading={isLoading}
+              loadingStatusText={loadingStatusText}
+              threadId={initialThreadId}
+              reload={handleRetryWithCleanup}
+              isThinkingPhase={isThinkingPhase}
+              shouldShowThinkingDisplay={shouldShowThinkingDisplay}
+              hasStartedResponding={hasStartedResponding}
+            />
+          ) : (
+            <ChatWelcomeScreen
+              isLoaded={!!user}
+              isAnonymous={isAnonymous}
+              canSendMessage={canSendMessage}
+              isLoading={isLoading}
+              floatingColors={floatingColors}
+              getUserGreeting={getUserGreetingMemo}
+              getUserSubtext={getUserSubtextMemo}
+              handleQuickPrompt={handleQuickPrompt}
+            />
+          )}
+        </ErrorBoundary>
       </div>
 
       {/* Error Display */}

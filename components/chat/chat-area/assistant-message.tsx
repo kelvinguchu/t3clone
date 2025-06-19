@@ -141,7 +141,7 @@ export function AssistantMessage({
 
   const isLatestFromDB = useQuery(
     api.messages.isLatestAssistantMessage,
-    shouldQueryDB
+    shouldQueryDB && sessionId !== null
       ? {
           messageId: msg.id as Id<"messages">,
           ...(sessionId ? { sessionId } : {}),

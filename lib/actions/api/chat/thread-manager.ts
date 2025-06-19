@@ -16,6 +16,7 @@ export async function createThreadIfNeeded(
   modelId: ModelId,
   userId: string | null,
   finalSessionId: string | null,
+  ipHash: string | null,
   fetchOptions?: { token: string },
   requestId?: string,
 ): Promise<ThreadCreationResult> {
@@ -60,6 +61,7 @@ export async function createThreadIfNeeded(
         sessionId: finalSessionId,
         title: smartTitle,
         model: modelId,
+        ipHash: ipHash ?? undefined,
       });
     }
 

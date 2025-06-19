@@ -39,18 +39,21 @@ export interface UseInfiniteThreadsReturn {
  */
 export function useInfiniteThreads(): UseInfiniteThreadsReturn {
   const { isLoaded, user } = useUser();
-  const { sessionId } = useAnonymousSession();
+  const { sessionId, isMigrating, hasMigrated } = useAnonymousSession();
   const { getCachedThreads, setCachedThreads, invalidateCache, isCacheValid } =
     useThreadsCache();
 
-  // Generate cache key based on user/session
+  // Generate cache key based on user/session and migration state
   const cacheKey = useMemo(() => {
-    return user?.id
-      ? `user:${user.id}`
-      : sessionId
-        ? `session:${sessionId}`
-        : "none";
-  }, [user?.id, sessionId]);
+    // During migration, keep using session cache until migration completes
+    if (user?.id && (!isMigrating || hasMigrated)) {
+      return `user:${user.id}`;
+    } else if (sessionId) {
+      return `session:${sessionId}`;
+    } else {
+      return "none";
+    }
+  }, [user?.id, sessionId, isMigrating, hasMigrated]);
 
   // Track if we've initialized from cache
   const initializedFromCache = useRef(false);
@@ -68,6 +71,15 @@ export function useInfiniteThreads(): UseInfiniteThreadsReturn {
     }
     lastCacheKey.current = cacheKey;
   }, [cacheKey, cacheKeyChanged, invalidateCache]);
+
+  // Clear cache when migration completes to refresh with claimed threads
+  useEffect(() => {
+    if (user && hasMigrated && !isMigrating) {
+      // Migration just completed, invalidate cache to refresh with user threads
+      invalidateCache();
+      initializedFromCache.current = false;
+    }
+  }, [user, hasMigrated, isMigrating, invalidateCache]);
 
   // Paginated query for authenticated user threads
   const userThreadsQuery = usePaginatedQuery(
@@ -88,7 +100,11 @@ export function useInfiniteThreads(): UseInfiniteThreadsReturn {
   );
 
   // Determine which query to use based on auth state
-  const activeQuery = user ? userThreadsQuery : anonymousThreadsQuery;
+  // Wait for migration to complete before switching to user query
+  const shouldUseUserQuery = user && (!isMigrating || hasMigrated);
+  const activeQuery = shouldUseUserQuery
+    ? userThreadsQuery
+    : anonymousThreadsQuery;
 
   // Combine all loaded threads from all pages with caching
   const allThreads = useMemo(() => {

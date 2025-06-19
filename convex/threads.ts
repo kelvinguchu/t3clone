@@ -94,22 +94,45 @@ export const getThread = query({
 
     const identity = await ctx.auth.getUserIdentity();
 
-    // Check access permissions
-    if (thread.isAnonymous && args.sessionId) {
-      // Anonymous thread access - check session ID
-      if (thread.sessionId !== args.sessionId) {
-        throw new Error("Unauthorized");
-      }
-    } else if (thread.userId) {
-      // Authenticated user thread - check user ownership or if it's public
-      if (thread.userId !== identity?.subject && !thread.isPublic) {
-        throw new Error("Unauthorized");
-      }
-    } else {
-      throw new Error("Invalid thread access");
+    // --- Refactored Access Control v2 ---
+
+    // 1. Authenticated owner access
+    if (thread.userId && identity?.subject === thread.userId) {
+      return thread;
     }
 
-    return thread;
+    // 2. Public access
+    if (thread.isPublic) {
+      return thread;
+    }
+
+    // 3. Anonymous access
+    if (
+      thread.isAnonymous &&
+      thread.sessionId &&
+      args.sessionId &&
+      thread.sessionId === args.sessionId
+    ) {
+      return thread;
+    }
+
+    // 4. Handle race condition: thread is claimed (userId is set, isAnonymous is false)
+    // but identity hasn't propagated to the Convex function execution yet.
+    // We can trust the sessionId passed from the client cookie in this specific, transient case.
+    if (
+      thread.userId &&
+      !identity?.subject &&
+      thread.sessionId &&
+      args.sessionId &&
+      thread.sessionId === args.sessionId
+    ) {
+      return thread;
+    }
+
+    // 5. If none of the above, deny access.
+    throw new Error(
+      "Unauthorized: You do not have permission to view this thread.",
+    );
   },
 });
 

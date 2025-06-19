@@ -39,6 +39,10 @@ export interface UseAnonymousSessionReactiveReturn {
   sessionId: string | null;
   threadCount: number;
 
+  // Thread claiming state
+  isMigrating: boolean;
+  hasMigrated: boolean;
+
   // Trust and behavior
   trustLevel?: string;
   behaviorScore?: number;
@@ -114,6 +118,7 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
   const sessionInitialized = useRef(false);
   const claimThreads = useMutation(convexApi.threads.claimAnonymousThreads);
   const [migrated, setMigrated] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
 
   // Determine authentication state
   const isAuthenticated = userLoaded && !!user;
@@ -233,6 +238,7 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
     } else if (userLoaded && isAuthenticated) {
       if (!migrated && sessionData?.sessionId) {
         (async () => {
+          setIsMigrating(true);
           try {
             await claimThreads({
               sessionId: sessionData.sessionId,
@@ -242,6 +248,7 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
             // Failed to claim anon threads
           } finally {
             setMigrated(true);
+            setIsMigrating(false);
           }
         })();
       }
@@ -289,6 +296,8 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
     checkCanSendMessage,
     sessionId,
     threadCount,
+    isMigrating,
+    hasMigrated: migrated,
     trustLevel: sessionData?.trustLevel,
     behaviorScore: sessionData?.behaviorScore,
   };

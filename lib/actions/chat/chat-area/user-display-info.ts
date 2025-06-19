@@ -7,12 +7,13 @@ export interface ClerkUser {
   }>;
 }
 
+import type { UserResource } from "@clerk/types";
+
 export interface UserDisplayInfoParams {
-  user: ClerkUser | null | undefined;
-  mounted: boolean;
+  user: UserResource | null | undefined;
   isAnonymous: boolean;
-  remainingMessages: number;
   canSendMessage: boolean;
+  remainingMessages: number;
 }
 
 export interface UserDisplayInfo {
@@ -33,28 +34,32 @@ export function getUserDisplayName(user: ClerkUser | null | undefined): string {
 }
 
 // Get user greeting based on auth state
-export function getUserGreeting(params: UserDisplayInfoParams): string {
-  const { user, mounted, isAnonymous, remainingMessages } = params;
-
-  if (!mounted || !user) return "Hey there!";
+export function getUserGreeting({
+  user,
+  isAnonymous,
+  remainingMessages,
+}: UserDisplayInfoParams): string {
   if (isAnonymous) {
-    return `Hey there! (${remainingMessages}/10 messages left)`;
+    return remainingMessages > 0
+      ? "Welcome to Anonymous Chat"
+      : "Message Limit Reached";
   }
-  return `Hey ${getUserDisplayName(user)}!`;
+  return user?.firstName ? `Hello, ${user.firstName}` : "Welcome Back";
 }
 
 // Get user subtext based on auth state and message limits
-export function getUserSubtext(params: UserDisplayInfoParams): string {
-  const { user, mounted, isAnonymous, canSendMessage } = params;
-
-  if (!mounted || !user) return "Ready to explore ideas together?";
+export function getUserSubtext({
+  isAnonymous,
+  canSendMessage,
+  remainingMessages,
+}: UserDisplayInfoParams): string {
   if (isAnonymous) {
     if (!canSendMessage) {
-      return "Sign up to continue chatting or wait 24 hours for reset";
+      return "Please sign up or log in to continue the conversation.";
     }
-    return "Sign up for unlimited conversations and message history";
+    return `You have ${remainingMessages} free messages remaining.`;
   }
-  return "Ready to explore ideas together?";
+  return "How can I help you today?";
 }
 
 // Get all user display info at once

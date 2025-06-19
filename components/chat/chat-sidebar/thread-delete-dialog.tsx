@@ -28,7 +28,7 @@ export function ThreadDeleteDialog({
 
   return (
     <AlertDialog open={isConfirmOpen} onOpenChange={closeConfirm}>
-      <AlertDialogContent className="bg-white dark:bg-dark-bg-secondary border border-purple-200 dark:border-dark-purple-accent">
+      <AlertDialogContent className="bg-white z-100 dark:bg-dark-bg-secondary border border-purple-200 dark:border-dark-purple-accent">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-purple-900 dark:text-slate-200">
             Delete Thread

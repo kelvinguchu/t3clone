@@ -32,16 +32,12 @@ async function getThreadForMetadata(threadId: string) {
       );
     }
 
-    // For anonymous users, check if we have a session ID
+    // For anonymous users, skip server-side metadata generation
+    // to avoid authentication issues. The client will handle thread access.
     if (anonSessionId) {
-      return await fetchQuery(
-        api.threads.getThread,
-        {
-          threadId: threadId as Id<"threads">,
-          sessionId: anonSessionId,
-        },
-        // No fetchOptions for anonymous users
-      );
+      // Return null to use fallback metadata for anonymous sessions
+      // This prevents server-side authentication errors while maintaining UX
+      return null;
     }
 
     // No auth context available, return null for fallback metadata

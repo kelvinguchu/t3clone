@@ -19,18 +19,16 @@ export const getThreadMessages = query({
     const identity = await ctx.auth.getUserIdentity();
 
     // Check access permissions
-    if (thread.isAnonymous && args.sessionId) {
-      // Anonymous thread access - check session ID
-      if (thread.sessionId !== args.sessionId) {
-        throw new Error("Unauthorized");
+    if (thread.userId) {
+      if (thread.userId !== identity?.subject) {
+        throw new Error("Unauthorized: User mismatch");
       }
-    } else if (thread.userId) {
-      // Authenticated user thread - check user ownership or if it's public
-      if (thread.userId !== identity?.subject && !thread.isPublic) {
-        throw new Error("Unauthorized");
+    } else if (thread.sessionId) {
+      if (thread.sessionId !== args.sessionId) {
+        throw new Error("Unauthorized: Session mismatch");
       }
     } else {
-      throw new Error("Invalid thread access");
+      return [];
     }
 
     return await ctx.db
@@ -60,18 +58,17 @@ export const getRecentThreadMessages = query({
     const identity = await ctx.auth.getUserIdentity();
 
     // Check access permissions
-    if (thread.isAnonymous && args.sessionId) {
-      // Anonymous thread access - check session ID
-      if (thread.sessionId !== args.sessionId) {
-        throw new Error("Unauthorized");
+    if (thread.userId) {
+      if (thread.userId !== identity?.subject) {
+        throw new Error("Unauthorized: User mismatch");
       }
-    } else if (thread.userId) {
-      // Authenticated user thread - check user ownership or if it's public
-      if (thread.userId !== identity?.subject && !thread.isPublic) {
-        throw new Error("Unauthorized");
+    } else if (thread.sessionId) {
+      if (thread.sessionId !== args.sessionId) {
+        throw new Error("Unauthorized: Session mismatch");
       }
     } else {
-      throw new Error("Invalid thread access");
+      // Thread is likely being created, return empty array to prevent crash
+      return [];
     }
 
     const limit = args.limit ?? 10; // Default to 10 recent messages
@@ -103,18 +100,17 @@ export const getThreadMessagesWithAttachments = query({
     const identity = await ctx.auth.getUserIdentity();
 
     // Check access permissions
-    if (thread.isAnonymous && args.sessionId) {
-      // Anonymous thread access - check session ID
-      if (thread.sessionId !== args.sessionId) {
-        throw new Error("Unauthorized");
+    if (thread.userId) {
+      if (thread.userId !== identity?.subject) {
+        throw new Error("Unauthorized: User mismatch");
       }
-    } else if (thread.userId) {
-      // Authenticated user thread - check user ownership or if it's public
-      if (thread.userId !== identity?.subject && !thread.isPublic) {
-        throw new Error("Unauthorized");
+    } else if (thread.sessionId) {
+      if (thread.sessionId !== args.sessionId) {
+        throw new Error("Unauthorized: Session mismatch");
       }
     } else {
-      throw new Error("Invalid thread access");
+      // Thread is likely being created, return empty array to prevent crash
+      return [];
     }
 
     const messages = await ctx.db
@@ -165,18 +161,17 @@ export const getBranchMessages = query({
     const identity = await ctx.auth.getUserIdentity();
 
     // Check access permissions
-    if (thread.isAnonymous && args.sessionId) {
-      // Anonymous thread access - check session ID
-      if (thread.sessionId !== args.sessionId) {
-        throw new Error("Unauthorized");
+    if (thread.userId) {
+      if (thread.userId !== identity?.subject) {
+        throw new Error("Unauthorized: User mismatch");
       }
-    } else if (thread.userId) {
-      // Authenticated user thread - check user ownership or if it's public
-      if (thread.userId !== identity?.subject && !thread.isPublic) {
-        throw new Error("Unauthorized");
+    } else if (thread.sessionId) {
+      if (thread.sessionId !== args.sessionId) {
+        throw new Error("Unauthorized: Session mismatch");
       }
     } else {
-      throw new Error("Invalid thread access");
+      // Thread is likely being created, return empty array to prevent crash
+      return [];
     }
 
     // Get all messages in this branch
