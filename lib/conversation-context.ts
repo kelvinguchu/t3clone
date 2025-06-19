@@ -2,8 +2,8 @@ import { conversationCache, type ConversationMessage } from "@/lib/kv";
 
 // Token estimation (rough approximation: 1 token ≈ 4 characters)
 const CHARS_PER_TOKEN = 4;
-const DEFAULT_CONTEXT_WINDOW = 8000; // tokens
-const MAX_MESSAGES_PER_CONTEXT = 10; // Limit to recent messages for better performance
+const DEFAULT_CONTEXT_WINDOW = 8000; 
+const MAX_MESSAGES_PER_CONTEXT = 10; 
 
 // Re-export conversationCache for convenience
 export { conversationCache };

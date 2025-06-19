@@ -556,3 +556,310 @@ export const resetUserPlanUsage = mutation({
     return false;
   },
 });
+
+// Update user plan (for payment processing)
+export const updateUserPlan = mutation({
+  args: {
+    userId: v.string(),
+    plan: v.union(v.literal("free"), v.literal("pro")),
+    paymentId: v.optional(v.string()),
+    paymentMethod: v.optional(v.string()),
+    paymentAmount: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || identity.subject !== args.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    const now = Date.now();
+
+    // Get or create user settings
+    let userSettings = await ctx.db
+      .query("userSettings")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
+
+    if (!userSettings) {
+      // Create new settings with the plan
+      const settingsId = await ctx.db.insert("userSettings", {
+        userId: args.userId,
+        defaultModel: "gemini-2.0-flash",
+        theme: "system",
+        enableWebSearch: false,
+        enableImageGeneration: false,
+        plan: args.plan,
+        planUpdatedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // Log the plan change
+      if (args.plan === "pro" && args.paymentId) {
+        await ctx.db.insert("usage", {
+          userId: args.userId,
+          month: new Date().toISOString().slice(0, 7),
+          tokensUsed: 0,
+          requestsCount: 0,
+          costInCents: 0,
+          providerUsage: {},
+          planUpgrade: {
+            paymentId: args.paymentId,
+            paymentMethod: args.paymentMethod,
+            paymentAmount: args.paymentAmount,
+            upgradedAt: now,
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      return settingsId;
+    } else {
+      // Update existing settings
+      await ctx.db.patch(userSettings._id, {
+        plan: args.plan,
+        planUpdatedAt: now,
+        updatedAt: now,
+      });
+
+      // Log the plan change if upgrading to pro
+      if (args.plan === "pro" && args.paymentId) {
+        const currentMonth = new Date().toISOString().slice(0, 7);
+
+        // Get or create usage record for current month
+        let usage = await ctx.db
+          .query("usage")
+          .withIndex("by_user_month", (q) =>
+            q.eq("userId", args.userId).eq("month", currentMonth),
+          )
+          .unique();
+
+        if (!usage) {
+          await ctx.db.insert("usage", {
+            userId: args.userId,
+            month: currentMonth,
+            tokensUsed: 0,
+            requestsCount: 0,
+            costInCents: 0,
+            providerUsage: {},
+            planUpgrade: {
+              paymentId: args.paymentId,
+              paymentMethod: args.paymentMethod,
+              paymentAmount: args.paymentAmount,
+              upgradedAt: now,
+            },
+            createdAt: now,
+            updatedAt: now,
+          });
+        } else {
+          await ctx.db.patch(usage._id, {
+            planUpgrade: {
+              paymentId: args.paymentId,
+              paymentMethod: args.paymentMethod,
+              paymentAmount: args.paymentAmount,
+              upgradedAt: now,
+            },
+            updatedAt: now,
+          });
+        }
+      }
+
+      return userSettings._id;
+    }
+  },
+});
+
+// Get user plan information
+export const getUserPlan = query({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || identity.subject !== args.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    const userSettings = await ctx.db
+      .query("userSettings")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
+
+    return {
+      plan: userSettings?.plan || "free",
+      planUpdatedAt: userSettings?.planUpdatedAt,
+    };
+  },
+});
+
+// Delete all user data (for account deletion)
+export const deleteAllUserData = mutation({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || identity.subject !== args.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    // Delete in order to respect foreign key constraints
+    // Start with child tables and work up to parent tables
+
+    // 1. Delete messages (they belong to threads)
+    const userThreads = await ctx.db
+      .query("threads")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const thread of userThreads) {
+      // Delete messages for this thread
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_thread", (q) => q.eq("threadId", thread._id))
+        .collect();
+
+      for (const message of messages) {
+        await ctx.db.delete(message._id);
+      }
+
+      // Delete attachments for this thread
+      const attachments = await ctx.db
+        .query("attachments")
+        .withIndex("by_thread", (q) => q.eq("threadId", thread._id))
+        .collect();
+
+      for (const attachment of attachments) {
+        await ctx.db.delete(attachment._id);
+      }
+
+      // Delete streams for this thread
+      const streams = await ctx.db
+        .query("streams")
+        .withIndex("by_chat", (q) => q.eq("chatId", thread._id))
+        .collect();
+
+      for (const stream of streams) {
+        await ctx.db.delete(stream._id);
+      }
+    }
+
+    // 2. Delete threads
+    for (const thread of userThreads) {
+      await ctx.db.delete(thread._id);
+    }
+
+    // 3. Delete standalone attachments (not linked to threads)
+    const standaloneAttachments = await ctx.db
+      .query("attachments")
+      .filter((q) => q.eq(q.field("threadId"), undefined))
+      .collect();
+
+    for (const attachment of standaloneAttachments) {
+      await ctx.db.delete(attachment._id);
+    }
+
+    // 4. Delete usage records
+    const usageRecords = await ctx.db
+      .query("usage")
+      .withIndex("by_user_month", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const usage of usageRecords) {
+      await ctx.db.delete(usage._id);
+    }
+
+    // 5. Delete user settings
+    const userSettings = await ctx.db
+      .query("userSettings")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
+
+    if (userSettings) {
+      await ctx.db.delete(userSettings._id);
+    }
+
+    // 6. Delete API keys
+    const apiKeys = await ctx.db
+      .query("apiKeys")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const apiKey of apiKeys) {
+      await ctx.db.delete(apiKey._id);
+    }
+
+    return true;
+  },
+});
+
+// Check if user has any data (for account deletion confirmation)
+export const getUserDataSummary = query({
+  args: {
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity || identity.subject !== args.userId) {
+      throw new Error("Unauthorized");
+    }
+
+    // Count user's data across all tables
+    const threadsCount = await ctx.db
+      .query("threads")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect()
+      .then((threads) => threads.length);
+
+    const messagesCount = await ctx.db
+      .query("threads")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect()
+      .then(async (threads) => {
+        let totalMessages = 0;
+        for (const thread of threads) {
+          const messages = await ctx.db
+            .query("messages")
+            .withIndex("by_thread", (q) => q.eq("threadId", thread._id))
+            .collect();
+          totalMessages += messages.length;
+        }
+        return totalMessages;
+      });
+
+    const attachmentsCount = await ctx.db
+      .query("threads")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect()
+      .then(async (threads) => {
+        let totalAttachments = 0;
+        for (const thread of threads) {
+          const attachments = await ctx.db
+            .query("attachments")
+            .withIndex("by_thread", (q) => q.eq("threadId", thread._id))
+            .collect();
+          totalAttachments += attachments.length;
+        }
+        return totalAttachments;
+      });
+
+    const apiKeysCount = await ctx.db
+      .query("apiKeys")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect()
+      .then((keys) => keys.length);
+
+    return {
+      threads: threadsCount,
+      messages: messagesCount,
+      attachments: attachmentsCount,
+      apiKeys: apiKeysCount,
+      hasData:
+        threadsCount > 0 ||
+        messagesCount > 0 ||
+        attachmentsCount > 0 ||
+        apiKeysCount > 0,
+    };
+  },
+});

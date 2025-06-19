@@ -59,7 +59,7 @@ export function ChatHeader() {
           className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center cursor-pointer"
           title="Settings"
           onClick={() => {
-            router.push("/settings/customization");
+            router.push("/settings/account");
           }}
         >
           <Settings className="h-4 w-4" />

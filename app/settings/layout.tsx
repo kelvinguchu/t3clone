@@ -15,6 +15,7 @@ import {
   Paperclip,
   History,
   Palette,
+  User,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useState, useEffect } from "react";
@@ -37,11 +38,11 @@ import { SettingsContentWrapper } from "@/components/settings/shared/settings-co
 import { usePlanLimits } from "@/lib/hooks/use-plan-limits";
 
 const settingsNavigation = [
-  // {
-  //   name: "Account",
-  //   href: "/settings/account",
-  //   icon: User,
-  // },
+  {
+    name: "Account",
+    href: "/settings/account",
+    icon: User,
+  },
   {
     name: "Customization",
     href: "/settings/customization",

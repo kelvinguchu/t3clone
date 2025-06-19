@@ -165,6 +165,16 @@ export default defineSchema({
       }),
     ),
 
+    // Plan upgrade tracking
+    planUpgrade: v.optional(
+      v.object({
+        paymentId: v.string(),
+        paymentMethod: v.optional(v.string()),
+        paymentAmount: v.optional(v.number()),
+        upgradedAt: v.number(),
+      }),
+    ),
+
     // Timestamps
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -194,6 +204,10 @@ export default defineSchema({
     userRole: v.optional(v.string()),
     traits: v.optional(v.array(v.string())),
     additionalInfo: v.optional(v.string()),
+
+    // Plan management
+    plan: v.optional(v.union(v.literal("free"), v.literal("pro"))),
+    planUpdatedAt: v.optional(v.number()),
 
     // Timestamps
     createdAt: v.number(),
