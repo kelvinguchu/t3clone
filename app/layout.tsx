@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
-import { Noto_Sans_Mono, Rubik } from "next/font/google";
+import { Rubik } from "next/font/google";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ClerkProvider } from "@clerk/nextjs";
@@ -18,14 +17,6 @@ const rubik = Rubik({
   variable: "--font-rubik",
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700", "800", "900"],
-  display: "swap",
-});
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const notoSansMono = Noto_Sans_Mono({
-  variable: "--font-noto-sans-mono",
-  subsets: ["latin"],
-  weight: ["200", "300", "400", "500", "600", "700", "800", "900"],
   display: "swap",
 });
 
@@ -86,7 +77,6 @@ export default function RootLayout({
         />
         <link rel="apple-touch-startup-image" href="/icon512_rounded.png" />
         <link rel="mask-icon" href="/logo.svg" color="#4c0fd0" />
-        <Script src="https://unpkg.com/react-scan/dist/auto.global.js" />
       </head>
       <body
         className={`${rubik.className} font-mono antialiased bg-purple-100 dark:bg-dark-bg`}

@@ -20,13 +20,14 @@ import {
 } from "@/lib/actions/chat/chat-sidebar";
 import { useUser } from "@clerk/nextjs";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
 
 export function ChatHeader() {
   const { open } = useSidebar();
   const { user } = useUser();
   const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
+  const router = useRouter();
   // Theme functionality with safe mounting
   const [mounted, setMounted] = useState(false);
   const { setTheme, resolvedTheme } = useTheme();
@@ -57,6 +58,9 @@ export function ChatHeader() {
         <button
           className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center cursor-pointer"
           title="Settings"
+          onClick={() => {
+            router.push("/settings");
+          }}
         >
           <Settings className="h-4 w-4" />
         </button>
