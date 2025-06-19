@@ -21,11 +21,12 @@ export function ModelsPage() {
     getVisionCapableModels,
     getGroqModels,
     setUserId,
+    setDbSynced,
+    isReady,
     _hasHydrated,
   } = useModelStore();
 
   const [mounted, setMounted] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
 
   // Convex queries and mutations
   const userEnabledModels = useQuery(
@@ -50,28 +51,29 @@ export function ModelsPage() {
     }
   }, [user, setUserId]);
 
-  // Initialize enabled models from database or use defaults
+  // Initialize enabled models from database and mark as synced
   useEffect(() => {
     if (!mounted || !_hasHydrated || !user) return;
 
-    if (userEnabledModels !== undefined && !isInitialized) {
+    if (userEnabledModels !== undefined) {
       if (userEnabledModels === null) {
         // No preferences in database, keep current defaults
         console.log("No user preferences found, using default enabled models");
+        setDbSynced(true); // Mark as synced since we've confirmed no DB preferences exist
       } else {
         // Load preferences from database
         console.log("Loading enabled models from database:", userEnabledModels);
         setEnabledModels(userEnabledModels as ModelId[]);
+        setDbSynced(true); // Mark as synced after loading from DB
       }
-      setIsInitialized(true);
     }
   }, [
     mounted,
     _hasHydrated,
     user,
     userEnabledModels,
-    isInitialized,
     setEnabledModels,
+    setDbSynced,
   ]);
 
   const handleModelToggle = async (modelId: ModelId, enabled: boolean) => {
@@ -108,8 +110,8 @@ export function ModelsPage() {
     }
   };
 
-  // Don't render until hydrated and initialized to avoid SSR mismatch
-  if (!mounted || !_hasHydrated || !user || !isInitialized) {
+  // Don't render until the store is fully ready (hydrated and synced)
+  if (!mounted || !user || !isReady()) {
     return (
       <SettingsPageWrapper
         title="Models"

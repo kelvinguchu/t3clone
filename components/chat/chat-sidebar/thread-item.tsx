@@ -180,13 +180,7 @@ export function ThreadItem({
                     sideOffset={8}
                     avoidCollisions={true}
                     collisionPadding={16}
-                    sticky="always"
                     onCloseAutoFocus={(e) => e.preventDefault()}
-                    container={
-                      typeof document !== "undefined"
-                        ? document.body
-                        : undefined
-                    }
                     style={{
                       zIndex: 99999,
                     }}

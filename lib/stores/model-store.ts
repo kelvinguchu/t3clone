@@ -19,12 +19,17 @@ interface ModelStore {
   // User ID for syncing with database
   userId: string | null;
   setUserId: (userId: string | null) => void;
+  // Database synchronization state
+  isDbSynced: boolean;
+  setDbSynced: (synced: boolean) => void;
   // Reset functions
   resetToDefault: () => void;
   resetEnabledModels: () => void;
   // Track hydration state
   _hasHydrated: boolean;
   setHasHydrated: (state: boolean) => void;
+  // Check if store is ready for use
+  isReady: () => boolean;
 }
 
 const DEFAULT_MODEL: ModelId = "gemini-2.0-flash";
@@ -60,6 +65,7 @@ export const useModelStore = create<ModelStore>()(
       selectedModel: DEFAULT_MODEL,
       enabledModels: getAllAvailableModels(),
       userId: null,
+      isDbSynced: false,
       _hasHydrated: false,
 
       setSelectedModel: (model: ModelId) => {
@@ -68,6 +74,7 @@ export const useModelStore = create<ModelStore>()(
       },
 
       setEnabledModels: (models: ModelId[]) => {
+        console.log("Zustand store - Setting enabled models:", models);
         const newEnabledModels = new Set(models);
         const { selectedModel } = get();
 
@@ -173,7 +180,23 @@ export const useModelStore = create<ModelStore>()(
       },
 
       setUserId: (userId: string | null) => {
-        set({ userId });
+        const currentUserId = get().userId;
+        if (currentUserId !== userId) {
+          console.log(
+            "Zustand store - User changed, resetting DB sync state:",
+            {
+              oldUserId: currentUserId,
+              newUserId: userId,
+            },
+          );
+          // Reset sync state when user changes
+          set({ userId, isDbSynced: false });
+        }
+      },
+
+      setDbSynced: (synced: boolean) => {
+        console.log("Zustand store - DB sync state changed:", synced);
+        set({ isDbSynced: synced });
       },
 
       resetToDefault: () => {
@@ -186,6 +209,14 @@ export const useModelStore = create<ModelStore>()(
 
       setHasHydrated: (state: boolean) => {
         set({ _hasHydrated: state });
+      },
+
+      isReady: () => {
+        const { _hasHydrated, userId, isDbSynced } = get();
+        // Store is ready when:
+        // 1. It has hydrated from localStorage
+        // 2. Either there's no user (anonymous) OR the database is synced
+        return _hasHydrated && (!userId || isDbSynced);
       },
     }),
     {
@@ -202,3 +233,15 @@ export const useModelStore = create<ModelStore>()(
     },
   ),
 );
+
+/**
+ * Convenience hook for components that need to wait for model store to be ready
+ * This ensures proper cross-device synchronization
+ */
+export function useModelStoreReady() {
+  const store = useModelStore();
+  return {
+    ...store,
+    isReady: store.isReady(),
+  };
+}

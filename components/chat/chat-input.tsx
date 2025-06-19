@@ -16,6 +16,7 @@ import { RateLimitWarnings } from "./chat-input/rate-limit-warnings";
 import { InputControls } from "./chat-input/input-controls";
 import { TextInputArea } from "./chat-input/text-input-area";
 import { getModelInfo } from "@/lib/ai-providers";
+import { useModelStore } from "@/lib/stores/model-store";
 
 // Types
 
@@ -54,14 +55,18 @@ export interface ChatInputProps {
 /**
  * Virtual Keyboard handling utilities
  */
-function setupVirtualKeyboardHandling () {
+function setupVirtualKeyboardHandling() {
   // Method 1: Modern VirtualKeyboard API (Chrome 94+)
-  if ('virtualKeyboard' in navigator) {
+  if ("virtualKeyboard" in navigator) {
     try {
-      (navigator as unknown as { virtualKeyboard: { overlaysContent: boolean } }).virtualKeyboard.overlaysContent = true
-      console.log('[ChatInput] VirtualKeyboard API enabled')
+      (
+        navigator as unknown as {
+          virtualKeyboard: { overlaysContent: boolean };
+        }
+      ).virtualKeyboard.overlaysContent = true;
+      console.log("[ChatInput] VirtualKeyboard API enabled");
     } catch (error: unknown) {
-      console.warn('[ChatInput] Failed to enable VirtualKeyboard API:', error)
+      console.warn("[ChatInput] Failed to enable VirtualKeyboard API:", error);
     }
   }
 
@@ -145,6 +150,9 @@ export function ChatInput({
     onHeightChange,
   });
 
+  // Check if model store is ready (important for cross-device sync)
+  const { isReady: isModelStoreReady } = useModelStore();
+
   // Get current model capabilities
   const currentModelInfo = getModelInfo(inputState.selectedModel);
 
@@ -216,6 +224,22 @@ export function ChatInput({
     inputState.attachmentIds.length,
     inputState.setPlaceholderIndex,
   );
+
+  // Don't render until model store is ready (important for cross-device sync)
+  if (!isModelStoreReady) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 md:relative md:bottom-auto md:left-auto md:right-auto bg-purple-50/30 dark:bg-dark-bg/50 z-50">
+        <div className="mx-auto w-full sm:w-[95%] md:w-[90%] lg:w-[80%] p-2 sm:p-2 md:p-3 border-t-2 border-l-2 border-r-2 border-purple-300 dark:border-dark-purple-accent rounded-t-xl bg-purple-100/90 dark:bg-dark-bg-secondary/90">
+          <div className="flex items-center justify-center py-4">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+            <span className="ml-2 text-sm text-purple-600 dark:text-purple-400">
+              Loading...
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

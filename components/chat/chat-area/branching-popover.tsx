@@ -34,7 +34,7 @@ export function BranchingPopover({
 }: BranchingPopoverProps) {
   const router = useRouter();
   const branchThread = useMutation(api.threads.branchThread);
-  const { enabledModels } = useModelStore();
+  const { enabledModels, isReady } = useModelStore();
 
   // Filter available models by enabled models from store
   const allAvailableModels = getAvailableModels();
@@ -59,46 +59,55 @@ export function BranchingPopover({
           Choose model to branch with
         </p>
         <div className="space-y-1 sm:space-y-1.5">
-          {availableModels.map((mId) => {
-            const info = getModelInfo(mId);
-            return (
-              <button
-                key={mId}
-                onClick={async () => {
-                  if (!threadId || !messageId) return;
+          {!isReady() ? (
+            <div className="flex items-center justify-center py-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+              <span className="ml-2 text-xs text-purple-600 dark:text-purple-400">
+                Loading models...
+              </span>
+            </div>
+          ) : (
+            availableModels.map((mId) => {
+              const info = getModelInfo(mId);
+              return (
+                <button
+                  key={mId}
+                  onClick={async () => {
+                    if (!threadId || !messageId) return;
 
-                  try {
-                    // Call the branchThread mutation
-                    const newThreadId = await branchThread({
-                      sourceThreadId: threadId as Id<"threads">,
-                      branchFromMessageId: messageId as Id<"messages">,
-                      model: mId,
-                      ...(sessionId ? { sessionId } : {}),
-                    });
+                    try {
+                      // Call the branchThread mutation
+                      const newThreadId = await branchThread({
+                        sourceThreadId: threadId as Id<"threads">,
+                        branchFromMessageId: messageId as Id<"messages">,
+                        model: mId,
+                        ...(sessionId ? { sessionId } : {}),
+                      });
 
-                    // Navigate to the new branched thread
-                    router.push(`/chat/${newThreadId}`);
+                      // Navigate to the new branched thread
+                      router.push(`/chat/${newThreadId}`);
 
-                    // Close the popover
-                    onOpenChange(false);
-                  } catch (error) {
-                    console.error("Failed to branch thread:", error);
-                    // Could add toast notification here
-                  }
-                }}
-                className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5 rounded-lg hover:bg-purple-100 dark:hover:bg-dark-bg-secondary text-xs sm:text-sm text-left transition-all duration-200 border border-transparent hover:border-purple-200 dark:hover:border-dark-purple-accent group cursor-pointer whitespace-nowrap"
-              >
-                <img
-                  src={info.icon}
-                  alt={info.name}
-                  className="h-4 w-4 sm:h-5 sm:w-5 rounded-sm flex-shrink-0"
-                />
-                <span className="font-medium text-gray-700 dark:text-gray-200 group-hover:text-purple-700 dark:group-hover:text-slate-200 transition-colors">
-                  {info.name}
-                </span>
-              </button>
-            );
-          })}
+                      // Close the popover
+                      onOpenChange(false);
+                    } catch (error) {
+                      console.error("Failed to branch thread:", error);
+                      // Could add toast notification here
+                    }
+                  }}
+                  className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5 rounded-lg hover:bg-purple-100 dark:hover:bg-dark-bg-secondary text-xs sm:text-sm text-left transition-all duration-200 border border-transparent hover:border-purple-200 dark:hover:border-dark-purple-accent group cursor-pointer whitespace-nowrap"
+                >
+                  <img
+                    src={info.icon}
+                    alt={info.name}
+                    className="h-4 w-4 sm:h-5 sm:w-5 rounded-sm flex-shrink-0"
+                  />
+                  <span className="font-medium text-gray-700 dark:text-gray-200 group-hover:text-purple-700 dark:group-hover:text-slate-200 transition-colors">
+                    {info.name}
+                  </span>
+                </button>
+              );
+            })
+          )}
         </div>
       </PopoverContent>
     </Popover>
