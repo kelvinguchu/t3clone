@@ -34,18 +34,16 @@ interface ModelStore {
 
 const DEFAULT_MODEL: ModelId = "gemini-2.0-flash";
 
-// Get all available models and enable them by default
+// Get all available models with fallback to default
 const getAllAvailableModels = (): Set<ModelId> => {
   try {
     const models = getAvailableModels();
     return new Set(models);
   } catch {
-    // Fallback if getAvailableModels fails
     return new Set([DEFAULT_MODEL]);
   }
 };
 
-// Helper function to check if a model has vision capabilities
 const hasVisionCapabilities = (modelId: ModelId): boolean => {
   const config = AI_MODELS[modelId];
   return (
@@ -53,7 +51,6 @@ const hasVisionCapabilities = (modelId: ModelId): boolean => {
   );
 };
 
-// Helper function to check if a model is a Groq model
 const isGroqModel = (modelId: ModelId): boolean => {
   const config = AI_MODELS[modelId];
   return config?.provider === "groq";
@@ -69,16 +66,14 @@ export const useModelStore = create<ModelStore>()(
       _hasHydrated: false,
 
       setSelectedModel: (model: ModelId) => {
-        console.log("Zustand store - Setting model:", model);
         set({ selectedModel: model });
       },
 
       setEnabledModels: (models: ModelId[]) => {
-        console.log("Zustand store - Setting enabled models:", models);
         const newEnabledModels = new Set(models);
         const { selectedModel } = get();
 
-        // If currently selected model is being disabled, switch to first enabled model
+        // Switch to first enabled model if current selection is being disabled
         if (!newEnabledModels.has(selectedModel) && models.length > 0) {
           set({
             enabledModels: newEnabledModels,
@@ -100,18 +95,14 @@ export const useModelStore = create<ModelStore>()(
         const { enabledModels, selectedModel } = get();
         const newEnabledModels = new Set(enabledModels);
 
-        // Check if removal is allowed
         const { canRemove } = get().canRemoveModel(modelId);
         if (!canRemove) {
-          console.warn(
-            `Cannot remove model ${modelId}: required for system functionality`,
-          );
           return;
         }
 
         newEnabledModels.delete(modelId);
 
-        // If we're removing the currently selected model, switch to first enabled model
+        // Switch to first remaining model if removing current selection
         if (selectedModel === modelId) {
           const remainingModels = Array.from(newEnabledModels);
           if (remainingModels.length > 0) {
@@ -144,7 +135,6 @@ export const useModelStore = create<ModelStore>()(
         const { enabledModels } = get();
         const currentEnabled = Array.from(enabledModels);
 
-        // Don't allow removal if it's the only enabled model
         if (currentEnabled.length <= 1) {
           return {
             canRemove: false,
@@ -152,7 +142,7 @@ export const useModelStore = create<ModelStore>()(
           };
         }
 
-        // Check if this is the last vision-capable model
+        // Ensure at least one vision-capable model remains
         if (hasVisionCapabilities(modelId)) {
           const visionModels = currentEnabled.filter(hasVisionCapabilities);
           if (visionModels.length <= 1) {
@@ -164,7 +154,7 @@ export const useModelStore = create<ModelStore>()(
           }
         }
 
-        // Check if this is the last Groq model
+        // Ensure at least one Groq model remains
         if (isGroqModel(modelId)) {
           const groqModels = currentEnabled.filter(isGroqModel);
           if (groqModels.length <= 1) {
@@ -182,20 +172,11 @@ export const useModelStore = create<ModelStore>()(
       setUserId: (userId: string | null) => {
         const currentUserId = get().userId;
         if (currentUserId !== userId) {
-          console.log(
-            "Zustand store - User changed, resetting DB sync state:",
-            {
-              oldUserId: currentUserId,
-              newUserId: userId,
-            },
-          );
-          // Reset sync state when user changes
           set({ userId, isDbSynced: false });
         }
       },
 
       setDbSynced: (synced: boolean) => {
-        console.log("Zustand store - DB sync state changed:", synced);
         set({ isDbSynced: synced });
       },
 
@@ -213,16 +194,13 @@ export const useModelStore = create<ModelStore>()(
 
       isReady: () => {
         const { _hasHydrated, userId, isDbSynced } = get();
-        // Store is ready when:
-        // 1. It has hydrated from localStorage
-        // 2. Either there's no user (anonymous) OR the database is synced
         return _hasHydrated && (!userId || isDbSynced);
       },
     }),
     {
-      name: "model-selection-store", // localStorage key
+      name: "model-selection-store",
       storage: createJSONStorage(() => localStorage),
-      // Only persist the selectedModel, not enabledModels (those come from database)
+      // Persist only selectedModel and userId (enabledModels sync from database)
       partialize: (state: ModelStore) => ({
         selectedModel: state.selectedModel,
         userId: state.userId,
@@ -234,10 +212,7 @@ export const useModelStore = create<ModelStore>()(
   ),
 );
 
-/**
- * Convenience hook for components that need to wait for model store to be ready
- * This ensures proper cross-device synchronization
- */
+// Hook that waits for model store to be ready with database sync
 export function useModelStoreReady() {
   const store = useModelStore();
   return {

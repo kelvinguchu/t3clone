@@ -30,10 +30,7 @@ export interface UseThreadDeleteReturn {
   actions: ThreadDeleteActions;
 }
 
-/**
- * Custom hook for managing thread deletion with confirmation
- * Handles navigation redirect if deleting current thread
- */
+// Manage thread deletion with confirmation and navigation handling
 export function useThreadDelete({
   threadId,
   threadTitle,
@@ -42,18 +39,13 @@ export function useThreadDelete({
   currentThreadId,
   onSuccess,
 }: ThreadDeleteParams): UseThreadDeleteReturn {
-  // Local state management
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Router for navigation
   const router = useRouter();
-
-  // Convex mutation
   const deleteThreadMutation = useMutation(api.threads.deleteThread);
 
-  // Actions
   const openConfirm = useCallback(() => {
     setIsConfirmOpen(true);
     setError(null);
@@ -74,20 +66,15 @@ export function useThreadDelete({
         ...(isAnonymous && sessionId ? { sessionId } : {}),
       });
 
-      // Success - close confirmation dialog
       setIsConfirmOpen(false);
 
-      // If we're deleting the currently active thread, redirect to chat home
+      // Redirect to chat home if deleting current thread
       if (currentThreadId === String(threadId)) {
         router.push("/chat");
       }
 
-      // Call success callback if provided
       onSuccess?.();
-
-      console.log(`[ThreadDelete] Successfully deleted thread: ${threadTitle}`);
     } catch (error) {
-      console.error("[ThreadDelete] Failed to delete thread:", error);
       setError(
         error instanceof Error
           ? error.message

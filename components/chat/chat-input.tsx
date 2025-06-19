@@ -52,11 +52,9 @@ export interface ChatInputProps {
   threadAttachments?: AttachmentPreview[]; // Thread-level attachments for model filtering
 }
 
-/**
- * Virtual Keyboard handling utilities
- */
+// Virtual keyboard handling for mobile devices
 function setupVirtualKeyboardHandling() {
-  // Method 1: Modern VirtualKeyboard API (Chrome 94+)
+  // Modern VirtualKeyboard API for supported browsers
   if ("virtualKeyboard" in navigator) {
     try {
       (
@@ -64,13 +62,12 @@ function setupVirtualKeyboardHandling() {
           virtualKeyboard: { overlaysContent: boolean };
         }
       ).virtualKeyboard.overlaysContent = true;
-      console.log("[ChatInput] VirtualKeyboard API enabled");
-    } catch (error: unknown) {
-      console.warn("[ChatInput] Failed to enable VirtualKeyboard API:", error);
+    } catch {
+      // Silently fail if API is not fully supported
     }
   }
 
-  // Method 2: Visual Viewport API fallback for iOS Safari and other browsers
+  // Visual Viewport API fallback for iOS Safari and other browsers
   if (window.visualViewport) {
     let pendingUpdate = false;
 
@@ -81,7 +78,6 @@ function setupVirtualKeyboardHandling() {
       requestAnimationFrame(() => {
         pendingUpdate = false;
 
-        // Update CSS custom property with keyboard height
         const keyboardHeight = Math.max(
           0,
           window.innerHeight -
@@ -93,7 +89,6 @@ function setupVirtualKeyboardHandling() {
           `${keyboardHeight}px`,
         );
 
-        // Dispatch custom event for components that need to know about keyboard changes
         window.dispatchEvent(
           new CustomEvent("virtualkeyboard", {
             detail: { keyboardHeight, isOpen: keyboardHeight > 0 },
@@ -102,14 +97,10 @@ function setupVirtualKeyboardHandling() {
       });
     }
 
-    // Listen for viewport changes
     window.visualViewport.addEventListener("resize", handleViewportChange);
     window.visualViewport.addEventListener("scroll", handleViewportChange);
-
-    // Initial setup
     handleViewportChange();
 
-    // Cleanup function
     return () => {
       window.visualViewport?.removeEventListener(
         "resize",
@@ -122,7 +113,7 @@ function setupVirtualKeyboardHandling() {
     };
   }
 
-  return () => {}; // No cleanup needed
+  return () => {};
 }
 
 export function ChatInput({
@@ -138,7 +129,7 @@ export function ChatInput({
 }: Readonly<ChatInputProps>) {
   const { isLoaded: userIsLoaded } = useUser();
 
-  // Setup virtual keyboard handling
+  // Initialize virtual keyboard handling for mobile
   useEffect(() => {
     const cleanup = setupVirtualKeyboardHandling();
     return cleanup;
@@ -150,10 +141,8 @@ export function ChatInput({
     onHeightChange,
   });
 
-  // Check if model store is ready (important for cross-device sync)
+  // Model store and capabilities
   const { isReady: isModelStoreReady } = useModelStore();
-
-  // Get current model capabilities
   const currentModelInfo = getModelInfo(inputState.selectedModel);
 
   // File upload functionality
@@ -165,10 +154,8 @@ export function ChatInput({
       multimodal: currentModelInfo.capabilities.multimodal,
       fileAttachments: currentModelInfo.capabilities.fileAttachments,
     },
-    onError: (error) => {
-      console.error("File upload error:", error);
-      // Error is handled by the FileUpload hook's internal state
-      // and displayed via the FilePreview component
+    onError: () => {
+      // Error handled by FileUpload hook and displayed via FilePreview
     },
   });
 
@@ -225,7 +212,7 @@ export function ChatInput({
     inputState.setPlaceholderIndex,
   );
 
-  // Don't render until model store is ready (important for cross-device sync)
+  // Wait for model store to be ready before rendering
   if (!isModelStoreReady) {
     return (
       <div className="fixed bottom-0 left-0 right-0 md:relative md:bottom-auto md:left-auto md:right-auto bg-purple-50/30 dark:bg-dark-bg/50 z-50">
@@ -262,19 +249,17 @@ export function ChatInput({
         onClearError={fileUpload.clearError}
       />
 
-      {/* Clean Chat Input Area with Virtual Keyboard Support */}
+      {/* Chat Input Area with Virtual Keyboard Support */}
       <div
         ref={inputState.inputContainerRef}
         className="fixed bottom-0 left-0 right-0 md:relative md:bottom-auto md:left-auto md:right-auto bg-purple-50/30 dark:bg-dark-bg/50 z-50"
         style={{
-          // Support for modern VirtualKeyboard API
           bottom: "max(0px, env(keyboard-inset-height, 0px))",
-          // Fallback using CSS custom property set by Visual Viewport API
           transform: "translateY(calc(-1 * var(--keyboard-height, 0px)))",
         }}
       >
         <div className="mx-auto w-full sm:w-[95%] md:w-[90%] lg:w-[80%] p-2 sm:p-2 md:p-3 border-t-2 border-l-2 border-r-2 border-purple-300 dark:border-dark-purple-accent rounded-t-xl bg-purple-100/90 dark:bg-dark-bg-secondary/90">
-          {/* Hidden file input - accept attribute based on model capabilities */}
+          {/* Hidden file input with model-based accept filter */}
           <input
             ref={fileUpload.fileInputRef}
             type="file"

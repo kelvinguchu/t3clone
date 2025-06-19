@@ -46,6 +46,7 @@ export function InfiniteThreadList({
     error,
     isAnonymous,
     sessionId,
+    refreshCache,
   } = useInfiniteThreads();
 
   // Group threads for display
@@ -127,6 +128,7 @@ export function InfiniteThreadList({
             sessionId={sessionId}
             isMobile={isMobile}
             setOpenMobile={setOpenMobile}
+            refreshCache={refreshCache}
           />
 
           <ThreadGroup
@@ -140,6 +142,7 @@ export function InfiniteThreadList({
             sessionId={sessionId}
             isMobile={isMobile}
             setOpenMobile={setOpenMobile}
+            refreshCache={refreshCache}
           />
 
           <ThreadGroup
@@ -153,6 +156,7 @@ export function InfiniteThreadList({
             sessionId={sessionId}
             isMobile={isMobile}
             setOpenMobile={setOpenMobile}
+            refreshCache={refreshCache}
           />
 
           <ThreadGroup
@@ -166,6 +170,7 @@ export function InfiniteThreadList({
             sessionId={sessionId}
             isMobile={isMobile}
             setOpenMobile={setOpenMobile}
+            refreshCache={refreshCache}
           />
 
           <ThreadGroup
@@ -179,6 +184,7 @@ export function InfiniteThreadList({
             sessionId={sessionId}
             isMobile={isMobile}
             setOpenMobile={setOpenMobile}
+            refreshCache={refreshCache}
           />
 
           {/* Loading more indicator */}
@@ -247,6 +253,7 @@ interface ThreadGroupProps {
   sessionId: string | null;
   isMobile: boolean;
   setOpenMobile: (open: boolean) => void;
+  refreshCache: () => void;
 }
 
 function ThreadGroup({
@@ -260,6 +267,7 @@ function ThreadGroup({
   sessionId,
   isMobile,
   setOpenMobile,
+  refreshCache,
 }: Readonly<ThreadGroupProps>) {
   if (threads.length === 0) return null;
 
@@ -289,6 +297,7 @@ function ThreadGroup({
               sessionId={sessionId ?? undefined}
               isMobile={isMobile}
               setOpenMobile={setOpenMobile}
+              refreshCache={refreshCache}
             />
           );
         })}

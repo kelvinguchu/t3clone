@@ -8,10 +8,12 @@ import { processAIResponseMessages } from "@/lib/actions/api/chat/response-proce
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+// Saves partial AI responses when user stops generation mid-stream
 export async function POST(req: NextRequest) {
   const requestId = `partial-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   try {
+    // Extract request data and validate partial content
     const { userId, fetchOptions } = await getConvexFetchOptions();
     const body = await req.json();
 
@@ -36,17 +38,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`[${requestId}] PARTIAL_SAVE - Saving partial response`, {
-      threadId,
-      contentLength: partialContent.length,
-      modelId,
-      userId: userId ? "authenticated" : "anonymous",
-    });
+    // Validate and prepare partial content for saving
 
-    // Extract session info
+    // Resolve session and thread for partial save
     const { sessionId } = await resolveSessionInfo(req, userId);
-
-    // Create thread if needed
     let finalThreadId = threadId;
     if (!finalThreadId) {
       const threadResult = await createThreadIfNeeded(
@@ -65,12 +60,12 @@ export async function POST(req: NextRequest) {
       throw new Error("Failed to create or find thread for partial save");
     }
 
-    // Save user message if this is a new conversation
+    // Save user message for new conversations
     if (!threadId && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
       if (lastMessage.role === "user") {
         await saveUserMessage(
-          true, // shouldSaveUserMessage
+          true,
           messages,
           finalThreadId,
           userId,
@@ -82,13 +77,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Create partial response message
+    // Create partial response message with metadata
     const partialResponseMessages = [
       {
         id: `partial-${Date.now()}`,
         role: "assistant" as const,
         content: partialContent,
-        // Mark as partial for potential future continuation
         experimental_data: {
           isPartial: true,
           stoppedAt: new Date().toISOString(),
@@ -97,31 +91,25 @@ export async function POST(req: NextRequest) {
       },
     ];
 
-    // Save the partial AI response
+    // Save partial response to database
     await processAIResponseMessages({
       responseMessages: partialResponseMessages,
       finalThreadId,
       userId,
       finalSessionId: sessionId,
       modelId,
-      toolsUsedInResponse: [], // No tools in partial response
+      toolsUsedInResponse: [],
       hasAnyToolCalls: false,
       usage: {
-        totalTokens: Math.ceil(partialContent.length / 4), // Rough estimate
+        totalTokens: Math.ceil(partialContent.length / 4),
       },
-      finishReason: "stop", // User stopped the generation
+      finishReason: "stop",
       extractedReasoning: undefined,
       fetchOptions,
       requestId,
     });
 
-    console.log(
-      `[${requestId}] PARTIAL_SAVE - Successfully saved partial response`,
-      {
-        threadId: finalThreadId,
-        contentLength: partialContent.length,
-      },
-    );
+    // Partial save completed successfully
 
     return new Response(
       JSON.stringify({
@@ -138,11 +126,7 @@ export async function POST(req: NextRequest) {
       },
     );
   } catch (error) {
-    console.error(
-      `[${requestId}] PARTIAL_SAVE - Failed to save partial response:`,
-      error,
-    );
-
+    // Handle partial save failures
     return new Response(
       JSON.stringify({
         error: "Failed to save partial response",

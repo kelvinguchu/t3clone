@@ -36,7 +36,7 @@ export function ErrorDisplay({
     }
   };
 
-  // Determine error type and styling
+  // Classify error type for appropriate messaging
   const isTokenError =
     error.message.toLowerCase().includes("token") ||
     error.message.toLowerCase().includes("too large");
@@ -112,8 +112,7 @@ export function ErrorDisplay({
                           size="sm"
                           variant="outline"
                           onClick={() => {
-                            // Could trigger a model switch or message editing
-                            console.log("Switch model or edit message");
+                            // TODO: Implement model switching functionality
                           }}
                           className="h-8 px-3 text-xs bg-white/80 dark:bg-dark-bg-secondary/80 hover:bg-white dark:hover:bg-dark-bg-secondary border-red-300 dark:border-red-500/50 text-red-700 dark:text-red-300 hover:text-red-800 dark:hover:text-red-200 transition-all duration-200"
                         >

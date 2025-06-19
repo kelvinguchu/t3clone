@@ -13,13 +13,13 @@ import { useMutation, useQuery } from "convex/react";
 import { useUser } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
 
-// Only show providers that support BYOK
+// Providers that support bring-your-own-key (BYOK)
 const SUPPORTED_PROVIDERS: Provider[] = ["groq", "google"];
 
 export function ApiKeysPage() {
   const { user } = useUser();
 
-  // Convex mutations and queries
+  // Database operations for API key management
   const storeApiKey = useMutation(api.apiKeys.storeApiKey);
   const deleteApiKey = useMutation(api.apiKeys.deleteApiKey);
   const userApiKeys = useQuery(api.apiKeys.getUserApiKeys);
@@ -31,10 +31,9 @@ export function ApiKeysPage() {
     }
 
     try {
-      // Encrypt the API key using user's ID
+      // Encrypt API key with user-specific salt and store securely
       const encryptedData = await encryptUserApiKey(apiKey, user.id);
 
-      // Store in Convex database
       await storeApiKey({
         provider,
         encryptedData: encryptedData.encryptedData,
@@ -44,10 +43,7 @@ export function ApiKeysPage() {
         iterations: encryptedData.iterations,
         keyPrefix: getKeyPrefix(apiKey),
       });
-
-      console.log(`✅ Successfully saved ${provider} API key`);
     } catch (error) {
-      console.error(`❌ Failed to save ${provider} API key:`, error);
       throw error;
     }
   };
@@ -58,14 +54,12 @@ export function ApiKeysPage() {
     }
 
     try {
-      // Find the user's key for this provider
+      // Find and delete user's API key for provider
       const userKey = userApiKeys?.find((key) => key.provider === provider);
       if (userKey) {
         await deleteApiKey({ keyId: userKey._id });
-        console.log(`✅ Successfully deleted ${provider} API key`);
       }
     } catch (error) {
-      console.error(`❌ Failed to delete ${provider} API key:`, error);
       throw error;
     }
   };
@@ -75,20 +69,15 @@ export function ApiKeysPage() {
     apiKey: string,
   ): Promise<boolean> => {
     try {
-      // Use the testApiKey function from api-key-manager
+      // Validate API key by testing with provider's API
       const isValid = await testApiKey(provider, apiKey);
-      console.log(
-        `🧪 ${provider} API key test:`,
-        isValid ? "✅ Valid" : "❌ Invalid",
-      );
       return isValid;
-    } catch (error) {
-      console.error(`❌ Failed to test ${provider} API key:`, error);
+    } catch {
       return false;
     }
   };
 
-  // Get user keys data for display
+  // Extract user's API key metadata for display
   const getUserKeyData = (provider: Provider) => {
     const stats = providerStats?.find((stat) => stat.provider === provider);
     const keyMeta = userApiKeys?.find((key) => key.provider === provider);

@@ -46,10 +46,7 @@ export interface FileUploadHandlerReturn {
   clearError: () => void;
 }
 
-/**
- * Custom hook that manages file upload functionality including file selection,
- * validation, upload progress, and attachment state management
- */
+// Manage file upload with validation, progress tracking, and attachment state
 export function useFileUploadHandler({
   attachmentIds,
   setAttachmentIds,
@@ -59,14 +56,10 @@ export function useFileUploadHandler({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<FileUploadError | null>(null);
 
-  // File upload hook from UploadThing with optimized settings
+  // Configure UploadThing with error handling
   const { startUpload, isUploading } = useUploadThing("chatAttachment", {
-    onClientUploadComplete: (res) => {
-      // Optional: Add global upload completion handler
-      console.log("Upload completed:", res);
-    },
-    onUploadError: (error) => {
-      console.error("Upload error:", error);
+    onClientUploadComplete: () => {},
+    onUploadError: () => {
       const uploadError: FileUploadError = {
         title: "Upload Failed",
         message: "Failed to upload files. Please try again.",
@@ -77,20 +70,18 @@ export function useFileUploadHandler({
     },
   });
 
-  // Use centralized file preview context
   const { addFilePreview, removeFilePreview, fileData } = useFilePreview();
 
-  // Get current attachment previews from context - filtered by current attachmentIds
+  // Filter file previews by current attachment IDs
   const attachmentPreviews = Array.from(fileData.values()).filter((file) =>
     attachmentIds.includes(file.id),
   );
 
-  // Clear error state
   const clearError = useCallback(() => {
     setError(null);
   }, []);
 
-  // Utility to temporarily change accept attribute and open file picker
+  // Open file picker with temporary accept filter
   const triggerFileSelect = useCallback((accept: string) => {
     const input = fileInputRef.current;
     if (!input) return;
@@ -98,21 +89,19 @@ export function useFileUploadHandler({
     const previous = input.accept;
     input.accept = accept;
     input.click();
-    // Restore immediately – the opened chooser keeps the filter
     input.accept = previous;
   }, []);
 
-  // Handle file selection and upload
+  // Process file selection, validate, and start upload
   const handleFileSelect = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(event.target.files || []);
 
       if (files.length === 0) return;
 
-      // Clear any previous errors
       clearError();
 
-      // Check if model supports file attachments at all
+      // Validate model supports file attachments
       if (!modelCapabilities?.fileAttachments) {
         const noAttachmentsError: FileUploadError = {
           title: "File Attachments Not Supported",
@@ -125,7 +114,7 @@ export function useFileUploadHandler({
         return;
       }
 
-      // Filter for supported file types based on model capabilities
+      // Filter files by model capabilities
       const supportsImages =
         modelCapabilities?.vision || modelCapabilities?.multimodal;
 
@@ -135,12 +124,13 @@ export function useFileUploadHandler({
         const isText = file.type.startsWith("text/");
 
         if (isImage && !supportsImages) {
-          return false; // Filter out images if model doesn't support vision
+          return false;
         }
 
         return isImage || isPdf || isText;
       });
 
+      // Handle unsupported files
       if (supportedFiles.length !== files.length) {
         const rejectedFiles = files.filter((f) => !supportedFiles.includes(f));
         const hasImages = rejectedFiles.some((f) =>
@@ -164,30 +154,29 @@ export function useFileUploadHandler({
         setError(unsupportedError);
         onError?.(unsupportedError);
 
-        // Continue with supported files if any
         if (supportedFiles.length === 0) {
           return;
         }
       }
 
       if (supportedFiles.length > 0) {
-        // Immediately show preview with loading state
+        // Create immediate previews with loading state
         const immediatePreview = supportedFiles.map((file) => ({
           id: `temp-${Date.now()}-${Math.random()}`,
           name: file.name,
           contentType: file.type,
-          url: URL.createObjectURL(file), // Create temporary URL for immediate preview
+          url: URL.createObjectURL(file),
           size: file.size,
-          isUploading: true, // Flag to show loading state
+          isUploading: true,
         }));
 
-        // Add files to context and track their IDs
+        // Add previews to context and track IDs
         immediatePreview.forEach((preview) => {
           addFilePreview(preview);
           setAttachmentIds((prev) => [...prev, preview.id]);
         });
 
-        // Start upload and handle the promise
+        // Upload files and handle completion
         startUpload(supportedFiles)
           .then((uploadedFiles) => {
             if (!uploadedFiles) return;
@@ -196,16 +185,14 @@ export function useFileUploadHandler({
               name: string;
               size: number;
               key: string;
-              url: string; // Keep for backwards compatibility
-              ufsUrl: string; // New preferred URL
+              url: string;
+              ufsUrl: string;
               type?: string;
-              // UploadThing v{>=9} places custom return values inside `serverData`
-              // Older versions may return the fields at top level. We support both.
               serverData?: { attachmentId?: string | null } | null;
               attachmentId?: string | null;
             }>;
 
-            // Collect all updates before applying them atomically
+            // Prepare batch updates for atomic state changes
             const tempIdsToRemove: string[] = [];
             const newAttachmentIds: string[] = [];
             const finalFilesToAdd: Array<{
@@ -219,42 +206,19 @@ export function useFileUploadHandler({
               };
             }> = [];
 
-            // Process all files first
+            // Process uploaded files and extract attachment IDs
             files.forEach((file, index) => {
               const tempId = immediatePreview[index]?.id;
               if (!tempId) return;
 
-              console.log("[FileUploadHandler] Processing uploaded file:", {
-                name: file.name,
-                key: file.key,
-                serverData: file.serverData,
-                attachmentId: file.attachmentId,
-                fullFile: file,
-              });
-
               const resolvedAttachmentId =
-                file.serverData?.attachmentId || // UploadThing v6+ with awaitServerData: true
-                file.attachmentId || // Direct property (if returned by server)
-                null;
+                file.serverData?.attachmentId || file.attachmentId || null;
 
-              // Ignore file if the server did not return a Convex attachmentId
               if (!resolvedAttachmentId) {
-                console.warn(
-                  "[FileUploadHandler] UPLOAD_COMPLETE - No attachmentId returned for file, skipping linkage",
-                  {
-                    name: file.name,
-                    key: file.key,
-                    serverData: file.serverData,
-                    attachmentId: file.attachmentId,
-                    availableProperties: Object.keys(file),
-                  },
-                );
-                // Still remove the temp preview
                 tempIdsToRemove.push(tempId);
                 return;
               }
 
-              // Prepare final file data
               const finalFileData = {
                 id: resolvedAttachmentId,
                 name: file.name,
@@ -270,47 +234,23 @@ export function useFileUploadHandler({
               finalFilesToAdd.push({ tempId, finalData: finalFileData });
             });
 
-            // Apply all updates atomically
-            console.log("[FileUploadHandler] Processing upload completion:", {
-              tempIdsToRemove,
-              newAttachmentIds,
-              finalFilesToAdd: finalFilesToAdd.map((f) => ({
-                tempId: f.tempId,
-                finalId: f.finalData.id,
-              })),
-            });
-
-            // 1. Update attachment IDs in one go (remove temps, add finals)
+            // Apply all state updates atomically
             setAttachmentIds((prev) => {
               const filtered = prev.filter(
                 (id) => !tempIdsToRemove.includes(id),
               );
-              const newIds = [...filtered, ...newAttachmentIds];
-              console.log("[FileUploadHandler] Updated attachment IDs:", {
-                prev,
-                filtered,
-                newIds,
-              });
-              return newIds;
+              return [...filtered, ...newAttachmentIds];
             });
 
-            // 2. Update file previews (remove temps, add finals)
+            // Replace temporary previews with final file data
             finalFilesToAdd.forEach(({ tempId, finalData }) => {
-              console.log("[FileUploadHandler] Replacing temp preview:", {
-                tempId,
-                finalId: finalData.id,
-              });
-              removeFilePreview(tempId); // This cleans up blob URLs
+              removeFilePreview(tempId);
               addFilePreview(finalData);
             });
 
-            // 3. Clean up any remaining temp IDs that didn't get processed
+            // Clean up orphaned temporary previews
             tempIdsToRemove.forEach((tempId) => {
               if (!finalFilesToAdd.some((f) => f.tempId === tempId)) {
-                console.log(
-                  "[FileUploadHandler] Cleaning up orphaned temp ID:",
-                  tempId,
-                );
                 removeFilePreview(tempId);
               }
             });
@@ -319,12 +259,7 @@ export function useFileUploadHandler({
               fileInputRef.current.value = "";
             }
           })
-          .catch((error) => {
-            console.error(
-              "[FileUploadHandler] UPLOAD_ERROR - Upload failed:",
-              error,
-            );
-
+          .catch(() => {
             const uploadError: FileUploadError = {
               title: "Upload Failed",
               message: "Failed to upload files. Please try again.",
@@ -333,9 +268,8 @@ export function useFileUploadHandler({
             setError(uploadError);
             onError?.(uploadError);
 
-            // Clean up temporary previews on error
+            // Clean up temporary previews on upload failure
             immediatePreview.forEach((preview) => {
-              // Clean up blob URL to prevent memory leaks
               if (preview.url.startsWith("blob:")) {
                 URL.revokeObjectURL(preview.url);
               }
@@ -364,12 +298,9 @@ export function useFileUploadHandler({
   // Remove attachment by index
   const removeAttachment = useCallback(
     (index: number) => {
-      // Get the file ID at the specified index
       const fileId = attachmentIds[index];
       if (fileId) {
-        // Remove from context (this handles blob URL cleanup)
         removeFilePreview(fileId);
-        // Remove from attachment IDs
         setAttachmentIds((prev) => prev.filter((_, i) => i !== index));
       }
     },
@@ -377,27 +308,18 @@ export function useFileUploadHandler({
   );
 
   return {
-    // File input ref and utilities
     fileInputRef,
     triggerFileSelect,
     handleFileSelect,
     removeAttachment,
-
-    // Upload state
     isUploading,
-
-    // File preview data
     attachmentPreviews,
-
-    // Error state
     error,
     clearError,
   };
 }
 
-/**
- * Utility function to validate if a file type is supported
- */
+// Validate if file type is supported by model capabilities
 export function isSupportedFileType(
   file: File,
   modelCapabilities?: {
@@ -410,7 +332,6 @@ export function isSupportedFileType(
   const isPdf = file.type === "application/pdf";
   const isText = file.type.startsWith("text/");
 
-  // First check if model supports file attachments at all
   if (!modelCapabilities?.fileAttachments) {
     return false;
   }
@@ -425,15 +346,12 @@ export function isSupportedFileType(
   return isImage || isPdf || isText;
 }
 
-/**
- * Utility function to get supported file types for accept attribute
- */
+// Get file accept string based on model capabilities
 export function getSupportedFileTypes(modelCapabilities?: {
   vision: boolean;
   multimodal: boolean;
   fileAttachments: boolean;
 }): string {
-  // First check if model supports file attachments at all
   if (!modelCapabilities?.fileAttachments) {
     return "";
   }
@@ -448,9 +366,7 @@ export function getSupportedFileTypes(modelCapabilities?: {
   }
 }
 
-/**
- * Utility function to filter files by supported types
- */
+// Filter files array by supported types
 export function filterSupportedFiles(
   files: File[],
   modelCapabilities?: {

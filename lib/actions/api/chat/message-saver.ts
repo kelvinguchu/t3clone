@@ -9,7 +9,7 @@ export interface MessageSaveResult {
   error?: string;
 }
 
-// Save user message and link attachments
+// Save user message to database and link any attachments
 export async function saveUserMessage(
   shouldSaveUserMessage: boolean,
   messages: Message[],
@@ -18,14 +18,9 @@ export async function saveUserMessage(
   finalSessionId: string | null,
   attachmentIds?: string[],
   fetchOptions?: { token: string },
-  requestId?: string,
 ): Promise<MessageSaveResult> {
-  const logPrefix = requestId ? `[${requestId}]` : "[saveUserMessage]";
-
+  // Skip saving if message already exists (retry scenario)
   if (!shouldSaveUserMessage) {
-    console.log(
-      `${logPrefix} CHAT_API - Skipping user message save (already exists or retry detected)`,
-    );
     return { success: true };
   }
 
@@ -66,7 +61,7 @@ export async function saveUserMessage(
       });
     }
 
-    // Link attachments if present
+    // Link any file attachments to the saved message
     if (attachmentIds && attachmentIds.length > 0 && messageId) {
       for (const attachmentId of attachmentIds) {
         try {
@@ -79,11 +74,8 @@ export async function saveUserMessage(
             },
             fetchOptions,
           );
-        } catch (error) {
-          console.error(
-            `${logPrefix} CHAT_API - Background attachment linking failed:`,
-            error,
-          );
+        } catch {
+          // Silently handle attachment linking failures
         }
       }
     }
@@ -95,10 +87,6 @@ export async function saveUserMessage(
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
-    console.error(
-      `${logPrefix} CHAT_API - Failed to save user message:`,
-      error,
-    );
 
     return {
       success: false,

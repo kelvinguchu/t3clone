@@ -28,7 +28,7 @@ export function ModelsPage() {
 
   const [mounted, setMounted] = useState(false);
 
-  // Convex queries and mutations
+  // Database operations for model preferences
   const userEnabledModels = useQuery(
     api.userPreferences.getEnabledModels,
     user ? { userId: user.id } : "skip",
@@ -51,20 +51,18 @@ export function ModelsPage() {
     }
   }, [user, setUserId]);
 
-  // Initialize enabled models from database and mark as synced
+  // Sync enabled models with database preferences
   useEffect(() => {
     if (!mounted || !_hasHydrated || !user) return;
 
     if (userEnabledModels !== undefined) {
       if (userEnabledModels === null) {
-        // No preferences in database, keep current defaults
-        console.log("No user preferences found, using default enabled models");
-        setDbSynced(true); // Mark as synced since we've confirmed no DB preferences exist
+        // No preferences in database, use defaults
+        setDbSynced(true);
       } else {
         // Load preferences from database
-        console.log("Loading enabled models from database:", userEnabledModels);
         setEnabledModels(userEnabledModels as ModelId[]);
-        setDbSynced(true); // Mark as synced after loading from DB
+        setDbSynced(true);
       }
     }
   }, [
@@ -83,17 +81,15 @@ export function ModelsPage() {
       if (enabled) {
         addEnabledModel(modelId);
       } else {
-        // Check if model can be removed
-        const { canRemove, reason } = canRemoveModel(modelId);
+        // Check if model can be removed (required models cannot be disabled)
+        const { canRemove } = canRemoveModel(modelId);
         if (!canRemove) {
-          console.warn(`Cannot disable ${modelId}: ${reason}`);
-          // You could add a toast notification here to inform the user
           return;
         }
         removeEnabledModel(modelId);
       }
 
-      // Sync to database
+      // Update database with new model preferences
       const currentEnabled = Array.from(enabledModels);
       const newEnabled = enabled
         ? [...currentEnabled, modelId].filter(
@@ -105,12 +101,12 @@ export function ModelsPage() {
         userId: user.id,
         enabledModels: newEnabled,
       });
-    } catch (error) {
-      console.error("Failed to update model preferences:", error);
+    } catch {
+      // Silently handle database update failures
     }
   };
 
-  // Don't render until the store is fully ready (hydrated and synced)
+  // Wait for store to be ready before rendering
   if (!mounted || !user || !isReady()) {
     return (
       <SettingsPageWrapper
@@ -165,7 +161,7 @@ export function ModelsPage() {
           const isEnabled = enabledModels.has(modelId as ModelId);
           const { canRemove, reason } = canRemoveModel(modelId as ModelId);
 
-          // Get enabled capabilities
+          // Extract model capabilities for display
           const enabledCapabilities = Object.entries(config.capabilities)
             .filter(([, enabled]) => enabled)
             .map(([capability]) => capability);
@@ -213,7 +209,7 @@ export function ModelsPage() {
                           >
                             {config.displayName}
                           </h3>
-                          {/* Special badges for required model types */}
+                          {/* Model type badges */}
                           {(config.capabilities.vision ||
                             config.capabilities.multimodal) && (
                             <Badge
@@ -241,7 +237,7 @@ export function ModelsPage() {
                         >
                           {config.description}
                         </p>
-                        {/* Show restriction reason if can't remove */}
+                        {/* Required model warning */}
                         {isEnabled && !canRemove && reason && (
                           <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-medium">
                             Required: {reason}

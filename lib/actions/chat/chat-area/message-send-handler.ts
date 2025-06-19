@@ -51,7 +51,7 @@ export interface MessageSendHandlerParams {
   setPrefillMessage: (message: string | null) => void;
 }
 
-// Handle message sending with attachments and web browsing
+// Process message sending with attachments, web browsing, and background operations
 export async function handleMessageSend(
   message: string,
   attachmentIds: string[] | undefined,
@@ -73,56 +73,36 @@ export async function handleMessageSend(
     setPrefillMessage,
   } = params;
 
+  // Skip empty messages without attachments
   if (!message.trim() && (!attachmentIds || attachmentIds.length === 0)) {
     return;
   }
 
-  console.log("[MessageSendHandler] Processing message send:", {
-    messageLength: message.trim().length,
-    attachmentCount: attachmentIds?.length || 0,
-    enableWebBrowsing: options?.enableWebBrowsing,
-    selectedModel,
-    threadId: threadId || initialThreadId,
-    timestamp: new Date().toISOString(),
-  });
-
   try {
-    // Convert attachment previews to experimental_attachments format for AI SDK
+    // Convert attachment previews for AI SDK compatibility
     const experimentalAttachments = attachmentPreviews?.map((preview) => ({
       name: preview.name,
       contentType: preview.contentType,
       url: preview.url,
     }));
 
-    console.log("[MessageSendHandler] Calling AI SDK sendMessage:", {
-      enableWebBrowsing: options?.enableWebBrowsing,
-      experimentalAttachmentsCount: experimentalAttachments?.length || 0,
-      timestamp: new Date().toISOString(),
-    });
-
-    // Use AI SDK's sendMessage for optimistic updates and proper streaming
+    // Send message with AI SDK for optimistic updates and streaming
     sendMessage(message, attachmentIds, {
       experimental_attachments: experimentalAttachments,
       enableWebBrowsing: options?.enableWebBrowsing,
     });
 
-    // Store browsing flag for UI indicator
+    // Set UI state for web browsing indicator
     setPendingBrowsing(!!options?.enableWebBrowsing);
-    console.log("[MessageSendHandler] Set pending browsing state:", {
-      pendingBrowsing: !!options?.enableWebBrowsing,
-      timestamp: new Date().toISOString(),
-    });
 
-    // Auto-detect thinking models and set thinking flag
+    // Enable thinking state for reasoning models
     const reasoningModels = ["deepseek-r1-distill-llama-70b", "qwen/qwen3-32b"];
-
     if (reasoningModels.includes(selectedModel)) {
       setPendingThinking(true);
     }
 
-    // Cache user message in background (non-blocking)
+    // Cache user message in background for performance
     if (initialThreadId) {
-      // Don't await - cache in background to avoid blocking UI
       fetch("/api/cache/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -137,17 +117,13 @@ export async function handleMessageSend(
           },
           sessionId: isAnonymous ? anonSessionId : undefined,
         }),
-      }).catch((error) => {
-        console.error(
-          "[MessageSendHandler] HANDLE_SEND - Error caching user message (non-blocking):",
-          error,
-        );
+      }).catch(() => {
+        // Silently handle caching failures (non-critical)
       });
     }
 
-    // Auto-update thread title if it's still "New Chat" (background operation)
+    // Auto-generate thread title in background
     if (threadId && threadMeta && shouldUpdateTitle(threadMeta.title)) {
-      // Don't await - update title in background
       generateThreadTitleClient(message)
         .then((newTitle) => {
           return updateThreadMutation({
@@ -159,26 +135,16 @@ export async function handleMessageSend(
           });
         })
         .then(() => {
-          // Thread title updated successfully
+          // Title updated successfully
         })
-        .catch((error) => {
-          console.error(
-            "[MessageSendHandler] Failed to auto-update thread title (non-blocking):",
-            error,
-          );
+        .catch(() => {
+          // Silently handle title update failures (non-critical)
         });
     }
-  } catch (error) {
-    console.error(
-      "[MessageSendHandler] HANDLE_SEND - Error sending message:",
-      error,
-    );
-    // Error sending message
-    // Message will be restored via the error state
-    // ensure ChatInput keeps its current contents if error occurs – let the
-    // component manage it locally.
+  } catch {
+    // Error sending message - let ChatInput handle error state
   }
 
-  // reset any pre-filled prompt after successful send
+  // Clear any pre-filled prompt after send attempt
   setPrefillMessage(null);
 }

@@ -14,6 +14,7 @@ import {
   Key,
   Paperclip,
   History,
+  Palette,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useState, useEffect } from "react";
@@ -41,11 +42,11 @@ const settingsNavigation = [
   //   href: "/settings/account",
   //   icon: User,
   // },
-  // {
-  //   name: "Customization",
-  //   href: "/settings/customization",
-  //   icon: Palette,
-  // },
+  {
+    name: "Customization",
+    href: "/settings/customization",
+    icon: Palette,
+  },
   {
     name: "History",
     href: "/settings/history",

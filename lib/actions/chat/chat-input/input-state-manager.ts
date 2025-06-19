@@ -147,9 +147,7 @@ const WEB_BROWSING_KEYWORDS = [
   "what's new",
 ];
 
-/**
- * Detect if message contains keywords that should trigger web browsing
- */
+// Check if message contains keywords that should trigger web browsing
 function shouldEnableWebBrowsing(message: string): boolean {
   const lowerMessage = message.toLowerCase();
   return WEB_BROWSING_KEYWORDS.some((keyword) =>
@@ -157,41 +155,25 @@ function shouldEnableWebBrowsing(message: string): boolean {
   );
 }
 
-// Export for testing or external use
 export { WEB_BROWSING_KEYWORDS, shouldEnableWebBrowsing };
 
-/**
- * Custom hook that manages all input-related state including model selection,
- * message content, placeholders, attachments, and web browsing preferences
- */
+// Manage input state including model, message, attachments, and web browsing
 export function useInputStateManager({
   presetMessage,
   onHeightChange,
 }: InputStateManagerParams): InputStateManagerReturn {
   const pathname = usePathname();
 
-  // Use Zustand store for model selection
   const { selectedModel, setSelectedModel, _hasHydrated } = useModelStore();
-
-  // Placeholder animation state
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
-
-  // Store attachment IDs instead of full attachment objects for better integration with Convex
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
-
-  // Web browsing toggle state - persist across sessions
   const [enableWebBrowsing, setEnableWebBrowsing] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-
-  // Track if user has manually disabled web browsing to prevent auto-enabling
   const [userManuallyDisabled, setUserManuallyDisabled] = useState(false);
-
-  // Local uncontrolled message state – isolated from parent re-renders
   const [message, setMessage] = useState<string>("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
 
-  // Memoized placeholder texts
   const placeholderTexts = useMemo(
     () => [
       "Ask me anything...",
@@ -204,34 +186,29 @@ export function useInputStateManager({
     [],
   );
 
-  // Get current thread ID from pathname
+  // Generate thread key from pathname for state management
   const currentThreadKey = useMemo(() => {
     if (pathname === "/chat") {
-      return "new-chat"; // Special key for the main chat page
+      return "new-chat";
     }
     if (pathname?.startsWith("/chat/")) {
       const threadId = pathname.split("/")[2];
       return `thread-${threadId}`;
     }
-    return "new-chat"; // Fallback
+    return "new-chat";
   }, [pathname]);
 
-  // Reset manual disable flag when thread changes (new conversation)
+  // Reset manual disable flag on thread change
   useEffect(() => {
     setUserManuallyDisabled(false);
   }, [currentThreadKey]);
 
-  // Initialize web browsing state after component mounts (hydration-safe)
+  // Initialize web browsing state from localStorage after mount
   useEffect(() => {
     setIsMounted(true);
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("enableWebBrowsing");
       const initialState = saved === "true";
-      console.log("[InputStateManager] Initializing web browsing state:", {
-        savedValue: saved,
-        initialState,
-        timestamp: new Date().toISOString(),
-      });
       setEnableWebBrowsing(initialState);
     }
   }, []);
@@ -239,64 +216,50 @@ export function useInputStateManager({
   // Persist web browsing state to localStorage
   useEffect(() => {
     if (isMounted && typeof window !== "undefined") {
-      console.log("[InputStateManager] Persisting web browsing state:", {
-        enableWebBrowsing,
-        isMounted,
-        timestamp: new Date().toISOString(),
-      });
       localStorage.setItem("enableWebBrowsing", enableWebBrowsing.toString());
     }
   }, [enableWebBrowsing, isMounted]);
 
-  // Auto-resize function
+  // Auto-resize textarea and report height changes
   const autoResize = useCallback(() => {
     const textarea = textareaRef.current;
     const container = inputContainerRef.current;
     if (textarea) {
       textarea.style.height = "auto";
-      const newHeight = Math.min(textarea.scrollHeight, 120); // Max height of 120px (about 5 lines)
+      const newHeight = Math.min(textarea.scrollHeight, 120);
       textarea.style.height = `${newHeight}px`;
 
-      // Report total input container height to parent
       if (container && onHeightChange) {
-        // Get the full height of the input container including padding and borders
         const containerHeight = container.offsetHeight;
         onHeightChange(containerHeight);
       }
     }
   }, [onHeightChange]);
 
-  // Keep local state in sync when presetMessage changes (takes priority over draft)
+  // Update message when preset is provided
   useEffect(() => {
     if (presetMessage) {
       setMessage(presetMessage);
-      // Auto-resize after setting preset message
       setTimeout(autoResize, 0);
     }
   }, [presetMessage, autoResize]);
 
-  // Auto-resize when message changes
   useEffect(() => {
     autoResize();
   }, [message, autoResize]);
 
-  // Create a wrapper function that tracks manual user actions
+  // Track manual web browsing changes to prevent auto-enabling
   const handleWebBrowsingChange = useCallback((enabled: boolean) => {
     setEnableWebBrowsing(enabled);
 
-    // If user manually disables, remember this to prevent auto-enabling
     if (!enabled) {
       setUserManuallyDisabled(true);
-      console.log(
-        "[InputStateManager] User manually disabled web browsing - preventing auto-enable",
-      );
     } else {
-      // If user manually enables, reset the flag
       setUserManuallyDisabled(false);
     }
   }, []);
 
-  // Auto-enable web browsing based on keywords in message
+  // Auto-enable web browsing based on message keywords
   useEffect(() => {
     if (
       isMounted &&
@@ -305,66 +268,29 @@ export function useInputStateManager({
       !userManuallyDisabled
     ) {
       if (shouldEnableWebBrowsing(message)) {
-        console.log(
-          "[InputStateManager] Auto-enabling web browsing due to keywords:",
-          {
-            message: message.substring(0, 50) + "...",
-            timestamp: new Date().toISOString(),
-          },
-        );
         setEnableWebBrowsing(true);
-      }
-    } else if (
-      isMounted &&
-      message.trim() &&
-      !enableWebBrowsing &&
-      userManuallyDisabled
-    ) {
-      if (shouldEnableWebBrowsing(message)) {
-        console.log(
-          "[InputStateManager] Keywords detected but auto-enable prevented - user manually disabled web browsing:",
-          {
-            message: message.substring(0, 50) + "...",
-            userManuallyDisabled,
-            timestamp: new Date().toISOString(),
-          },
-        );
       }
     }
   }, [message, enableWebBrowsing, isMounted, userManuallyDisabled]);
 
-  // Report initial height on mount
   useEffect(() => {
     autoResize();
   }, [autoResize]);
 
   return {
-    // Model state
     selectedModel,
     setSelectedModel,
     _hasHydrated,
-
-    // Message state
     message,
     setMessage,
-
-    // Placeholder state
     placeholderIndex,
     setPlaceholderIndex,
     placeholderTexts,
-
-    // Attachment state
     attachmentIds,
     setAttachmentIds,
-
-    // Web browsing state
     enableWebBrowsing,
     setEnableWebBrowsing: handleWebBrowsingChange,
-
-    // Mounting state
     isMounted,
-
-    // Refs and utilities
     textareaRef,
     inputContainerRef,
     autoResize,
@@ -372,20 +298,17 @@ export function useInputStateManager({
   };
 }
 
-/**
- * Custom hook that manages placeholder animation cycling
- */
+// Manage placeholder text cycling animation
 export function usePlaceholderAnimation(
   placeholderTexts: string[],
   message: string,
   attachmentCount: number,
   setPlaceholderIndex: React.Dispatch<React.SetStateAction<number>>,
 ): void {
-  // Cycling placeholder animation - only when input is empty
+  // Cycle placeholder only when input is empty
   useEffect(() => {
-    // Only animate when input is completely empty and no attachments
     if (message.trim() || attachmentCount > 0) {
-      return; // No interval when user has content
+      return;
     }
 
     const interval = setInterval(() => {

@@ -33,26 +33,17 @@ export interface ChatRequestBody {
   };
 }
 
-// Validate incoming chat request data
+// Validate and extract chat request parameters
 export function validateChatRequest(
   body: ChatRequestBody,
   threadIdHeader?: string | null,
-  requestId?: string,
 ): { validation: ValidationResult; data?: ValidatedRequestData } {
-  const logPrefix = requestId ? `[${requestId}]` : "[validateChatRequest]";
-
-  // Validate messages array
+  // Validate required messages array
   if (
     !body.messages ||
     !Array.isArray(body.messages) ||
     body.messages.length === 0
   ) {
-    console.error(`${logPrefix} CHAT_API - Invalid messages:`, {
-      messages: body.messages,
-      isArray: Array.isArray(body.messages),
-      length: body.messages?.length,
-    });
-
     return {
       validation: {
         isValid: false,
@@ -65,7 +56,7 @@ export function validateChatRequest(
     };
   }
 
-  // Extract and validate other fields
+  // Extract request parameters with defaults
   const {
     messages,
     modelId = "gemini-2.0-flash" as ModelId,
@@ -77,7 +68,7 @@ export function validateChatRequest(
     options,
   } = body;
 
-  // Set higher default maxTokens for reasoning models
+  // Set higher token limits for reasoning models
   const defaultMaxTokens =
     modelId === "deepseek-r1-distill-llama-70b" || modelId === "qwen/qwen3-32b"
       ? 8192
@@ -87,19 +78,9 @@ export function validateChatRequest(
   // Resolve thread ID (body takes precedence over header)
   const finalThreadId = threadIdBody ?? threadIdHeader ?? null;
 
-  // Get enableWebBrowsing from either direct property or options object
+  // Resolve web browsing setting from multiple sources
   const enableWebBrowsing =
     directEnableWebBrowsing ?? options?.enableWebBrowsing ?? false;
-
-  // Log request details for debugging retry operations
-  console.log(`${logPrefix} CHAT_API - Request validation:`, {
-    messagesCount: messages.length,
-    modelId,
-    threadId: finalThreadId,
-    hasThreadId: !!finalThreadId,
-    lastMessageRole: messages[messages.length - 1]?.role,
-    enableWebBrowsing,
-  });
 
   return {
     validation: { isValid: true },

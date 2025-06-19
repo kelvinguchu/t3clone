@@ -24,10 +24,9 @@ import { fetchQuery } from "convex/nextjs";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
-// Performance optimizations for streaming chat API
-export const dynamic = "force-dynamic"; // Always dynamic for real-time chat
-export const runtime = "nodejs"; // Use Node.js runtime for AI SDK and Redis operations
-export const maxDuration = 60; // Allow streaming responses up to 60 seconds
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 // GET handler for resuming streams
 export async function GET(request: Request) {
@@ -81,21 +80,10 @@ export async function POST(req: NextRequest) {
       enableWebBrowsing = false,
     } = data!;
 
-    console.log(`[${requestId}] CHAT_API - Request processed:`, {
-      modelId,
-      threadId,
-      enableWebBrowsing,
-      messagesCount: messages.length,
-      attachmentIdsCount: attachmentIds.length,
-      temperature,
-      maxTokens,
-      timestamp: new Date().toISOString(),
-    });
+    // Request parameters extracted and validated
 
-    // ----------------------------------------------------
-    // OPTIMIZATION: Only load conversation from Convex for actual retry operations
-    // New messages should use client messages to ensure proper processing
-    // ----------------------------------------------------
+    // Smart message handling: detect retries vs new messages
+    // Retries use database history, new messages use client data
     let messagesForAI: CoreMessage[] = [];
     let isRetryFromConvex = false;
     const originalMessages = messages; // Keep original messages for functions that need Message[]
@@ -127,18 +115,7 @@ export async function POST(req: NextRequest) {
             lastUserMessageFromClient.content === lastUserMessageFromDB.content;
 
           if (isActualRetry) {
-            console.log(
-              `[${requestId}] CHAT_API - Confirmed retry operation, using Convex history`,
-              {
-                threadId,
-                clientMessagesCount: messages.length,
-                convexMessagesCount: existingMessages.length,
-                lastUserMessage:
-                  lastUserMessageFromClient.content.substring(0, 100) + "...",
-              },
-            );
-
-            // Convert Convex messages to CoreMessage format (no IDs needed for CoreMessage)
+            // Retry detected: use conversation history from database
             messagesForAI = existingMessages.map((msg) => ({
               role: msg.role as "user" | "assistant" | "system",
               content: msg.content,
@@ -146,30 +123,13 @@ export async function POST(req: NextRequest) {
 
             isRetryFromConvex = true;
           } else {
-            console.log(
-              `[${requestId}] CHAT_API - New message detected, using client messages`,
-              {
-                threadId,
-                clientLastUser:
-                  lastUserMessageFromClient?.content.substring(0, 100) + "...",
-                dbLastUser:
-                  lastUserMessageFromDB?.content.substring(0, 100) + "...",
-              },
-            );
+            // New message: use client-provided messages
           }
         } else if (existingMessages === null) {
-          // Thread was deleted, log this case
-          console.log(
-            `[${requestId}] CHAT_API - Thread not found (possibly deleted), using client messages`,
-            { threadId },
-          );
+          // Thread was deleted: fall back to client messages
         }
-      } catch (error) {
-        console.warn(
-          `[${requestId}] CHAT_API - Failed to load conversation from Convex, using client messages`,
-          error,
-        );
-        // Fall back to using client messages if Convex load fails
+      } catch {
+        // Convex query failed: fall back to client messages
       }
     }
 
@@ -237,24 +197,41 @@ export async function POST(req: NextRequest) {
         if (threadRes.success && threadRes.threadId) {
           earlyThreadId = threadRes.threadId;
         }
-      } catch (err) {
-        console.error(
-          `[${requestId}] CHAT_API - Early thread creation failed`,
-          err,
-        );
+      } catch {
+        // Thread creation failed: continue without early ID
       }
     }
 
     // Model configuration was already set up earlier for multimodal processing
 
-    // ------------------------------------------------------------------
-    // IMMEDIATE STREAMING: Start AI response immediately
-    // All database operations moved to onFinish for background processing
-    // ------------------------------------------------------------------
+    // Get dynamic system prompt for the user (if customization preferences are set)
+    const { getDynamicSystemPrompt } = await import("@/lib/ai-providers");
+    const dynamicSystemPrompt = await getDynamicSystemPrompt(
+      userId ?? undefined,
+    );
+
+    // If we received a dynamic system prompt, prepend it as a system message
+    if (dynamicSystemPrompt) {
+      // Avoid duplicating system messages if one already exists at the front
+      if (
+        messagesForAI.length === 0 ||
+        messagesForAI[0].role !== "system" ||
+        messagesForAI[0].content !== dynamicSystemPrompt
+      ) {
+        messagesForAI = [
+          { role: "system", content: dynamicSystemPrompt },
+          ...messagesForAI,
+        ];
+      }
+    }
+
+    // Start AI streaming immediately for optimal performance
+    // Database operations happen in background via onFinish callback
 
     const result = streamText({
       model,
       messages: messagesForAI,
+      ...(dynamicSystemPrompt && { system: dynamicSystemPrompt }),
       temperature,
       maxTokens: Math.min(maxTokens, modelConfig.maxTokens),
       ...(tools && { tools }),
@@ -274,34 +251,18 @@ export async function POST(req: NextRequest) {
       abortSignal: req.signal,
 
       // Handle each step completion for multi-step tool calls
-      onStepFinish: async ({
-        text,
-        toolCalls,
-        toolResults,
-        finishReason,
-        usage,
-      }) => {
+      onStepFinish: async () => {
         // CRITICAL: Make this callback completely non-blocking to prevent stream interruption
         // Use setImmediate to defer all operations to the next tick
+        // Non-blocking step completion handling (for monitoring)
         setImmediate(() => {
-          console.log(`[${requestId}] CHAT_API - Step finished:`, {
-            stepText:
-              text?.substring(0, 100) +
-              (text && text.length > 100 ? "..." : ""),
-            toolCallsCount: toolCalls?.length || 0,
-            toolResultsCount: toolResults?.length || 0,
-            finishReason,
-            usage,
-            timestamp: new Date().toISOString(),
-          });
-
           // All database operations moved to onFinish callback
-          // This callback should ONLY be used for logging/monitoring
         });
       },
 
       onFinish: async (result) => {
-        // Background: Handle session management for anonymous users
+        // Background processing after stream completes
+        // Handle session management for anonymous users
         let finalThreadId = earlyThreadId ?? threadId;
         let finalSessionId = sessionId;
 
@@ -322,15 +283,12 @@ export async function POST(req: NextRequest) {
               );
               finalSessionId = sessionData.sessionId;
             }
-          } catch (error) {
-            console.error(
-              `[${requestId}] CHAT_API - Background session creation failed:`,
-              error,
-            );
+          } catch {
+            // Session creation failed: continue without session
           }
         }
 
-        // Background: Create thread if needed
+        // Create thread if needed
         const threadResult = await createThreadIfNeeded(
           finalThreadId,
           messages,
@@ -342,7 +300,7 @@ export async function POST(req: NextRequest) {
         );
         finalThreadId = threadResult.threadId;
 
-        // Background: Save messages to database
+        // Save messages to database
         if (finalThreadId) {
           try {
             // For retry operations, we never save user messages (they already exist)
@@ -358,18 +316,9 @@ export async function POST(req: NextRequest) {
               );
               shouldSaveUserMessage = retryResult.shouldSaveUserMessage;
 
-              // Debug logging for retry detection
-              console.log(`[${requestId}] CHAT_API - Retry detection result:`, {
-                isRetryOperation: retryResult.isRetryOperation,
-                shouldSaveUserMessage,
-                messagesCount: messages.length,
-                lastMessageRole: messages[messages.length - 1]?.role,
-                threadId: finalThreadId,
-              });
+              // Retry detection completed
             } else {
-              console.log(
-                `[${requestId}] CHAT_API - Retry operation detected via Convex history, skipping user message save`,
-              );
+              // Retry operation: skip user message save
             }
 
             // Save user message only if it doesn't already exist
@@ -387,16 +336,12 @@ export async function POST(req: NextRequest) {
             // Extract reasoning from the result - this is the key fix!
             let extractedReasoning: string | undefined;
 
-            // Method 1: Check if result has direct reasoning property (for some models)
+            // Extract reasoning from AI response if available
             if (result.reasoning) {
               extractedReasoning = result.reasoning;
-              console.log(
-                `[${requestId}] CHAT_API - Direct reasoning extracted:`,
-                extractedReasoning.substring(0, 100) + "...",
-              );
             }
 
-            // Method 2: Check response messages for reasoning parts
+            // Check response messages for reasoning parts
             if (!extractedReasoning && result.response.messages) {
               for (const message of result.response.messages) {
                 if (
@@ -415,10 +360,6 @@ export async function POST(req: NextRequest) {
 
                   if (reasoningParts.length > 0) {
                     extractedReasoning = reasoningParts.join("\n");
-                    console.log(
-                      `[${requestId}] CHAT_API - Message reasoning extracted:`,
-                      extractedReasoning.substring(0, 100) + "...",
-                    );
                     break;
                   }
                 }
@@ -446,15 +387,12 @@ export async function POST(req: NextRequest) {
               fetchOptions,
               requestId,
             });
-          } catch (error) {
-            console.error(
-              `[${requestId}] CHAT_API - Background message saving failed:`,
-              error,
-            );
+          } catch {
+            // Message saving failed: continue with other operations
           }
         }
 
-        // Background: Cache conversation context
+        // Cache conversation context
         await cacheConversationContext(
           finalThreadId,
           originalMessages, // Use original Message[] format for caching
@@ -462,7 +400,7 @@ export async function POST(req: NextRequest) {
           requestId,
         );
 
-        // Background: Track usage for authenticated users
+        // Track usage for authenticated users
         await trackUsage(
           userId,
           result.usage,
@@ -471,25 +409,12 @@ export async function POST(req: NextRequest) {
           requestId,
         );
 
-        // Background: Cleanup browser sessions
+        // Cleanup browser sessions
         await cleanupBrowserSessions(requestId);
       },
 
-      onError: (error) => {
-        console.error(`[${requestId}] CHAT_API - streamText onError:`, error);
-
-        // Log specific error types for better debugging
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        if (errorMessage.includes("Request too large")) {
-          console.error(
-            `[${requestId}] CHAT_API - Token limit exceeded for model ${modelId}`,
-          );
-        } else if (errorMessage.includes("rate limit")) {
-          console.error(
-            `[${requestId}] CHAT_API - Rate limit exceeded for model ${modelId}`,
-          );
-        }
+      onError: () => {
+        // Error handling for AI stream failures
       },
     });
 
@@ -518,8 +443,6 @@ export async function POST(req: NextRequest) {
       headers: streamConfig.headers as Record<string, string>,
     });
   } catch (error) {
-    console.error(`[${requestId}] CHAT_API - Request failed:`, error);
-
     // Determine appropriate status code and error type
     let status = 500;
     let errorType = "internal_error";

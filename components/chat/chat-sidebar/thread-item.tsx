@@ -36,6 +36,7 @@ export interface ThreadItemProps {
   sessionId?: string;
   isMobile: boolean;
   setOpenMobile: (open: boolean) => void;
+  refreshCache: () => void;
 }
 
 export function ThreadItem({
@@ -49,6 +50,7 @@ export function ThreadItem({
   sessionId,
   isMobile,
   setOpenMobile,
+  refreshCache,
 }: Readonly<ThreadItemProps>) {
   const router = useRouter();
   const isActive = currentThreadId === String(thread._id);
@@ -80,7 +82,7 @@ export function ThreadItem({
     currentThreadId,
     currentlyPublic: thread.isPublic,
     onDeleteSuccess: () => {
-      // Optionally close mobile sidebar after deletion
+      refreshCache();
       if (isMobile) {
         setOpenMobile(false);
       }

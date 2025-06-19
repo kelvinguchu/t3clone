@@ -17,11 +17,7 @@ const systemGoogle = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
-// Log system key availability at startup
-console.log(`🏢 [AI Providers] System keys available:`, {
-  groq: !!process.env.GROQ_API_KEY,
-  google: !!process.env.GEMINI_API_KEY,
-});
+// System provider instances for fallback when user keys unavailable
 
 // Provider instances cache (will use user keys when available)
 const providerInstances: {
@@ -167,60 +163,27 @@ export interface ModelConfig {
   theme: string;
 }
 
-/**
- * Get provider instance (with user API key if available, fallback to system)
- */
+// Get provider instance with user API key if available, fallback to system
 async function getProviderInstance(provider: Provider) {
-  console.log(`[AI Providers] Getting provider instance for: ${provider}`);
-
-  // Check if we already have a cached instance
+  // Return cached instance if available
   if (providerInstances[provider]) {
-    console.log(`[AI Providers] Using cached ${provider} instance`);
     return providerInstances[provider];
   }
 
   try {
-    // Try to get user API key first
+    // Attempt to get user's BYOK API key
     let userApiKey: string | null = null;
 
-    console.log(`[AI Providers] Checking if API key manager is unlocked...`);
     if (apiKeyManager.getIsUnlocked()) {
-      console.log(
-        `[AI Providers] API key manager is unlocked, checking for user ${provider} key...`,
-      );
       userApiKey = await apiKeyManager.getApiKey(provider);
-
-      if (userApiKey) {
-        console.log(
-          `✅ [AI Providers] Found user BYOK key for ${provider} (${userApiKey.substring(0, 8)}...)`,
-        );
-      } else {
-        console.log(
-          `⚠️ [AI Providers] No user BYOK key found for ${provider}, will use system key`,
-        );
-      }
-    } else {
-      console.log(
-        `⚠️ [AI Providers] API key manager is locked, will use system key for ${provider}`,
-      );
     }
 
+    // Create provider instance with user key or system fallback
     switch (provider) {
       case "groq": {
         const instance = userApiKey
           ? createGroq({ apiKey: userApiKey })
           : systemGroq;
-
-        if (userApiKey) {
-          console.log(
-            `🔑 [AI Providers] Created ${provider} instance with user BYOK key`,
-          );
-        } else {
-          console.log(
-            `🏢 [AI Providers] Created ${provider} instance with system key`,
-          );
-        }
-
         providerInstances[provider] = instance;
         return instance;
       }
@@ -229,17 +192,6 @@ async function getProviderInstance(provider: Provider) {
         const instance = userApiKey
           ? createGoogleGenerativeAI({ apiKey: userApiKey })
           : systemGoogle;
-
-        if (userApiKey) {
-          console.log(
-            `🔑 [AI Providers] Created ${provider} instance with user BYOK key`,
-          );
-        } else {
-          console.log(
-            `🏢 [AI Providers] Created ${provider} instance with system key`,
-          );
-        }
-
         providerInstances[provider] = instance;
         return instance;
       }
@@ -247,65 +199,59 @@ async function getProviderInstance(provider: Provider) {
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
-  } catch (error) {
-    console.error(
-      `❌ [AI Providers] Failed to create ${provider} instance:`,
-      error,
-    );
-
-    // For providers that support system fallback
+  } catch {
+    // Fallback to system providers on error
     if (provider === "groq") {
-      console.log(
-        `🔄 [AI Providers] Falling back to system ${provider} key due to error`,
-      );
       providerInstances[provider] = systemGroq;
       return systemGroq;
     } else if (provider === "google") {
-      console.log(
-        `🔄 [AI Providers] Falling back to system ${provider} key due to error`,
-      );
       providerInstances[provider] = systemGoogle;
       return systemGoogle;
     }
 
-    throw error;
+    throw new Error(`Failed to create provider instance: ${provider}`);
   }
 }
 
-/**
- * Enhanced model factory function with user API key support
- */
+// Create model instance with user API key support and system fallback
 export async function getModel(modelId: ModelId): Promise<LanguageModelV1> {
-  console.log(`[AI Providers] Creating model instance for: ${modelId}`);
-
   const config = AI_MODELS[modelId];
   if (!config) {
-    console.error(`❌ [AI Providers] Model ${modelId} not found`);
     throw new Error(`Model ${modelId} not found`);
   }
-
-  console.log(
-    `[AI Providers] Model ${modelId} uses provider: ${config.provider}`,
-  );
 
   // Get provider instance (with user key if available)
   const provider = await getProviderInstance(config.provider);
 
-  // Create model instance
-  console.log(
-    `[AI Providers] Creating ${modelId} model instance with ${config.modelName}`,
-  );
-  const model = provider(config.modelName);
-
-  console.log(
-    `✅ [AI Providers] Successfully created ${modelId} model instance`,
-  );
-  return model;
+  // Create and return model instance
+  return provider(config.modelName);
 }
 
-/**
- * Synchronous version for cases where user keys aren't needed
- */
+// Generate dynamic system prompt from user's customization preferences
+export async function getDynamicSystemPrompt(
+  userId?: string,
+): Promise<string | undefined> {
+  if (!userId) {
+    return undefined;
+  }
+
+  try {
+    // Import here to avoid circular dependencies
+    const { fetchQuery } = await import("convex/nextjs");
+    const { api } = await import("@/convex/_generated/api");
+
+    const systemPrompt = await fetchQuery(
+      api.userPreferences.generateSystemPrompt,
+      { userId },
+    );
+
+    return systemPrompt || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Synchronous model creation using system keys only
 export function getModelSync(modelId: ModelId): LanguageModelV1 {
   const config = AI_MODELS[modelId];
   if (!config) {
@@ -321,28 +267,13 @@ export function getModelSync(modelId: ModelId): LanguageModelV1 {
   }
 }
 
-/**
- * Clear provider instances cache (call when user keys change)
- */
+// Clear provider instances cache when user keys change
 export function clearProviderCache(): void {
-  console.log(`🗑️ [AI Providers] Clearing provider cache (user keys changed)`);
-
-  const clearedProviders = [];
   if (providerInstances.groq) {
     delete providerInstances.groq;
-    clearedProviders.push("groq");
   }
   if (providerInstances.google) {
     delete providerInstances.google;
-    clearedProviders.push("google");
-  }
-
-  if (clearedProviders.length > 0) {
-    console.log(
-      `🗑️ [AI Providers] Cleared cached instances for: ${clearedProviders.join(", ")}`,
-    );
-  } else {
-    console.log(`🗑️ [AI Providers] No cached instances to clear`);
   }
 }
 
@@ -380,66 +311,33 @@ export function getModelInfo(modelId: ModelId) {
   };
 }
 
-// Get available tools for a model
+// Get available tools for models that support tool calling
 export function getModelTools(modelId: ModelId) {
   const config = AI_MODELS[modelId];
   if (!config) {
     throw new Error(`Model ${modelId} not found`);
   }
 
-  console.log("[getModelTools] Checking tool availability:", {
-    modelId,
-    supportsTools: config.capabilities.tools,
-    timestamp: new Date().toISOString(),
-  });
-
-  // Only return tools for models that support tool calling
+  // Check if provider supports tool calling
   const providerConfig = PROVIDER_CONFIGS[config.provider];
   if (!providerConfig.supportsToolCalls) {
-    console.log("[getModelTools] Provider does not support tool calls:", {
-      modelId,
-      provider: config.provider,
-      timestamp: new Date().toISOString(),
-    });
     return undefined;
   }
 
-  // Check if Browserbase is configured
+  // Verify Browserbase configuration is available
   const hasBrowserbaseConfig =
     process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID;
 
-  console.log("[getModelTools] Browserbase configuration check:", {
-    modelId,
-    hasBrowserbaseApiKey: !!process.env.BROWSERBASE_API_KEY,
-    hasBrowserbaseProjectId: !!process.env.BROWSERBASE_PROJECT_ID,
-    hasBrowserbaseConfig,
-    timestamp: new Date().toISOString(),
-  });
-
   if (!hasBrowserbaseConfig) {
-    console.warn(
-      "[getModelTools] Browserbase not configured - tools unavailable:",
-      {
-        modelId,
-        timestamp: new Date().toISOString(),
-      },
-    );
     return undefined;
   }
 
-  const tools = {
+  // Return available browsing tools
+  return {
     createSession: createSessionTool,
     duckDuckGoSearch: duckDuckGoSearchTool,
     getPageContent: getPageContentTool,
   };
-
-  console.log("[getModelTools] Tools available:", {
-    modelId,
-    toolNames: Object.keys(tools),
-    timestamp: new Date().toISOString(),
-  });
-
-  return tools;
 }
 
 // Validate environment variables

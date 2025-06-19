@@ -166,23 +166,20 @@ const ChatArea = memo(function ChatArea({
       | "skip",
   );
 
-  // Handle thread deletion: if we're on a specific thread but it returns null,
-  // it means the thread was deleted, so redirect to main chat page
+  // Redirect to main chat if thread is deleted
   useEffect(() => {
     if (
-      initialThreadId && // We're on a specific thread page
-      historicalQueryArgs !== "skip" && // Query should be running
-      historicalMessages === null // Thread not found (deleted)
+      initialThreadId &&
+      historicalQueryArgs !== "skip" &&
+      historicalMessages === null
     ) {
-      console.log("[ChatArea] Thread deleted, redirecting to main chat page");
       router.push("/chat");
-      return; // Early return to prevent further processing
+      return;
     }
   }, [initialThreadId, historicalQueryArgs, historicalMessages, router]);
 
-  // FIXED: Stabilize initial messages to prevent cascading re-renders
+  // Convert historical messages to AI SDK format
   const initialMessages = useMemo(() => {
-    // Handle null case (thread deleted) by returning undefined
     if (historicalMessages === null) return undefined;
     if (!historicalMessages) return undefined;
 
@@ -204,9 +201,8 @@ const ChatArea = memo(function ChatArea({
   // State for error handling
   const [chatError, setChatError] = useState<Error | null>(null);
 
-  // Memoize the onError callback to prevent useChat from recreating
+  // Handle chat errors with stable callback
   const onChatError = useCallback((error: Error) => {
-    console.error("[ChatArea] CHAT_ERROR - Error in chat:", error);
     setChatError(error);
   }, []);
 
@@ -233,7 +229,7 @@ const ChatArea = memo(function ChatArea({
     isSavingPartial, // Partial save state
   } = useChat(useChatConfig);
 
-  // FIXED: Use stable message references to prevent infinite re-renders
+  // Stabilize message references to prevent re-renders
   const stableMessages = useStableMessages(hookMessages);
 
   // Mutation to remove last assistant message from database
@@ -263,7 +259,7 @@ const ChatArea = memo(function ChatArea({
   }, [
     threadId,
     status,
-    stableMessages, // Changed from hookMessages to stableMessages
+    stableMessages,
     selectedModel,
     data,
     removeLastAssistantMessage,
@@ -285,23 +281,16 @@ const ChatArea = memo(function ChatArea({
   // Add resumable stream support
   useAutoResume(autoResumeConfig);
 
-  // AI SDK Pattern: Use AI SDK messages for all UI display
-  // Convex is only used for persistence and loading initial messages
-  const effectiveMessages = useEffectiveMessages(stableMessages); // Use stable messages
+  // Use AI SDK messages for UI display, Convex for persistence
+  const effectiveMessages = useEffectiveMessages(stableMessages);
 
-  // OPTIMIZED: Use AI SDK status for immediate loading feedback
+  // Track loading state from AI SDK status
   const isLoading = useLoadingState(status, hookLoading, effectiveMessages);
 
-  // Detect web-browsing phase: when a generation is in-progress, the last assistant
-  // message exists but is still empty (Gemini/LLM has not emitted any tokens yet).
-  // This happens while the model is busy executing tool calls (e.g. Browserbase).
+  // Track assistant message states for tool usage detection
   const lastAssistantMessage = useLastAssistantMessage(effectiveMessages);
-
-  // Track whether the current generation was started with web-browsing enabled.
   const [pendingBrowsing, setPendingBrowsing] =
     usePendingBrowsingState(isLoading);
-
-  // Track whether the current generation was started with a thinking model.
   const [pendingThinking, setPendingThinking] =
     usePendingThinkingState(isLoading);
 
@@ -317,14 +306,13 @@ const ChatArea = memo(function ChatArea({
     pendingThinking,
   );
 
-  // Get detailed thinking phase information
+  // Determine thinking and browsing display states
   const { isThinkingPhase, shouldShowThinkingDisplay, hasStartedResponding } =
     useThinkingPhase(isLoading, lastAssistantMessage, pendingThinking);
 
-  // Get current loading status text (only show "Thinking..." if in pure thinking phase and no thinking display)
   const loadingStatusText = useLoadingStatusText(
     isLoading,
-    isThinking && !shouldShowThinkingDisplay, // Only show thinking text if we don't have the display
+    isThinking && !shouldShowThinkingDisplay,
     isBrowsing,
   );
 
@@ -359,28 +347,23 @@ const ChatArea = memo(function ChatArea({
       | "skip",
   );
 
-  // Handle thread deletion for threadMeta query as well
+  // Handle thread metadata deletion
   useEffect(() => {
     if (
-      initialThreadId && // We're on a specific thread page
-      threadMetaQueryArgs !== "skip" && // Query should be running
-      threadMeta === null // Thread not found (deleted)
+      initialThreadId &&
+      threadMetaQueryArgs !== "skip" &&
+      threadMeta === null
     ) {
-      console.log(
-        "[ChatArea] Thread metadata not found (deleted), redirecting to main chat page",
-      );
       router.push("/chat");
-      return; // Early return to prevent further processing
+      return;
     }
   }, [initialThreadId, threadMetaQueryArgs, threadMeta, router]);
 
-  // FIXED: Stabilize model change effect to prevent cascading updates
-  // Only auto-change model when thread first loads, not when user manually changes it
+  // Auto-set model from thread on initial load only
   const currentModelFromThread = threadMeta?.model;
   const hasLoadedThreadModel = useRef(false);
 
   useEffect(() => {
-    // Only auto-set model from thread on initial load, not on subsequent user changes
     if (
       currentModelFromThread &&
       currentModelFromThread !== selectedModel &&
@@ -401,12 +384,11 @@ const ChatArea = memo(function ChatArea({
     }
   }, [initialThreadId, loadConversationContext]);
 
-  // FIXED: Stable display messages conversion to prevent unnecessary recalculations
+  // Convert messages for display with attachments and metadata
   const displayMessages: DisplayMessage[] = useMemo(() => {
     return convertToDisplayMessages(
       effectiveMessages,
       selectedModel,
-      // Handle null case by passing undefined to the converter
       historicalMessages === null ? undefined : historicalMessages,
     );
   }, [effectiveMessages, selectedModel, historicalMessages]);
@@ -419,7 +401,7 @@ const ChatArea = memo(function ChatArea({
     setMounted(true);
   }, []);
 
-  // Memoize user display functions using extracted functions
+  // Stable user display functions for welcome screen
   const getUserGreetingMemo = useCallback(
     () =>
       getUserGreeting({
@@ -444,8 +426,7 @@ const ChatArea = memo(function ChatArea({
     [user, mounted, isAnonymous, canSendMessage, remainingMessages],
   );
 
-  // Quick-prompt handling – we just forward the preset down to ChatInput so
-  // that the heavy ChatArea component does not re-render on every keystroke.
+  // Quick-prompt state for welcome screen interactions
   const [prefillMessage, setPrefillMessage] = useState<string | null>(null);
 
   const handleQuickPrompt = useQuickPromptHandler(
@@ -471,23 +452,8 @@ const ChatArea = memo(function ChatArea({
       }>,
       options?: { enableWebBrowsing?: boolean },
     ) => {
-      console.log("[ChatArea] handleSend called:", {
-        messageLength: message.length,
-        attachmentIdsCount: attachmentIds?.length || 0,
-        attachmentPreviewsCount: attachmentPreviews?.length || 0,
-        enableWebBrowsing: options?.enableWebBrowsing,
-        selectedModel,
-        threadId,
-        timestamp: new Date().toISOString(),
-        isAnonymous,
-        planLimits: isAnonymous
-          ? null
-          : { canSend: planLimits.canSend, remaining: planLimits.remaining },
-      });
-
       // Check plan limits for authenticated users
       if (!isAnonymous && !planLimits.canSend) {
-        console.warn("[ChatArea] Message blocked: Plan limit exceeded");
         return;
       }
 
@@ -495,9 +461,6 @@ const ChatArea = memo(function ChatArea({
       if (!isAnonymous) {
         const incrementSuccess = await planLimits.incrementUsage();
         if (!incrementSuccess) {
-          console.warn(
-            "[ChatArea] Message blocked: Failed to increment usage or limit exceeded",
-          );
           return;
         }
       }
@@ -534,14 +497,12 @@ const ChatArea = memo(function ChatArea({
       setPendingBrowsing,
       setPendingThinking,
       setPrefillMessage,
-      planLimits.canSend,
-      planLimits.incrementUsage,
+      planLimits,
     ],
   );
 
+  // Model-specific theming and styling
   const modelInfo = getModelInfo(selectedModel);
-
-  // Use extracted model theme functions
   const modelThemeClasses = useMemo(
     () => getModelThemeClasses(modelInfo),
     [modelInfo],
@@ -598,7 +559,7 @@ const ChatArea = memo(function ChatArea({
           : "md:border-2 md:border-t-transparent md:border-l-transparent md:border-r-transparent md:rounded-t-[0]"
       }`}
     >
-      {/* Scrollable Messages Area - Account for fixed mobile header and input */}
+      {/* Scrollable Messages Area */}
       <div
         className="flex-1 overflow-y-auto min-h-0 pt-12 md:pt-0 pb-32 md:pb-4"
         ref={messagesContainerRef}
@@ -644,7 +605,7 @@ const ChatArea = memo(function ChatArea({
         </div>
       )}
 
-      {/* Fixed Chat Input at Bottom - Account for mobile positioning */}
+      {/* Fixed Chat Input */}
       <div className="flex-shrink-0 pb-safe">
         <ChatInput
           presetMessage={prefillMessage}
@@ -666,7 +627,7 @@ const ChatArea = memo(function ChatArea({
         />
       </div>
 
-      {/* Scroll-to-bottom button - Positioned to center within chat input area */}
+      {/* Scroll-to-bottom button */}
       <div
         className={`fixed left-0 right-0 md:absolute md:left-0 md:right-0 z-55 transition-all duration-300 ${
           showScrollButton
@@ -674,7 +635,6 @@ const ChatArea = memo(function ChatArea({
             : "opacity-0 translate-y-2 pointer-events-none"
         }`}
         style={{
-          // Responsive spacing: closer on mobile (8px), more space on desktop (12px)
           bottom: `${inputHeight + (isMobile ? 8 : 12)}px`,
         }}
       >

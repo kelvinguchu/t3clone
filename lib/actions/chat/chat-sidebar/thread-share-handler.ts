@@ -43,18 +43,13 @@ export interface UseThreadShareReturn {
   actions: ThreadShareActions;
 }
 
-/**
- * Enhanced custom hook for managing thread sharing functionality
- * Handles share URL generation, cloning controls, view tracking, and advanced sharing options
- */
+// Manage thread sharing with URL generation, cloning controls, and view tracking
 export function useThreadShare({
   threadId,
-  threadTitle,
   isAnonymous,
   currentlyPublic = false,
   currentShareToken = null,
 }: ThreadShareParams): UseThreadShareReturn {
-  // Local state management
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(
@@ -64,18 +59,16 @@ export function useThreadShare({
   );
   const [error, setError] = useState<string | null>(null);
   const [isPublic, setIsPublic] = useState(currentlyPublic);
-  const [allowCloning, setAllowCloning] = useState(true); // Default to allowing cloning
+  const [allowCloning, setAllowCloning] = useState(true);
 
-  // Fetch thread statistics when public
   const threadStats = useQuery(
     api.threads.getThreadStats,
     isPublic ? { threadId } : "skip",
   );
 
-  // Convex mutations
   const toggleShareMutation = useMutation(api.threads.toggleThreadShare);
 
-  // Sync state with thread stats when available
+  // Update local state from thread stats
   useEffect(() => {
     if (threadStats) {
       setIsPublic(threadStats.isPublic);
@@ -88,7 +81,6 @@ export function useThreadShare({
     }
   }, [threadStats]);
 
-  // Actions
   const openDialog = useCallback(() => {
     setIsDialogOpen(true);
     setError(null);
@@ -101,7 +93,6 @@ export function useThreadShare({
 
   const toggleShare = useCallback(
     async (options?: { expiresInHours?: number; allowCloning?: boolean }) => {
-      // Anonymous users cannot share threads
       if (isAnonymous) {
         setError(
           "Anonymous users cannot share threads. Please sign up to share.",
@@ -122,7 +113,6 @@ export function useThreadShare({
             : {}),
         });
 
-        // Update local state
         const newIsPublic = !isPublic;
         setIsPublic(newIsPublic);
 
@@ -131,22 +121,14 @@ export function useThreadShare({
         }
 
         if (newIsPublic && shareToken) {
-          // Generate share URL
           const baseUrl =
             typeof window !== "undefined" ? window.location.origin : "";
           const newShareUrl = `${baseUrl}/share/${shareToken}`;
           setShareUrl(newShareUrl);
         } else {
-          // Thread is now private
           setShareUrl(null);
         }
-
-        console.log(
-          `[ThreadShare] ${newIsPublic ? "Shared" : "Unshared"} thread: ${threadTitle}`,
-          { allowCloning: options?.allowCloning ?? allowCloning },
-        );
       } catch (error) {
-        console.error("[ThreadShare] Failed to toggle share:", error);
         setError(
           error instanceof Error
             ? error.message
@@ -158,7 +140,6 @@ export function useThreadShare({
     },
     [
       threadId,
-      threadTitle,
       isAnonymous,
       isPublic,
       allowCloning,
@@ -184,21 +165,12 @@ export function useThreadShare({
       try {
         await toggleShareMutation({
           threadId,
-          isPublic: true, // Keep it public, just update cloning
+          isPublic: true,
           allowCloning: newAllowCloning,
         });
 
         setAllowCloning(newAllowCloning);
-
-        console.log(
-          `[ThreadShare] Updated cloning settings for thread: ${threadTitle}`,
-          { allowCloning: newAllowCloning },
-        );
       } catch (error) {
-        console.error(
-          "[ThreadShare] Failed to update cloning settings:",
-          error,
-        );
         setError(
           error instanceof Error
             ? error.message
@@ -208,7 +180,7 @@ export function useThreadShare({
         setIsSharing(false);
       }
     },
-    [threadId, threadTitle, isAnonymous, isPublic, toggleShareMutation],
+    [threadId, isAnonymous, isPublic, toggleShareMutation],
   );
 
   const copyShareUrl = useCallback(async () => {
@@ -218,11 +190,10 @@ export function useThreadShare({
     }
 
     try {
-      // Try modern clipboard API first
+      // Use modern clipboard API with fallback
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(shareUrl);
       } else {
-        // Fallback for older browsers
         const textArea = document.createElement("textarea");
         textArea.value = shareUrl;
         textArea.style.position = "fixed";
@@ -234,20 +205,13 @@ export function useThreadShare({
         document.execCommand("copy");
         document.body.removeChild(textArea);
       }
-
-      console.log("[ThreadShare] Share URL copied to clipboard");
-
-      // Could show a toast notification here
-      // For now, we'll rely on the UI to show feedback
-    } catch (error) {
-      console.error("[ThreadShare] Failed to copy share URL:", error);
+    } catch {
       setError("Failed to copy URL to clipboard");
     }
   }, [shareUrl]);
 
   const refreshStats = useCallback(() => {
-    // This will trigger a refetch of threadStats
-    // The query will automatically update when called
+    // Triggers refetch of threadStats query
   }, []);
 
   return {

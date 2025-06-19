@@ -189,6 +189,12 @@ export default defineSchema({
     enableWebSearch: v.optional(v.boolean()),
     enableImageGeneration: v.optional(v.boolean()),
 
+    // Customization preferences (for system prompt generation)
+    userName: v.optional(v.string()),
+    userRole: v.optional(v.string()),
+    traits: v.optional(v.array(v.string())),
+    additionalInfo: v.optional(v.string()),
+
     // Timestamps
     createdAt: v.number(),
     updatedAt: v.number(),

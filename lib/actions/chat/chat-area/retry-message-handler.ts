@@ -19,7 +19,7 @@ export interface RetryMessageHandlerParams {
   sendMessage: (content: string) => Promise<void>;
 }
 
-// Optimized retry logic that leverages Convex conversation history
+// Retry failed message by removing last assistant response and reloading
 export async function handleRetryMessage({
   threadId,
   hookMessages,
@@ -35,19 +35,13 @@ export async function handleRetryMessage({
   }
 
   try {
-    console.log("[RetryHandler] Starting optimized retry operation", {
-      threadId,
-      selectedModel,
-      hookMessagesCount: hookMessages.length,
-    });
-
-    // Step 1: Remove the last assistant message from the database
+    // Remove failed assistant message from database
     await removeLastAssistantMessage({
       threadId: threadId as Id<"threads">,
       ...(isAnonymous && anonSessionId ? { sessionId: anonSessionId } : {}),
     });
 
-    // Step 2: Find the last assistant message to remove from UI
+    // Find last assistant message in UI state
     let lastAssistantIndex = -1;
     for (let i = hookMessages.length - 1; i >= 0; i--) {
       if (hookMessages[i].role === "assistant") {
@@ -57,30 +51,20 @@ export async function handleRetryMessage({
     }
 
     if (lastAssistantIndex === -1) {
-      console.warn("[RetryHandler] No assistant message found to remove");
       return;
     }
 
-    // Step 3: Remove the assistant message from the UI state
+    // Remove assistant message from UI
     setMessages((currentMessages) => {
       return currentMessages.slice(0, lastAssistantIndex);
     });
 
-    // Step 4: Small delay to ensure UI updates
+    // Brief delay for UI update
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // Step 5: Use the AI SDK's reload() function
-    // The key optimization is that our server-side code now detects retry operations
-    // and loads conversation history from Convex instead of using the client-sent messages
-    console.log(
-      "[RetryHandler] Using AI SDK reload() with server-side conversation loading optimization",
-    );
-
+    // Reload conversation from server (uses Convex history for retry detection)
     await reload();
-
-    console.log("[RetryHandler] Optimized retry completed successfully");
   } catch (error) {
-    console.error("[RetryHandler] Retry failed:", error);
     throw error;
   }
 }

@@ -6,9 +6,9 @@ import { api } from "@/convex/_generated/api";
 
 const f = createUploadthing();
 
-// FileRouter for your app, can contain multiple FileRoutes
+// UploadThing file router configuration for chat attachments and profile pictures
 export const ourFileRouter = {
-  // Chat attachments route - supports images, documents, and other files
+  // Chat attachments with multi-format support and size limits
   chatAttachment: f(
     {
       image: {
@@ -38,24 +38,16 @@ export const ourFileRouter = {
       },
     },
     {
-      awaitServerData: true, // Wait for server callback to get attachmentId
+      awaitServerData: true,
     },
   )
-    .middleware(async ({ req }) => {
-      console.log("[UploadThing] Middleware called:", {
-        method: req.method,
-        url: req.url,
-        headers: Object.fromEntries(req.headers.entries()),
-      });
-
+    .middleware(async () => {
+      // Authenticate user and prepare upload metadata
       try {
-        // Get authenticated user from Clerk
         const user = await currentUser();
 
-        // Allow anonymous uploads but track differently
+        // Allow anonymous uploads with session tracking
         if (!user) {
-          console.log("[UploadThing] Anonymous upload detected");
-          // For anonymous users, we'll use a session-based approach
           return {
             userId: null,
             userEmail: null,
@@ -63,104 +55,63 @@ export const ourFileRouter = {
           };
         }
 
-        console.log("[UploadThing] Authenticated upload:", {
-          userId: user.id,
-          email: user.emailAddresses[0]?.emailAddress,
-        });
-
-        // Return metadata to be used in onUploadComplete
+        // Return authenticated user metadata
         return {
           userId: user.id,
           userEmail: user.emailAddresses[0]?.emailAddress,
           isAnonymous: false,
         };
-      } catch (error) {
-        console.error("[UploadThing] Middleware error:", error);
+      } catch {
         throw new UploadThingError("Authentication failed");
       }
     })
     .onUploadComplete(async ({ metadata, file }) => {
-      // This code runs on your server after upload
-      console.log("[UploadThing] onUploadComplete called:", {
-        metadata,
-        file: {
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          key: file.key,
-          url: file.url,
-          ufsUrl: file.ufsUrl,
-        },
-      });
-
+      // Store file metadata in Convex database after successful upload
       let attachmentId: string | null = null;
 
       try {
-        // Store file metadata in Convex as standalone attachment
-        // This will be linked to a thread/message later when used in chat
         if (metadata.userId) {
-          // Authenticated user
-          console.log(
-            "[UploadThing] Creating Convex attachment for authenticated user",
-          );
+          // Create attachment record for authenticated user
           attachmentId = await fetchMutation(
             api.attachments.createStandaloneAttachment,
             {
               fileName: file.name,
               fileSize: file.size,
               fileType: file.type,
-              fileUrl: file.ufsUrl || file.url, // Prefer ufsUrl
+              fileUrl: file.ufsUrl || file.url,
               fileKey: file.key,
               uploadedBy: metadata.userId,
             },
           );
         } else {
-          // Anonymous user - create attachment without userId
-          console.log(
-            "[UploadThing] Creating Convex attachment for anonymous user",
-          );
+          // Create attachment record for anonymous user
           attachmentId = await fetchMutation(
             api.attachments.createStandaloneAttachment,
             {
               fileName: file.name,
               fileSize: file.size,
               fileType: file.type,
-              fileUrl: file.ufsUrl || file.url, // Prefer ufsUrl
+              fileUrl: file.ufsUrl || file.url,
               fileKey: file.key,
-              // Don't include uploadedBy for anonymous users
             },
           );
         }
-
-        console.log("[UploadThing] Convex attachment created:", {
-          attachmentId,
-        });
-      } catch (error) {
-        console.error(
-          "[UploadThing] Failed to create Convex attachment:",
-          error,
-        );
-        // Don't throw here to avoid breaking the upload flow
-        // The file is already uploaded to UploadThing
-        // But we should still return some indication of the error
+      } catch {
+        // Continue without attachment ID if database save fails
       }
 
-      const result = {
+      // Return upload result with attachment metadata
+      return {
         uploadedBy: metadata.userId,
-        fileUrl: file.ufsUrl || file.url, // Prefer ufsUrl
+        fileUrl: file.ufsUrl || file.url,
         fileName: file.name,
         fileSize: file.size,
         fileType: file.type,
-        attachmentId, // Include the Convex attachment ID
+        attachmentId,
       };
-
-      console.log("[UploadThing] onUploadComplete returning:", result);
-
-      // Return data to be sent to the client, including the Convex attachment ID
-      return result;
     }),
 
-  // Profile picture upload route
+  // Profile picture upload for authenticated users only
   profilePicture: f({
     image: {
       maxFileSize: "4MB",
@@ -179,8 +130,7 @@ export const ourFileRouter = {
       return { userId: user.id };
     })
     .onUploadComplete(async ({ metadata, file }) => {
-      // This code runs on your server after upload
-
+      // Return profile picture URL for authenticated user
       return {
         uploadedBy: metadata.userId,
         profilePicture: file.ufsUrl || file.url,
