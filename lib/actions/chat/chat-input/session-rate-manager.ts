@@ -95,8 +95,8 @@ export function useSessionRateManager({
       if (remaining <= 2) {
         return { color: "red" as const, level: "critical" as const };
       }
-      if (remaining <= total / 2) {
-        // 5 messages or less
+      if (remaining <= Math.floor(total / 2)) {
+        // 5 messages or less (half of 10)
         return { color: "orange" as const, level: "warning" as const };
       }
       return null;
@@ -111,8 +111,8 @@ export function useSessionRateManager({
       if (remaining <= 2) {
         return { color: "red" as const, level: "critical" as const };
       }
-      if (remaining <= total / 2) {
-        // Half of plan limit
+      if (remaining <= Math.floor(total / 2)) {
+        // Half of plan limit (rounded down for consistent behavior)
         return { color: "orange" as const, level: "warning" as const };
       }
       return null;

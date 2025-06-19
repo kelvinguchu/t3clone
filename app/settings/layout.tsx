@@ -128,7 +128,7 @@ function SettingsSidebarContent() {
             variant="ghost"
             size="sm"
             onClick={handleBackToChat}
-            className="text-purple-600 dark:text-purple-300 hover:text-purple-700 dark:hover:text-purple-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary text-sm"
+            className="text-purple-600 dark:text-purple-300 hover:text-purple-700 dark:hover:text-purple-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary text-sm cursor-pointer"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             <span className="hidden sm:inline">Back to Chat</span>
@@ -140,7 +140,7 @@ function SettingsSidebarContent() {
         {user && (
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10 sm:h-12 sm:w-12">
+              <Avatar className="h-10 w-10 sm:h-12 sm:w-12 cursor-pointer">
                 <AvatarImage src={user.imageUrl} />
                 <AvatarFallback className="bg-purple-600 text-white font-semibold text-sm">
                   {user.firstName?.charAt(0) ||
@@ -224,7 +224,7 @@ function SettingsSidebarContent() {
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
-                      className={`w-full justify-start gap-3 px-3 py-2 rounded-lg transition-colors text-sm sm:text-base ${
+                      className={`w-full justify-start gap-3 px-3 py-2 rounded-lg transition-colors text-sm sm:text-base cursor-pointer ${
                         isActive
                           ? "bg-purple-200 dark:bg-dark-bg-tertiary text-purple-900 dark:text-purple-200"
                           : "text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary hover:text-purple-900 dark:hover:text-purple-200"
@@ -232,7 +232,7 @@ function SettingsSidebarContent() {
                     >
                       <button
                         onClick={() => handleNavigation(item.href)}
-                        className="w-full flex items-center gap-3"
+                        className="w-full flex items-center gap-3 cursor-pointer"
                       >
                         <Icon className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
                         <span className="font-medium">{item.name}</span>
@@ -254,7 +254,7 @@ function SettingsSidebarContent() {
             onClick={() =>
               setTheme(resolvedTheme === "dark" ? "light" : "dark")
             }
-            className="w-full justify-start gap-3 text-purple-600 dark:text-purple-300 hover:text-purple-700 dark:hover:text-purple-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary text-sm"
+            className="w-full justify-start gap-3 text-purple-600 dark:text-purple-300 hover:text-purple-700 dark:hover:text-purple-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary text-sm cursor-pointer"
           >
             <Sun className="h-4 w-4" />
             <span>Toggle theme</span>
@@ -264,7 +264,7 @@ function SettingsSidebarContent() {
           variant="ghost"
           size="sm"
           onClick={handleSignOut}
-          className="w-full justify-start gap-3 text-purple-600 dark:text-purple-300 hover:text-purple-700 dark:hover:text-purple-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary text-sm"
+          className="w-full justify-start gap-3 text-purple-600 dark:text-purple-300 hover:text-purple-700 dark:hover:text-purple-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary text-sm cursor-pointer"
         >
           <LogOut className="h-4 w-4" />
           <span>Sign out</span>
