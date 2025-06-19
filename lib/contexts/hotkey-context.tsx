@@ -4,10 +4,10 @@ import { createContext, useContext, useState, ReactNode } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useHotkey } from "@/hooks/use-hotkeys";
 import {
-  useThreadsFetcher,
   useThreadCreator,
   useNewChatHandler,
 } from "@/lib/actions/chat/chat-sidebar";
+import { useThreadsCache } from "./threads-cache-context";
 
 interface HotkeyContextType {
   openSearchDialog: () => void;
@@ -33,19 +33,20 @@ interface HotkeyProviderProps {
 export function HotkeyProvider({ children }: HotkeyProviderProps) {
   const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
   const { user } = useUser();
+  const { invalidateCache } = useThreadsCache();
 
   const openSearchDialog = () => setIsSearchDialogOpen(true);
   const closeSearchDialog = () => setIsSearchDialogOpen(false);
 
   // Get new chat handler functionality
-  const { threadsData, sessionId, sessionData } = useThreadsFetcher();
   const threadCreator = useThreadCreator(user);
   const handleNewChat = useNewChatHandler({
     user,
-    sessionId,
-    sessionData,
-    threadsData,
     threadCreator,
+    onNewThread: () => {
+      // Invalidate cache so sidebar updates immediately when using the hotkey
+      invalidateCache();
+    },
   });
 
   const createNewChat = () => {
@@ -67,7 +68,7 @@ export function HotkeyProvider({ children }: HotkeyProviderProps) {
   useHotkey(
     "o",
     createNewChat,
-    { ctrl: true, meta: true, shift: true }, 
+    { ctrl: true, meta: true, shift: true },
     {
       preventDefault: true,
       stopPropagation: true,
