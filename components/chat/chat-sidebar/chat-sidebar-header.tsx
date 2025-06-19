@@ -30,7 +30,7 @@ export function ChatSidebarHeader({
       <div className="relative mt-3">
         <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-purple-400 dark:text-slate-400" />
         <Input
-          placeholder="Search conversations..."
+          placeholder="Ctrl + K to search"
           className="pl-8 h-8 text-sm bg-white/70 dark:bg-dark-bg-tertiary/60 border-purple-200 dark:border-dark-purple-accent/50 focus:border-purple-400 dark:focus:border-dark-purple-glow focus:ring-purple-400/20 dark:focus:ring-dark-purple-glow/20 placeholder:text-purple-400/70 dark:placeholder:text-slate-500 text-purple-900 dark:text-slate-200"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
