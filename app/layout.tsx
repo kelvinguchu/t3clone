@@ -5,6 +5,7 @@ import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ClerkProvider } from "@clerk/nextjs";
 import { FilePreviewProvider } from "@/lib/contexts/file-preview-context";
 import { AnonymousSessionProvider } from "@/lib/contexts/anonymous-session-context";
+import { ThreadsCacheProvider } from "@/lib/contexts/threads-cache-context";
 import { HotkeyProvider } from "@/lib/contexts/hotkey-context";
 import { GlobalChatSearch } from "@/components/chat/global-chat-search";
 import { Toaster } from "@/components/ui/sonner";
@@ -101,11 +102,13 @@ export default function RootLayout({
             <ConvexClientProvider>
               <FilePreviewProvider>
                 <AnonymousSessionProvider>
-                  <HotkeyProvider>
-                    {children}
-                    <GlobalChatSearch />
-                    <Toaster />
-                  </HotkeyProvider>
+                  <ThreadsCacheProvider>
+                    <HotkeyProvider>
+                      {children}
+                      <GlobalChatSearch />
+                      <Toaster />
+                    </HotkeyProvider>
+                  </ThreadsCacheProvider>
                 </AnonymousSessionProvider>
               </FilePreviewProvider>
             </ConvexClientProvider>

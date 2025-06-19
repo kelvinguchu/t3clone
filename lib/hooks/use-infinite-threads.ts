@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useRef, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
 import { usePaginatedQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useAnonymousSession } from "@/lib/contexts/anonymous-session-context";
+import { useThreadsCache } from "@/lib/contexts/threads-cache-context";
 import type { Doc } from "@/convex/_generated/dataModel";
 
 const ITEMS_PER_PAGE = 30;
@@ -27,85 +28,155 @@ export interface UseInfiniteThreadsReturn {
   // Session info
   isAnonymous: boolean;
   sessionId: string | null;
+
+  // Cache management
+  refreshCache: () => void;
 }
 
 /**
  * Custom hook for infinite scrolling threads using Convex's native pagination
- * Combines authenticated and anonymous threads with proper infinite loading
+ * with persistent caching to prevent refetching on sidebar state changes
  */
 export function useInfiniteThreads(): UseInfiniteThreadsReturn {
   const { isLoaded, user } = useUser();
   const { sessionId } = useAnonymousSession();
+  const { getCachedThreads, setCachedThreads, invalidateCache, isCacheValid } =
+    useThreadsCache();
+
+  // Generate cache key based on user/session
+  const cacheKey = useMemo(() => {
+    return user?.id
+      ? `user:${user.id}`
+      : sessionId
+        ? `session:${sessionId}`
+        : "none";
+  }, [user?.id, sessionId]);
+
+  // Track if we've initialized from cache
+  const initializedFromCache = useRef(false);
+  const lastCacheKey = useRef<string | null>(null);
+
+  // Check if cache key changed (user login/logout or new session)
+  const cacheKeyChanged =
+    lastCacheKey.current !== null && lastCacheKey.current !== cacheKey;
+
+  useEffect(() => {
+    if (cacheKeyChanged) {
+      // Clear cache when switching between user/anonymous or different users
+      invalidateCache();
+      initializedFromCache.current = false;
+    }
+    lastCacheKey.current = cacheKey;
+  }, [cacheKey, cacheKeyChanged, invalidateCache]);
 
   // Paginated query for authenticated user threads
   const userThreadsQuery = usePaginatedQuery(
     api.threads.getUserThreadsPaginated,
     user?.id ? { userId: user.id } : "skip",
-    { initialNumItems: ITEMS_PER_PAGE },
+    {
+      initialNumItems: ITEMS_PER_PAGE,
+    },
   );
 
   // Paginated query for anonymous threads
   const anonymousThreadsQuery = usePaginatedQuery(
     api.threads.getAnonymousThreadsPaginated,
     sessionId ? { sessionId } : "skip",
-    { initialNumItems: ITEMS_PER_PAGE },
+    {
+      initialNumItems: ITEMS_PER_PAGE,
+    },
   );
 
   // Determine which query to use based on auth state
   const activeQuery = user ? userThreadsQuery : anonymousThreadsQuery;
 
-  // Combine all loaded threads from all pages
+  // Combine all loaded threads from all pages with caching
   const allThreads = useMemo(() => {
-    if (!activeQuery.results) return [];
+    // Always try to get cached data first
+    const cachedData = getCachedThreads(cacheKey);
 
-    // The usePaginatedQuery from Convex returns threads directly in the results array
-    // No need to flatMap by page since it's already flattened
-    const threads = activeQuery.results.filter(
-      (thread): thread is Doc<"threads"> => thread != null,
-    );
+    // If we have cached data, return it immediately (prevents loading flash)
+    if (cachedData && cachedData.length > 0) {
+      return cachedData;
+    }
 
-    // Deduplicate by _id in case a thread appears in multiple queries
-    const uniqueThreads = Array.from(
-      new Map(threads.map((thread) => [String(thread._id), thread])).values(),
-    );
+    // If we have new data from Convex, process and cache it
+    if (activeQuery.results) {
+      const threads = activeQuery.results.filter(
+        (thread): thread is Doc<"threads"> => thread != null,
+      );
 
-    // Sort by updatedAt/createdAt (most recent first)
-    return uniqueThreads.sort((a, b) => {
-      const aTime = a.updatedAt ?? a._creationTime;
-      const bTime = b.updatedAt ?? b._creationTime;
+      // Deduplicate by _id in case a thread appears in multiple queries
+      const uniqueThreads = Array.from(
+        new Map(threads.map((thread) => [String(thread._id), thread])).values(),
+      );
 
-      // Check if multiple threads have the same updatedAt (bulk update indicator)
-      const timeDiff = Math.abs(aTime - bTime);
-      if (timeDiff < 1000) {
-        // Within 1 second = likely bulk update
-        // For bulk updates, sort by creation time to maintain natural order
+      // Sort by updatedAt/createdAt (most recent first)
+      const sortedThreads = uniqueThreads.sort((a, b) => {
+        const aTime = a.updatedAt ?? a._creationTime;
+        const bTime = b.updatedAt ?? b._creationTime;
+
+        // Check if multiple threads have the same updatedAt (bulk update indicator)
+        const timeDiff = Math.abs(aTime - bTime);
+        if (timeDiff < 1000) {
+          // Within 1 second = likely bulk update
+          // For bulk updates, sort by creation time to maintain natural order
+          return b._creationTime - a._creationTime;
+        }
+
+        // Primary sort by updatedAt/creationTime
+        if (bTime !== aTime) {
+          return bTime - aTime;
+        }
+
+        // Secondary sort by _creationTime (most recent first) when updatedAt is identical
         return b._creationTime - a._creationTime;
-      }
+      });
 
-      // Primary sort by updatedAt/creationTime
-      if (bTime !== aTime) {
-        return bTime - aTime;
-      }
+      // Cache the processed threads
+      setCachedThreads(cacheKey, sortedThreads);
 
-      // Secondary sort by _creationTime (most recent first) when updatedAt is identical
-      return b._creationTime - a._creationTime;
-    });
-  }, [activeQuery.results]);
+      return sortedThreads;
+    }
 
-  // Load more function
+    // Return empty array if no data available
+    return [];
+  }, [activeQuery.results, getCachedThreads, setCachedThreads, cacheKey]);
+
+  // Load more function with cache invalidation
   const loadMore = useCallback(() => {
     if (activeQuery.status === "CanLoadMore") {
+      // Invalidate cache when loading more to ensure fresh data
+      invalidateCache(cacheKey);
       activeQuery.loadMore(ITEMS_PER_PAGE);
     }
-  }, [activeQuery]);
+  }, [activeQuery, cacheKey, invalidateCache]);
 
-  // Derived states
-  const isLoading = !isLoaded || activeQuery.isLoading;
+  // Manual cache refresh function
+  const refreshCache = useCallback(() => {
+    invalidateCache(cacheKey);
+    initializedFromCache.current = false;
+    // Optionally trigger a refetch here if needed
+  }, [cacheKey, invalidateCache]);
+
+  // Derived states with cache consideration
+  const cachedData = getCachedThreads(cacheKey);
+
+  // Prioritize showing data immediately - only show loading if we truly have no data
+  // Check both allThreads and cached data to prevent flash of loading state
+  const hasDataToShow =
+    allThreads.length > 0 || (cachedData && cachedData.length > 0);
+  const isLoading = !isLoaded || (!hasDataToShow && activeQuery.isLoading);
+
   const isLoadingMore = activeQuery.status === "LoadingMore";
-  const hasNextPage = activeQuery.status === "CanLoadMore";
+  const hasNextPage =
+    activeQuery.status === "CanLoadMore" ||
+    (!isCacheValid(cacheKey) && !activeQuery.results);
   const error = activeQuery.isLoading
     ? null
     : (activeQuery as { error?: Error }).error || null;
+
+  // Derived session info
   const isAnonymous = !user && isLoaded;
 
   return {
@@ -117,5 +188,6 @@ export function useInfiniteThreads(): UseInfiniteThreadsReturn {
     error,
     isAnonymous,
     sessionId,
+    refreshCache,
   };
 }

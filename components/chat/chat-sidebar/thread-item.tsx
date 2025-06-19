@@ -109,12 +109,20 @@ export function ThreadItem({
               <Link href={threadUrl} prefetch={true} onClick={onThreadClick}>
                 <SidebarMenuButton
                   isActive={isActive}
-                  className={`h-8 text-sm w-full justify-start text-left p-2 pr-10 transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer ${
+                  className={`h-8 text-sm w-full justify-start text-left p-2 pr-12 transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer ${
                     isActive
                       ? "bg-purple-200 dark:bg-dark-bg-tertiary/70 text-purple-900 dark:text-slate-200 border-l-4 border-purple-600 dark:border-dark-purple-glow"
                       : "hover:bg-purple-50 dark:hover:bg-dark-bg-tertiary/30"
                   }`}
                   onMouseEnter={handleThreadHover}
+                  onTouchStart={(e) => {
+                    // Prevent link navigation if touch started on dropdown area
+                    const target = e.target as HTMLElement;
+                    const dropdownArea = target.closest("[data-dropdown-area]");
+                    if (dropdownArea) {
+                      e.preventDefault();
+                    }
+                  }}
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     {thread.parentThreadId && (
@@ -135,20 +143,34 @@ export function ThreadItem({
 
               {/* Action button positioned absolutely within the button area */}
               <div
-                className={`absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center transition-opacity duration-200 ${
+                data-dropdown-area
+                className={`absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center transition-opacity duration-200 ${
                   isMobile || isHovered ? "opacity-100" : "opacity-0"
                 }`}
-                style={{ zIndex: 10 }}
+                style={{ zIndex: 20 }}
               >
-                <DropdownMenu>
+                <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-6 w-6 p-0 bg-purple-600 dark:bg-dark-purple-glow hover:bg-purple-700 dark:hover:bg-dark-purple-light text-white rounded-md cursor-pointer shadow-sm border border-purple-300 dark:border-dark-purple-accent flex items-center justify-center"
-                      onClick={(e) => e.stopPropagation()}
+                      className={`${
+                        isMobile ? "h-8 w-8 p-1" : "h-6 w-6 p-0"
+                      } bg-purple-600 dark:bg-dark-purple-glow hover:bg-purple-700 dark:hover:bg-dark-purple-light text-white rounded-md cursor-pointer shadow-sm border border-purple-300 dark:border-dark-purple-accent flex items-center justify-center touch-manipulation`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                      }}
+                      onTouchEnd={(e) => {
+                        e.stopPropagation();
+                      }}
                     >
-                      <MoreVertical className="h-3 w-3" />
+                      <MoreVertical
+                        className={`${isMobile ? "h-4 w-4" : "h-3 w-3"}`}
+                      />
                       <span className="sr-only">Thread actions</span>
                     </Button>
                   </DropdownMenuTrigger>
@@ -156,34 +178,49 @@ export function ThreadItem({
                     align="end"
                     className="w-48 bg-purple-50 dark:bg-dark-bg-tertiary border border-purple-200 dark:border-dark-purple-accent shadow-lg backdrop-blur-sm"
                     sideOffset={8}
+                    avoidCollisions={true}
+                    collisionPadding={16}
+                    sticky="always"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                    container={
+                      typeof document !== "undefined"
+                        ? document.body
+                        : undefined
+                    }
+                    style={{
+                      zIndex: 99999,
+                    }}
                   >
                     <DropdownMenuItem
-                      className="gap-2 cursor-pointer whitespace-nowrap text-purple-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-dark-bg-secondary focus:bg-purple-100 dark:focus:bg-dark-bg-secondary"
+                      className="gap-2 cursor-pointer whitespace-nowrap text-purple-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-dark-bg-secondary focus:bg-purple-100 dark:focus:bg-dark-bg-secondary min-h-[44px] touch-manipulation"
                       onClick={(e) => {
                         e.stopPropagation();
                         threadActions.rename.actions.startEditing();
                       }}
+                      onTouchStart={(e) => e.stopPropagation()}
                     >
                       <PenSquare className="h-4 w-4 flex-shrink-0" />
                       <span className="truncate">Rename</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      className="gap-2 cursor-pointer whitespace-nowrap text-purple-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-dark-bg-secondary focus:bg-purple-100 dark:focus:bg-dark-bg-secondary"
+                      className="gap-2 cursor-pointer whitespace-nowrap text-purple-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-dark-bg-secondary focus:bg-purple-100 dark:focus:bg-dark-bg-secondary min-h-[44px] touch-manipulation"
                       onClick={(e) => {
                         e.stopPropagation();
                         threadActions.share.actions.openDialog();
                       }}
+                      onTouchStart={(e) => e.stopPropagation()}
                     >
                       <ExternalLink className="h-4 w-4 flex-shrink-0" />
                       <span className="truncate">Share</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      className="gap-2 text-red-600 dark:text-red-400 cursor-pointer whitespace-nowrap hover:bg-red-50 dark:hover:bg-red-900/20 focus:bg-red-50 dark:focus:bg-red-900/20"
+                      className="gap-2 text-red-600 dark:text-red-400 cursor-pointer whitespace-nowrap hover:bg-red-50 dark:hover:bg-red-900/20 focus:bg-red-50 dark:focus:bg-red-900/20 min-h-[44px] touch-manipulation"
                       onClick={(e) => {
                         e.stopPropagation();
                         threadActions.delete.actions.openConfirm();
                       }}
+                      onTouchStart={(e) => e.stopPropagation()}
                     >
                       <Trash2 className="h-4 w-4 flex-shrink-0" />
                       <span className="truncate">Delete</span>

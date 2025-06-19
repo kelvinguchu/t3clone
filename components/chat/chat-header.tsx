@@ -131,9 +131,9 @@ export function ChatHeader() {
         </AnimatePresence>
       </div>
 
-      {/* Main header - Fixed on mobile, increased height */}
+      {/* Main header */}
       <div
-        className={`fixed top-0 left-0 right-0 md:relative md:top-auto md:left-auto md:right-auto flex items-center justify-between h-9 md:h-6 p-3 md:p-2 transition-colors duration-200 z-[50] ${
+        className={`fixed top-0 left-0 right-0 md:relative md:top-auto md:left-auto md:right-auto flex items-center justify-between h-11 md:h-6 p-3 md:p-2 transition-colors duration-200 z-[50] ${
           open ? "md:pl-12" : "md:pl-24"
         } ${
           open
@@ -143,7 +143,7 @@ export function ChatHeader() {
       >
         {/* Mobile sidebar trigger */}
         <div className="md:hidden">
-          <SidebarTrigger className="text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent" />
+          <SidebarTrigger className="size-9 md:size-auto text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent [&>svg]:h-5 [&>svg]:w-5 md:[&>svg]:h-4 md:[&>svg]:w-4" />
         </div>
 
         {/* Centered title */}
@@ -155,10 +155,10 @@ export function ChatHeader() {
         <div className="md:hidden">
           <button
             onClick={() => setMobileMenuOpen(true)}
-            className="size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center cursor-pointer"
+            className="size-9 md:size-7 text-purple-900 dark:text-slate-200 hover:bg-purple-200 dark:hover:bg-dark-bg-tertiary transition-colors bg-purple-100 dark:bg-dark-bg-secondary backdrop-blur-sm border border-purple-200 dark:border-dark-purple-accent rounded-md flex items-center justify-center cursor-pointer"
             title="Menu"
           >
-            <MoreVertical className="h-4 w-4" />
+            <MoreVertical className="h-5 w-5 md:h-4 md:w-4" />
           </button>
         </div>
       </div>

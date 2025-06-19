@@ -54,14 +54,14 @@ export interface ChatInputProps {
 /**
  * Virtual Keyboard handling utilities
  */
-function setupVirtualKeyboardHandling() {
+function setupVirtualKeyboardHandling () {
   // Method 1: Modern VirtualKeyboard API (Chrome 94+)
-  if ("virtualKeyboard" in navigator) {
+  if ('virtualKeyboard' in navigator) {
     try {
-      (navigator as any).virtualKeyboard.overlaysContent = true;
-      console.log("[ChatInput] VirtualKeyboard API enabled");
-    } catch (error) {
-      console.warn("[ChatInput] Failed to enable VirtualKeyboard API:", error);
+      (navigator as unknown as { virtualKeyboard: { overlaysContent: boolean } }).virtualKeyboard.overlaysContent = true
+      console.log('[ChatInput] VirtualKeyboard API enabled')
+    } catch (error: unknown) {
+      console.warn('[ChatInput] Failed to enable VirtualKeyboard API:', error)
     }
   }
 
