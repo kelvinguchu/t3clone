@@ -552,7 +552,7 @@ const ChatArea = memo(function ChatArea({
   );
 
   const { messagesContainerRef, showScrollButton, scrollToBottom } =
-    useScrollManager({ displayMessages, isLoading });
+    useScrollManager();
 
   // Track chat input height for dynamic scroll button positioning
   const [inputHeight, setInputHeight] = useState(140);

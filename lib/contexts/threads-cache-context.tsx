@@ -21,7 +21,7 @@ const ThreadsCacheContext = createContext<ThreadsCacheContextValue | null>(
 
 // Global cache using React 19's cache function for optimal performance
 const threadsCache = cache(
-  (key: string) =>
+  () =>
     new Map<
       string,
       {
@@ -41,7 +41,7 @@ export function ThreadsCacheProvider({
   children: React.ReactNode;
 }) {
   // Get cache for this provider instance
-  const cache = threadsCache("threads");
+  const cache = threadsCache();
 
   const getCachedThreads = useCallback(
     (key: string): Doc<"threads">[] | null => {

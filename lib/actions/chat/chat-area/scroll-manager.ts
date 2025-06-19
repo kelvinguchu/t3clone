@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState, useRef } from "react";
-import type { DisplayMessage } from "./display-message-converter";
 
 export interface ScrollManagerState {
   isAtBottom: boolean;
@@ -9,17 +8,8 @@ export interface ScrollManagerState {
   messagesContainerRef: React.RefObject<HTMLDivElement | null>;
 }
 
-export interface ScrollManagerParams {
-  displayMessages: DisplayMessage[];
-  isLoading: boolean;
-}
-
 // Create scroll manager for chat messages
-export function useScrollManager(
-  params: ScrollManagerParams,
-): ScrollManagerState {
-  const { displayMessages, isLoading } = params;
-
+export function useScrollManager(): ScrollManagerState {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Track whether user is near the bottom of the message list
@@ -51,7 +41,7 @@ export function useScrollManager(
 
     let scrollTimeout: NodeJS.Timeout;
 
-    const handleScroll = () => {
+    const checkScrollPosition = () => {
       const { scrollTop, clientHeight, scrollHeight } = el;
       // Increase threshold to prevent flickering near bottom
       const atBottom = scrollTop + clientHeight >= scrollHeight - 20; // 20px threshold for quicker detection
@@ -64,28 +54,29 @@ export function useScrollManager(
       }, 50);
     };
 
+    const handleScroll = () => {
+      checkScrollPosition();
+    };
+
     el.addEventListener("scroll", handleScroll);
-    handleScroll(); // initialise
+
+    // Initial check
+    checkScrollPosition();
+
+    // Set up ResizeObserver to detect content changes (new messages streaming in)
+    const resizeObserver = new ResizeObserver(() => {
+      // When content height changes, immediately check if user is still at bottom
+      checkScrollPosition();
+    });
+
+    resizeObserver.observe(el);
 
     return () => {
       el.removeEventListener("scroll", handleScroll);
+      resizeObserver.disconnect();
       clearTimeout(scrollTimeout);
     };
   }, []);
-
-  // Auto-scroll only if user is already at the bottom
-  useEffect(() => {
-    if (!isAtBottom) return;
-    const el = messagesContainerRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [displayMessages, isAtBottom]);
-
-  // During streaming keep auto-scroll if user is at bottom
-  useEffect(() => {
-    if (!(isLoading && isAtBottom) || !messagesContainerRef.current) return;
-    const interval = setInterval(() => scrollToBottom(), 120);
-    return () => clearInterval(interval);
-  }, [isLoading, isAtBottom, scrollToBottom]);
 
   return {
     isAtBottom,
