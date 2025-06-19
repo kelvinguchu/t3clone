@@ -114,13 +114,13 @@ export function ThreadShareDialog({
         open={state.isDialogOpen}
         onOpenChange={() => actions.closeDialog()}
       >
-        <DialogContent className="sm:max-w-md h-[90vh] max-h-[90vh] bg-gradient-to-br from-purple-50 to-white dark:from-dark-bg-secondary dark:to-dark-bg-tertiary border-purple-200 dark:border-dark-purple-accent flex flex-col overflow-hidden">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-purple-800 dark:text-slate-200">
-              <Share2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-              Share Conversation
+        <DialogContent className="w-[95vw] z-60 max-w-md mx-auto h-[85vh] sm:h-[90vh] max-h-[85vh] sm:max-h-[90vh] bg-gradient-to-br from-purple-50 to-white dark:from-dark-bg-secondary dark:to-dark-bg-tertiary border-purple-200 dark:border-dark-purple-accent flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0 px-1 sm:px-0">
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg text-purple-800 dark:text-slate-200">
+              <Share2 className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 dark:text-purple-400" />
+              <span className="truncate">Share Conversation</span>
             </DialogTitle>
-            <DialogDescription className="text-purple-600 dark:text-slate-400">
+            <DialogDescription className="text-sm sm:text-base text-purple-600 dark:text-slate-400 line-clamp-2">
               {state.isPublic
                 ? `Manage sharing settings for "${threadTitle}"`
                 : `Create a shareable link for "${threadTitle}"`}
@@ -128,15 +128,15 @@ export function ThreadShareDialog({
           </DialogHeader>
 
           <ScrollArea className="flex-1 min-h-0 overflow-auto">
-            <div className="space-y-4 pr-4">
+            <div className="space-y-3 sm:space-y-4 pr-2 sm:pr-4">
               {/* Show share URL if already shared */}
               {state.isPublic && state.shareUrl && (
-                <div className="space-y-3 p-4 bg-purple-50 dark:bg-dark-bg-tertiary/50 rounded-lg border border-purple-200 dark:border-dark-purple-accent">
+                <div className="space-y-2 sm:space-y-3 p-3 sm:p-4 bg-purple-50 dark:bg-dark-bg-tertiary/50 rounded-lg border border-purple-200 dark:border-dark-purple-accent">
                   <div className="flex items-center gap-2">
                     <div
                       className={`w-2 h-2 rounded-full ${isExpired ? "bg-red-500" : "bg-green-500 animate-pulse"}`}
                     ></div>
-                    <Label className="text-sm font-medium text-purple-800 dark:text-slate-200">
+                    <Label className="text-xs sm:text-sm font-medium text-purple-800 dark:text-slate-200">
                       {isExpired ? "Share Link Expired" : "Share Link Active"}
                     </Label>
                   </div>
@@ -145,23 +145,23 @@ export function ThreadShareDialog({
                       <Input
                         value={state.shareUrl}
                         readOnly
-                        className="font-mono text-xs bg-white dark:bg-dark-bg-secondary border-purple-300 dark:border-dark-purple-accent text-purple-700 dark:text-slate-300"
+                        className="font-mono text-xs bg-white dark:bg-dark-bg-secondary border-purple-300 dark:border-dark-purple-accent text-purple-700 dark:text-slate-300 min-w-0 flex-1"
                       />
                       <Button
                         onClick={handleCopyUrl}
                         size="sm"
                         variant="outline"
                         disabled={isExpired}
-                        className={`shrink-0 transition-all duration-200 cursor-pointer ${
+                        className={`shrink-0 h-9 w-9 sm:h-auto sm:w-auto sm:px-3 transition-all duration-200 cursor-pointer ${
                           copied
                             ? "bg-green-100 dark:bg-green-900/30 border-green-300 text-green-700 dark:text-green-300"
                             : "border-purple-300 dark:border-dark-purple-accent text-purple-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-dark-bg-secondary"
                         }`}
                       >
                         {copied ? (
-                          <CheckCircle className="h-4 w-4" />
+                          <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4" />
                         ) : (
-                          <Copy className="h-4 w-4" />
+                          <Copy className="h-3 w-3 sm:h-4 sm:w-4" />
                         )}
                       </Button>
                     </div>
@@ -176,21 +176,21 @@ export function ThreadShareDialog({
               )}
 
               {/* Sharing Settings - show for both shared and unshared threads */}
-              <div className="space-y-4 p-4 bg-purple-50 dark:bg-dark-bg-tertiary/50 rounded-lg border border-purple-200 dark:border-dark-purple-accent">
-                <div className="flex items-center gap-2 mb-3">
-                  <Settings className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                  <Label className="text-sm font-semibold text-purple-800 dark:text-slate-200">
+              <div className="space-y-3 sm:space-y-4 p-3 sm:p-4 bg-purple-50 dark:bg-dark-bg-tertiary/50 rounded-lg border border-purple-200 dark:border-dark-purple-accent">
+                <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                  <Settings className="h-3 w-3 sm:h-4 sm:w-4 text-purple-600 dark:text-purple-400" />
+                  <Label className="text-xs sm:text-sm font-semibold text-purple-800 dark:text-slate-200">
                     {state.isPublic ? "Sharing Settings" : "Share Settings"}
                   </Label>
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium text-purple-800 dark:text-slate-200">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <Label className="text-xs sm:text-sm font-medium text-purple-800 dark:text-slate-200">
                         Allow Cloning
                       </Label>
-                      <p className="text-xs text-purple-600 dark:text-slate-400">
+                      <p className="text-xs text-purple-600 dark:text-slate-400 leading-relaxed">
                         Let others create their own copy of this conversation
                       </p>
                     </div>
@@ -198,21 +198,21 @@ export function ThreadShareDialog({
                       checked={localAllowCloning}
                       onCheckedChange={handleCloningToggle}
                       disabled={state.isSharing || isExpired}
-                      className="data-[state=checked]:bg-purple-600 cursor-pointer"
+                      className="data-[state=checked]:bg-purple-600 cursor-pointer shrink-0"
                     />
                   </div>
                 </div>
 
                 {!state.isPublic && (
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium text-purple-800 dark:text-slate-200">
+                    <Label className="text-xs sm:text-sm font-medium text-purple-800 dark:text-slate-200">
                       Link Expiration
                     </Label>
                     <Select
                       value={selectedExpiration}
                       onValueChange={setSelectedExpiration}
                     >
-                      <SelectTrigger className="bg-white dark:bg-dark-bg-secondary border-purple-300 dark:border-dark-purple-accent cursor-pointer">
+                      <SelectTrigger className="bg-white dark:bg-dark-bg-secondary border-purple-300 dark:border-dark-purple-accent cursor-pointer h-9 sm:h-10">
                         <SelectValue placeholder="Select expiration time" />
                       </SelectTrigger>
                       <SelectContent className="bg-white dark:bg-dark-bg-secondary border-purple-200 dark:border-purple-800">
@@ -220,7 +220,7 @@ export function ThreadShareDialog({
                           <SelectItem
                             key={option.value}
                             value={option.value}
-                            className="focus:bg-purple-50 dark:focus:bg-purple-900/20 cursor-pointer"
+                            className="focus:bg-purple-50 dark:focus:bg-purple-900/20 cursor-pointer py-2 sm:py-2.5"
                           >
                             {option.label}
                           </SelectItem>
@@ -241,14 +241,14 @@ export function ThreadShareDialog({
                   }`}
                 >
                   <Clock
-                    className={`h-4 w-4 ${isExpired ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}
+                    className={`h-3 w-3 sm:h-4 sm:w-4 ${isExpired ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}
                   />
                   <AlertDescription
-                    className={
+                    className={`text-xs sm:text-sm ${
                       isExpired
                         ? "text-red-800 dark:text-red-200"
                         : "text-amber-800 dark:text-amber-200"
-                    }
+                    }`}
                   >
                     This share link {isExpired ? "expired" : "expires"} on{" "}
                     {formatDate(state.expiresAt)}
@@ -258,35 +258,35 @@ export function ThreadShareDialog({
 
               {/* Statistics (when public) */}
               {state.isPublic && state.shareStats && (
-                <div className="bg-white/70 dark:bg-dark-bg-tertiary/60 rounded-lg p-4 border border-purple-200 dark:border-dark-purple-accent backdrop-blur-sm">
-                  <div className="flex items-center gap-2 mb-4">
-                    <BarChart3 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                    <Label className="text-sm font-semibold text-purple-800 dark:text-slate-200">
+                <div className="bg-white/70 dark:bg-dark-bg-tertiary/60 rounded-lg p-3 sm:p-4 border border-purple-200 dark:border-dark-purple-accent backdrop-blur-sm">
+                  <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                    <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 text-purple-600 dark:text-purple-400" />
+                    <Label className="text-xs sm:text-sm font-semibold text-purple-800 dark:text-slate-200">
                       Share Analytics
                     </Label>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="bg-purple-50 dark:bg-dark-bg-secondary/50 rounded-lg p-3 text-center">
-                      <div className="flex items-center justify-center gap-2 mb-1">
-                        <Eye className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4">
+                    <div className="bg-purple-50 dark:bg-dark-bg-secondary/50 rounded-lg p-2 sm:p-3 text-center">
+                      <div className="flex items-center justify-center gap-1 sm:gap-2 mb-1">
+                        <Eye className="h-3 w-3 sm:h-4 sm:w-4 text-purple-600 dark:text-purple-400" />
                       </div>
-                      <p className="text-2xl font-bold text-purple-800 dark:text-slate-200">
+                      <p className="text-lg sm:text-2xl font-bold text-purple-800 dark:text-slate-200">
                         {state.shareStats.viewCount}
                       </p>
-                      <p className="text-xs text-purple-600 dark:text-slate-400 font-medium">
+                      <p className="text-xs font-medium text-purple-600 dark:text-slate-400">
                         Views
                       </p>
                     </div>
 
-                    <div className="bg-purple-50 dark:bg-dark-bg-secondary/50 rounded-lg p-3 text-center">
-                      <div className="flex items-center justify-center gap-2 mb-1">
-                        <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <div className="bg-purple-50 dark:bg-dark-bg-secondary/50 rounded-lg p-2 sm:p-3 text-center">
+                      <div className="flex items-center justify-center gap-1 sm:gap-2 mb-1">
+                        <Users className="h-3 w-3 sm:h-4 sm:w-4 text-purple-600 dark:text-purple-400" />
                       </div>
-                      <p className="text-2xl font-bold text-purple-800 dark:text-slate-200">
+                      <p className="text-lg sm:text-2xl font-bold text-purple-800 dark:text-slate-200">
                         {state.shareStats.cloneCount}
                       </p>
-                      <p className="text-xs text-purple-600 dark:text-slate-400 font-medium">
+                      <p className="text-xs font-medium text-purple-600 dark:text-slate-400">
                         Clones
                       </p>
                     </div>
@@ -308,15 +308,17 @@ export function ThreadShareDialog({
               {/* Error Display */}
               {state.error && (
                 <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{state.error}</AlertDescription>
+                  <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <AlertDescription className="text-xs sm:text-sm">
+                    {state.error}
+                  </AlertDescription>
                 </Alert>
               )}
             </div>
           </ScrollArea>
 
           {/* Action Buttons - Fixed at bottom */}
-          <div className="flex-shrink-0 border-t border-purple-200 dark:border-dark-purple-accent pt-4 mt-4">
+          <div className="flex-shrink-0 border-t border-purple-200 dark:border-dark-purple-accent pt-3 sm:pt-4 mt-3 sm:mt-4 px-1 sm:px-0">
             <div className="flex gap-2">
               {state.isPublic ? (
                 <>
@@ -324,28 +326,38 @@ export function ThreadShareDialog({
                     onClick={() => setShowMakePrivateDialog(true)}
                     variant="destructive"
                     disabled={state.isSharing}
-                    className="flex-1 cursor-pointer"
+                    className="flex-1 cursor-pointer h-10 sm:h-auto text-xs sm:text-sm"
                   >
-                    <ShieldOff className="h-4 w-4 mr-2" />
-                    {state.isSharing ? "Making Private..." : "Make Private"}
+                    <ShieldOff className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">
+                      {state.isSharing ? "Making Private..." : "Make Private"}
+                    </span>
+                    <span className="sm:hidden">
+                      {state.isSharing ? "Making..." : "Private"}
+                    </span>
                   </Button>
                   <Button
                     onClick={() => window.open(state.shareUrl ?? "", "_blank")}
                     variant="outline"
                     size="sm"
                     disabled={isExpired}
-                    className="shrink-0 border-purple-300 dark:border-dark-purple-accent text-purple-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-dark-bg-secondary cursor-pointer"
+                    className="shrink-0 border-purple-300 dark:border-dark-purple-accent text-purple-700 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-dark-bg-secondary cursor-pointer h-10 w-10 sm:h-auto sm:w-auto sm:px-3"
                   >
-                    <ExternalLink className="h-4 w-4" />
+                    <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4" />
                   </Button>
                 </>
               ) : (
                 <Button
                   onClick={handleShare}
                   disabled={state.isSharing}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white cursor-pointer"
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white cursor-pointer h-10 sm:h-auto text-xs sm:text-sm"
                 >
-                  {state.isSharing ? "Creating Link..." : "Create Share Link"}
+                  <span className="hidden sm:inline">
+                    {state.isSharing ? "Creating Link..." : "Create Share Link"}
+                  </span>
+                  <span className="sm:hidden">
+                    {state.isSharing ? "Creating..." : "Create Link"}
+                  </span>
                 </Button>
               )}
             </div>
@@ -358,10 +370,12 @@ export function ThreadShareDialog({
         open={showMakePrivateDialog}
         onOpenChange={setShowMakePrivateDialog}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="w-[95vw] max-w-md mx-auto">
           <AlertDialogHeader>
-            <AlertDialogTitle>Make Thread Private</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="text-base sm:text-lg">
+              Make Thread Private
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs sm:text-sm leading-relaxed">
               Are you sure you want to make &ldquo;{threadTitle}&rdquo; private?
               This will revoke the share link and make the conversation
               inaccessible to anyone who previously had the link.
@@ -371,14 +385,17 @@ export function ThreadShareDialog({
               thread again later, but it will have a new share link.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={state.isSharing}>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+            <AlertDialogCancel
+              disabled={state.isSharing}
+              className="w-full sm:w-auto h-10 sm:h-auto text-xs sm:text-sm"
+            >
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleMakePrivate}
               disabled={state.isSharing}
-              className="bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 cursor-pointer"
+              className="bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 cursor-pointer w-full sm:w-auto h-10 sm:h-auto text-xs sm:text-sm"
             >
               {state.isSharing ? "Making Private..." : "Make Private"}
             </AlertDialogAction>

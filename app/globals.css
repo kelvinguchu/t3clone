@@ -80,6 +80,9 @@
   --sidebar-accent-foreground: var(--color-purple-900);
   --sidebar-border: var(--color-purple-300);
   --sidebar-ring: var(--color-purple-600);
+  
+  /* Virtual Keyboard Support - fallback for browsers without env() support */
+  --keyboard-height: 0px;
 }
 
 .dark {

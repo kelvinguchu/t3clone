@@ -188,7 +188,7 @@ function Sidebar({
           data-slot="sidebar"
           data-mobile="true"
           className={cn(
-            "bg-sidebar text-sidebar-foreground w-(--sidebar-width) p-0 [&>button]:text-purple-600 [&>button]:hover:text-purple-800 [&>button]:dark:text-purple-400 [&>button]:dark:hover:text-purple-200",
+            "bg-sidebar z-60 text-sidebar-foreground w-(--sidebar-width) p-0 [&>button]:text-purple-600 [&>button]:hover:text-purple-800 [&>button]:dark:text-purple-400 [&>button]:dark:hover:text-purple-200",
             className,
           )}
           style={
