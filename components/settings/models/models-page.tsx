@@ -17,6 +17,9 @@ export function ModelsPage() {
     setEnabledModels,
     addEnabledModel,
     removeEnabledModel,
+    canRemoveModel,
+    getVisionCapableModels,
+    getGroqModels,
     setUserId,
     _hasHydrated,
   } = useModelStore();
@@ -78,6 +81,13 @@ export function ModelsPage() {
       if (enabled) {
         addEnabledModel(modelId);
       } else {
+        // Check if model can be removed
+        const { canRemove, reason } = canRemoveModel(modelId);
+        if (!canRemove) {
+          console.warn(`Cannot disable ${modelId}: ${reason}`);
+          // You could add a toast notification here to inform the user
+          return;
+        }
         removeEnabledModel(modelId);
       }
 
@@ -88,11 +98,6 @@ export function ModelsPage() {
             (id, index, arr) => arr.indexOf(id) === index,
           )
         : currentEnabled.filter((id) => id !== modelId);
-
-      // Ensure at least one model remains enabled
-      if (newEnabled.length === 0) {
-        return;
-      }
 
       await setEnabledModelsMutation({
         userId: user.id,
@@ -123,8 +128,40 @@ export function ModelsPage() {
       description="Configure which AI models are available in chat"
     >
       <div className="space-y-4">
+        {/* Requirements Info */}
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5">
+              <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center">
+                <span className="text-white text-xs font-bold">i</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <h4 className="font-medium text-blue-900 dark:text-blue-100">
+                Model Requirements
+              </h4>
+              <div className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                <p>
+                  • At least one <strong>vision-capable model</strong> (Gemini)
+                  must be enabled for image processing
+                </p>
+                <p>
+                  • At least one <strong>Groq model</strong> (Llama, DeepSeek,
+                  Qwen) must be enabled for fast responses
+                </p>
+                <p>
+                  • Currently enabled:{" "}
+                  <strong>{getVisionCapableModels().length} vision</strong>,{" "}
+                  <strong>{getGroqModels().length} Groq</strong>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {Object.entries(AI_MODELS).map(([modelId, config]) => {
           const isEnabled = enabledModels.has(modelId as ModelId);
+          const { canRemove, reason } = canRemoveModel(modelId as ModelId);
 
           // Get enabled capabilities
           const enabledCapabilities = Object.entries(config.capabilities)
@@ -164,17 +201,37 @@ export function ModelsPage() {
                     {/* Model Name */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <h3
-                          className={`font-semibold text-sm sm:text-base break-words ${
-                            isEnabled
-                              ? "text-purple-900 dark:text-purple-100"
-                              : "text-gray-600 dark:text-gray-400"
-                          }`}
-                        >
-                          {config.displayName}
-                        </h3>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3
+                            className={`font-semibold text-sm sm:text-base break-words ${
+                              isEnabled
+                                ? "text-purple-900 dark:text-purple-100"
+                                : "text-gray-600 dark:text-gray-400"
+                            }`}
+                          >
+                            {config.displayName}
+                          </h3>
+                          {/* Special badges for required model types */}
+                          {(config.capabilities.vision ||
+                            config.capabilities.multimodal) && (
+                            <Badge
+                              variant="secondary"
+                              className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200"
+                            >
+                              Vision
+                            </Badge>
+                          )}
+                          {config.provider === "groq" && (
+                            <Badge
+                              variant="secondary"
+                              className="text-xs px-2 py-0.5 bg-orange-100 dark:bg-orange-900/20 text-orange-800 dark:text-orange-200"
+                            >
+                              Fast
+                            </Badge>
+                          )}
+                        </div>
                         <p
-                          className={`text-xs sm:text-sm mt-1 ${
+                          className={`text-xs sm:text-sm ${
                             isEnabled
                               ? "text-purple-600 dark:text-purple-400"
                               : "text-gray-500 dark:text-gray-500"
@@ -182,6 +239,12 @@ export function ModelsPage() {
                         >
                           {config.description}
                         </p>
+                        {/* Show restriction reason if can't remove */}
+                        {isEnabled && !canRemove && reason && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-medium">
+                            Required: {reason}
+                          </p>
+                        )}
                       </div>
 
                       {/* Toggle Switch */}
@@ -190,7 +253,8 @@ export function ModelsPage() {
                         onCheckedChange={(enabled) =>
                           handleModelToggle(modelId as ModelId, enabled)
                         }
-                        disabled={!isEnabled && enabledModels.size === 1}
+                        disabled={isEnabled && !canRemove}
+                        className="cursor-pointer"
                       />
                     </div>
 

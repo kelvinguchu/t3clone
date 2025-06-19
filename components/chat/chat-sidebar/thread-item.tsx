@@ -136,7 +136,7 @@ export function ThreadItem({
               {/* Action button positioned absolutely within the button area */}
               <div
                 className={`absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center transition-opacity duration-200 ${
-                  isHovered ? "opacity-100" : "opacity-0"
+                  isMobile || isHovered ? "opacity-100" : "opacity-0"
                 }`}
                 style={{ zIndex: 10 }}
               >

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { ModelId } from "@/lib/ai-providers";
-import { getAvailableModels } from "@/lib/ai-providers";
+import { getAvailableModels, AI_MODELS } from "@/lib/ai-providers";
 
 interface ModelStore {
   selectedModel: ModelId;
@@ -12,6 +12,10 @@ interface ModelStore {
   addEnabledModel: (modelId: ModelId) => void;
   removeEnabledModel: (modelId: ModelId) => void;
   getEnabledModels: () => ModelId[];
+  // Validation helpers
+  getVisionCapableModels: () => ModelId[];
+  getGroqModels: () => ModelId[];
+  canRemoveModel: (modelId: ModelId) => { canRemove: boolean; reason?: string };
   // User ID for syncing with database
   userId: string | null;
   setUserId: (userId: string | null) => void;
@@ -34,6 +38,20 @@ const getAllAvailableModels = (): Set<ModelId> => {
     // Fallback if getAvailableModels fails
     return new Set([DEFAULT_MODEL]);
   }
+};
+
+// Helper function to check if a model has vision capabilities
+const hasVisionCapabilities = (modelId: ModelId): boolean => {
+  const config = AI_MODELS[modelId];
+  return (
+    config?.capabilities.vision || config?.capabilities.multimodal || false
+  );
+};
+
+// Helper function to check if a model is a Groq model
+const isGroqModel = (modelId: ModelId): boolean => {
+  const config = AI_MODELS[modelId];
+  return config?.provider === "groq";
 };
 
 export const useModelStore = create<ModelStore>()(
@@ -75,8 +93,14 @@ export const useModelStore = create<ModelStore>()(
         const { enabledModels, selectedModel } = get();
         const newEnabledModels = new Set(enabledModels);
 
-        // Don't remove if it's the only enabled model
-        if (newEnabledModels.size <= 1) return;
+        // Check if removal is allowed
+        const { canRemove } = get().canRemoveModel(modelId);
+        if (!canRemove) {
+          console.warn(
+            `Cannot remove model ${modelId}: required for system functionality`,
+          );
+          return;
+        }
 
         newEnabledModels.delete(modelId);
 
@@ -97,6 +121,55 @@ export const useModelStore = create<ModelStore>()(
 
       getEnabledModels: () => {
         return Array.from(get().enabledModels);
+      },
+
+      getVisionCapableModels: () => {
+        const { enabledModels } = get();
+        return Array.from(enabledModels).filter(hasVisionCapabilities);
+      },
+
+      getGroqModels: () => {
+        const { enabledModels } = get();
+        return Array.from(enabledModels).filter(isGroqModel);
+      },
+
+      canRemoveModel: (modelId: ModelId) => {
+        const { enabledModels } = get();
+        const currentEnabled = Array.from(enabledModels);
+
+        // Don't allow removal if it's the only enabled model
+        if (currentEnabled.length <= 1) {
+          return {
+            canRemove: false,
+            reason: "At least one model must remain enabled",
+          };
+        }
+
+        // Check if this is the last vision-capable model
+        if (hasVisionCapabilities(modelId)) {
+          const visionModels = currentEnabled.filter(hasVisionCapabilities);
+          if (visionModels.length <= 1) {
+            return {
+              canRemove: false,
+              reason:
+                "At least one vision-capable model must remain enabled for image processing",
+            };
+          }
+        }
+
+        // Check if this is the last Groq model
+        if (isGroqModel(modelId)) {
+          const groqModels = currentEnabled.filter(isGroqModel);
+          if (groqModels.length <= 1) {
+            return {
+              canRemove: false,
+              reason:
+                "At least one Groq model must remain enabled for fast responses",
+            };
+          }
+        }
+
+        return { canRemove: true };
       },
 
       setUserId: (userId: string | null) => {
