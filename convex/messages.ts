@@ -41,6 +41,50 @@ export const getThreadMessages = query({
   },
 });
 
+// Get recent messages for a thread (limited for context injection)
+export const getRecentThreadMessages = query({
+  args: {
+    threadId: v.id("threads"),
+    sessionId: v.optional(v.string()), // For anonymous access
+    limit: v.optional(v.number()), // Default to 10 messages
+  },
+  handler: async (ctx, args) => {
+    // First check if user has access to this thread
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread) {
+      // Return null instead of throwing error to handle race conditions
+      // when thread is deleted while query is executing
+      return null;
+    }
+
+    const identity = await ctx.auth.getUserIdentity();
+
+    // Check access permissions
+    if (thread.isAnonymous && args.sessionId) {
+      // Anonymous thread access - check session ID
+      if (thread.sessionId !== args.sessionId) {
+        throw new Error("Unauthorized");
+      }
+    } else if (thread.userId) {
+      // Authenticated user thread - check user ownership or if it's public
+      if (thread.userId !== identity?.subject && !thread.isPublic) {
+        throw new Error("Unauthorized");
+      }
+    } else {
+      throw new Error("Invalid thread access");
+    }
+
+    const limit = args.limit ?? 10; // Default to 10 recent messages
+
+    return await ctx.db
+      .query("messages")
+      .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+      .order("desc") // Get most recent first
+      .take(limit)
+      .then((messages) => messages.reverse()); // Reverse to get chronological order
+  },
+});
+
 // Get all messages for a thread with their attachments (supports both authenticated and anonymous access)
 export const getThreadMessagesWithAttachments = query({
   args: {

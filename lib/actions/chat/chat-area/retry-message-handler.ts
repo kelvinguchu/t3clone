@@ -23,7 +23,6 @@ export interface RetryMessageHandlerParams {
 export async function handleRetryMessage({
   threadId,
   hookMessages,
-  selectedModel,
   isAnonymous,
   anonSessionId,
   removeLastAssistantMessage,

@@ -51,11 +51,7 @@ export async function POST(req: NextRequest) {
     // Validate request and extract parameters
     const threadIdHeader =
       req.headers.get("x-thread-id") ?? req.headers.get("X-Thread-Id");
-    const { validation, data } = validateChatRequest(
-      body,
-      threadIdHeader,
-      requestId,
-    );
+    const { validation, data } = validateChatRequest(body, threadIdHeader);
 
     if (!validation.isValid) {
       return new Response(
@@ -82,6 +78,11 @@ export async function POST(req: NextRequest) {
 
     // Request parameters extracted and validated
 
+    // Extract session info early (needed for Convex queries)
+    const { sessionId, remainingMessages: defaultRemainingMessages } =
+      await resolveSessionInfo(req, userId);
+    let remainingMessages = defaultRemainingMessages;
+
     // Smart message handling: detect retries vs new messages
     // Retries use database history, new messages use client data
     let messagesForAI: CoreMessage[] = [];
@@ -91,10 +92,14 @@ export async function POST(req: NextRequest) {
     // Only check for Convex history if this might be a retry AND we have an existing thread
     if (threadId && messages.length > 1) {
       try {
-        // Load the actual conversation history from Convex
+        // Load recent conversation history from Convex (limited to last 10 messages for context)
         const existingMessages = await fetchQuery(
-          api.messages.getThreadMessages,
-          { threadId: threadId as Id<"threads"> },
+          api.messages.getRecentThreadMessages,
+          {
+            threadId: threadId as Id<"threads">,
+            limit: 10, // Only get last 10 messages for context injection
+            ...(sessionId && { sessionId }),
+          },
           fetchOptions,
         );
 
@@ -133,10 +138,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Extract session info quickly
-    const { sessionId, remainingMessages: defaultRemainingMessages } =
-      await resolveSessionInfo(req, userId);
-    let remainingMessages = defaultRemainingMessages;
+    // Session info already extracted earlier
 
     // QUICK rate limit check for anonymous users (non-blocking)
     const rateLimitResult = await checkAnonymousRateLimit(userId, sessionId);
@@ -158,7 +160,6 @@ export async function POST(req: NextRequest) {
         enableWebBrowsing,
         userId ?? undefined,
         fetchOptions,
-        requestId,
       );
 
     // Process multimodal messages for all new messages (not retries)
@@ -330,7 +331,6 @@ export async function POST(req: NextRequest) {
               finalSessionId,
               attachmentIds,
               fetchOptions,
-              requestId,
             );
 
             // Extract reasoning from the result - this is the key fix!

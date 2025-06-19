@@ -292,9 +292,9 @@ export const conversationCache = {
     context.lastUpdated = Date.now();
     context.messageCount = context.messages.length;
 
-    // Keep only last 50 messages to prevent cache bloat
-    if (context.messages.length > 50) {
-      context.messages = context.messages.slice(-50);
+    // Keep only last 10 messages to prevent cache bloat
+    if (context.messages.length > 10) {
+      context.messages = context.messages.slice(-10);
     }
 
     return this.setContext(threadId, context, ttl);
@@ -303,7 +303,7 @@ export const conversationCache = {
   // Get recent messages for context window
   async getRecentMessages(
     threadId: string,
-    limit = 20,
+    limit = 10,
   ): Promise<ConversationMessage[]> {
     const context = await this.getContext(threadId);
     if (!context) return [];

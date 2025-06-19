@@ -72,7 +72,6 @@ export async function POST(req: NextRequest) {
           sessionId,
           attachmentIds,
           fetchOptions,
-          requestId,
         );
       }
     }
