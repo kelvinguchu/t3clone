@@ -1,4 +1,5 @@
 import { generateText } from "ai";
+import type { LanguageModelV1 } from "ai";
 import { getModel } from "@/lib/ai-providers";
 
 /**
@@ -29,8 +30,18 @@ export async function generateThreadTitle(
   }
 
   try {
-    // Use AI to generate a smart title
-    const model = await getModel("llama3-70b-8192");
+    // Use AI to generate a smart title. Try Groq first, then fall back to Gemini if Groq unavailable.
+    let model: LanguageModelV1;
+
+    try {
+      model = await getModel("llama3-70b-8192");
+    } catch (err) {
+      console.warn(
+        "[Title] Groq model unavailable, falling back to Gemini",
+        err,
+      );
+      model = await getModel("gemini-2.0-flash");
+    }
 
     const result = await generateText({
       model,

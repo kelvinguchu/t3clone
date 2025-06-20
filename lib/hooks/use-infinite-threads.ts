@@ -108,56 +108,42 @@ export function useInfiniteThreads(): UseInfiniteThreadsReturn {
 
   // Combine all loaded threads from all pages with caching
   const allThreads = useMemo(() => {
-    // Always try to get cached data first
-    const cachedData = getCachedThreads(cacheKey);
-
-    // If we have cached data, return it immediately (prevents loading flash)
-    if (cachedData && cachedData.length > 0) {
-      return cachedData;
-    }
-
-    // If we have new data from Convex, process and cache it
+    // 1. Always prefer fresh data from Convex when available
     if (activeQuery.results) {
       const threads = activeQuery.results.filter(
         (thread): thread is Doc<"threads"> => thread != null,
       );
 
-      // Deduplicate by _id in case a thread appears in multiple queries
       const uniqueThreads = Array.from(
-        new Map(threads.map((thread) => [String(thread._id), thread])).values(),
+        new Map(threads.map((t) => [String(t._id), t])).values(),
       );
 
-      // Sort by updatedAt/createdAt (most recent first)
       const sortedThreads = uniqueThreads.sort((a, b) => {
         const aTime = a.updatedAt ?? a._creationTime;
         const bTime = b.updatedAt ?? b._creationTime;
 
-        // Check if multiple threads have the same updatedAt (bulk update indicator)
-        const timeDiff = Math.abs(aTime - bTime);
-        if (timeDiff < 1000) {
-          // Within 1 second = likely bulk update
-          // For bulk updates, sort by creation time to maintain natural order
+        if (Math.abs(aTime - bTime) < 1000) {
           return b._creationTime - a._creationTime;
         }
 
-        // Primary sort by updatedAt/creationTime
-        if (bTime !== aTime) {
-          return bTime - aTime;
-        }
-
-        // Secondary sort by _creationTime (most recent first) when updatedAt is identical
-        return b._creationTime - a._creationTime;
+        return bTime - aTime;
       });
 
-      // Cache the processed threads
+      // Update cache so future renders start with the latest data
       setCachedThreads(cacheKey, sortedThreads);
 
       return sortedThreads;
     }
 
-    // Return empty array if no data available
+    // 2. Fall back to cached data to avoid loading flash while query resolves
+    const cachedData = getCachedThreads(cacheKey);
+    if (cachedData && cachedData.length > 0) {
+      return cachedData;
+    }
+
+    // 3. Nothing yet
     return [];
-  }, [activeQuery.results, getCachedThreads, setCachedThreads, cacheKey]);
+  }, [activeQuery.results, cacheKey, getCachedThreads, setCachedThreads]);
 
   // Load more function with cache invalidation
   const loadMore = useCallback(() => {
