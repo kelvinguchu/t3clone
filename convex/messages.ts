@@ -11,8 +11,6 @@ export const getThreadMessages = query({
     // First check if user has access to this thread
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
-      // Return null instead of throwing error to handle race conditions
-      // when thread is deleted while query is executing
       return null;
     }
 
@@ -21,14 +19,23 @@ export const getThreadMessages = query({
     // Check access permissions
     if (thread.userId) {
       if (thread.userId !== identity?.subject) {
-        throw new Error("Unauthorized: User mismatch");
+        console.error("Unauthorized: User mismatch", {
+          threadUserId: thread.userId,
+          identitySubject: identity?.subject,
+        });
+        return null; // Return null instead of throwing
       }
-    } else if (thread.sessionId) {
+    } else if (thread.isAnonymous && thread.sessionId) {
       if (thread.sessionId !== args.sessionId) {
-        throw new Error("Unauthorized: Session mismatch");
+        console.warn("Unauthorized: Session mismatch", {
+          threadSessionId: thread.sessionId,
+          argsSessionId: args.sessionId,
+        });
+        return null; // Return null to trigger client-side transfer
       }
-    } else {
-      return [];
+    } else if (!thread.userId) {
+      // Unclaimed thread with no session, deny access
+      return null;
     }
 
     return await ctx.db
@@ -50,8 +57,6 @@ export const getRecentThreadMessages = query({
     // First check if user has access to this thread
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
-      // Return null instead of throwing error to handle race conditions
-      // when thread is deleted while query is executing
       return null;
     }
 
@@ -60,15 +65,15 @@ export const getRecentThreadMessages = query({
     // Check access permissions
     if (thread.userId) {
       if (thread.userId !== identity?.subject) {
-        throw new Error("Unauthorized: User mismatch");
+        return null; // Return null instead of throwing
       }
-    } else if (thread.sessionId) {
+    } else if (thread.isAnonymous && thread.sessionId) {
       if (thread.sessionId !== args.sessionId) {
-        throw new Error("Unauthorized: Session mismatch");
+        return null; // Return null instead of throwing
       }
-    } else {
-      // Thread is likely being created, return empty array to prevent crash
-      return [];
+    } else if (!thread.userId) {
+      // Unclaimed thread with no session, deny access
+      return null;
     }
 
     const limit = args.limit ?? 10; // Default to 10 recent messages
@@ -89,26 +94,137 @@ export const getThreadMessagesWithAttachments = query({
     sessionId: v.optional(v.string()), // For anonymous access
   },
   handler: async (ctx, args) => {
+    console.log("[getThreadMessagesWithAttachments] Starting query", {
+      threadId: args.threadId,
+      sessionId: args.sessionId,
+      hasSessionId: !!args.sessionId,
+    });
+
     // First check if user has access to this thread
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
+      console.log("[getThreadMessagesWithAttachments] Thread not found", {
+        threadId: args.threadId,
+      });
       // Return null instead of throwing error to handle race conditions
       // when thread is deleted while query is executing
       return null;
     }
 
     const identity = await ctx.auth.getUserIdentity();
+    console.log(
+      "[getThreadMessagesWithAttachments] Thread and identity loaded",
+      {
+        threadId: args.threadId,
+        threadUserId: thread.userId,
+        threadSessionId: thread.sessionId,
+        threadIsAnonymous: thread.isAnonymous,
+        identitySubject: identity?.subject,
+        argsSessionId: args.sessionId,
+        hasIdentity: !!identity,
+      },
+    );
 
-    // Check access permissions
-    if (thread.userId) {
-      if (thread.userId !== identity?.subject) {
+    // Enhanced access control with proper migration handling
+    // Priority order:
+    // 1. Authenticated user access (thread.userId matches identity)
+    // 2. Claimed thread access (thread has userId but user is still passing sessionId during transition)
+    // 3. Anonymous session access (thread.sessionId matches args.sessionId)
+
+    if (thread.userId && identity?.subject) {
+      // Case 1: Both thread and user are authenticated
+      console.log(
+        "[getThreadMessagesWithAttachments] Checking authenticated user access",
+        {
+          threadUserId: thread.userId,
+          identitySubject: identity.subject,
+          match: thread.userId === identity.subject,
+        },
+      );
+
+      if (thread.userId === identity.subject) {
+        // Perfect match - authenticated user accessing their thread
+        console.log(
+          "[getThreadMessagesWithAttachments] Authenticated access granted",
+        );
+      } else {
+        console.error("[getThreadMessagesWithAttachments] User mismatch", {
+          threadUserId: thread.userId,
+          identitySubject: identity.subject,
+        });
         throw new Error("Unauthorized: User mismatch");
       }
-    } else if (thread.sessionId) {
-      if (thread.sessionId !== args.sessionId) {
-        throw new Error("Unauthorized: Session mismatch");
+    } else if (
+      thread.userId &&
+      !identity?.subject &&
+      thread.sessionId === args.sessionId
+    ) {
+      // Case 2: Claimed thread but user identity hasn't propagated yet
+      // This handles the race condition during claiming
+      console.warn(
+        "[getThreadMessagesWithAttachments] Claimed thread access during identity propagation",
+        {
+          threadUserId: thread.userId,
+          threadSessionId: thread.sessionId,
+          argsSessionId: args.sessionId,
+        },
+      );
+      // Allow access - this is the race condition fix from the threads.ts getThread query
+    } else if (thread.sessionId && args.sessionId) {
+      // Case 3: Anonymous session access
+      console.log(
+        "[getThreadMessagesWithAttachments] Checking session access",
+        {
+          threadSessionId: thread.sessionId,
+          argsSessionId: args.sessionId,
+          threadIsAnonymous: thread.isAnonymous,
+          hasIdentity: !!identity,
+          sessionMatch: thread.sessionId === args.sessionId,
+        },
+      );
+
+      if (thread.sessionId === args.sessionId) {
+        console.log(
+          "[getThreadMessagesWithAttachments] Session access granted",
+        );
+      } else {
+        console.warn(
+          "[getThreadMessagesWithAttachments] Anonymous session mismatch detected",
+          {
+            threadSessionId: thread.sessionId,
+            argsSessionId: args.sessionId,
+            threadIsAnonymous: thread.isAnonymous,
+            hasIdentity: !!identity,
+          },
+        );
+
+        // For anonymous threads with session mismatch, deny access to trigger client-side transfer
+        if (thread.isAnonymous && args.sessionId) {
+          console.warn(
+            "[getThreadMessagesWithAttachments] Session mismatch - denying access to trigger transfer",
+            {
+              threadSessionId: thread.sessionId,
+              argsSessionId: args.sessionId,
+            },
+          );
+          return null; // Deny access to trigger background transfer
+        } else {
+          console.error(
+            "[getThreadMessagesWithAttachments] Cannot provide access to thread",
+          );
+          return null;
+        }
       }
     } else {
+      console.log(
+        "[getThreadMessagesWithAttachments] Thread has no valid access path, returning empty array",
+        {
+          hasThreadUserId: !!thread.userId,
+          hasThreadSessionId: !!thread.sessionId,
+          hasIdentity: !!identity,
+          hasArgsSessionId: !!args.sessionId,
+        },
+      );
       // Thread is likely being created, return empty array to prevent crash
       return [];
     }
@@ -155,7 +271,7 @@ export const getBranchMessages = query({
     // First check if user has access to this thread
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
-      throw new Error("Thread not found");
+      return null; // Return null instead of throwing
     }
 
     const identity = await ctx.auth.getUserIdentity();
@@ -163,15 +279,15 @@ export const getBranchMessages = query({
     // Check access permissions
     if (thread.userId) {
       if (thread.userId !== identity?.subject) {
-        throw new Error("Unauthorized: User mismatch");
+        return null; // Return null instead of throwing
       }
-    } else if (thread.sessionId) {
+    } else if (thread.isAnonymous && thread.sessionId) {
       if (thread.sessionId !== args.sessionId) {
-        throw new Error("Unauthorized: Session mismatch");
+        return null; // Return null instead of throwing
       }
-    } else {
-      // Thread is likely being created, return empty array to prevent crash
-      return [];
+    } else if (!thread.userId) {
+      // Unclaimed thread with no session, deny access
+      return null;
     }
 
     // Get all messages in this branch
@@ -417,7 +533,7 @@ export const getLatestMessage = query({
     // Check thread access
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
-      throw new Error("Thread not found");
+      return null; // Return null instead of throwing
     }
 
     const identity = await ctx.auth.getUserIdentity();
@@ -425,14 +541,15 @@ export const getLatestMessage = query({
     // Check access permissions
     if (thread.isAnonymous && args.sessionId) {
       if (thread.sessionId !== args.sessionId) {
-        throw new Error("Unauthorized");
+        return null; // Return null instead of throwing
       }
     } else if (thread.userId) {
       if (thread.userId !== identity?.subject && !thread.isPublic) {
-        throw new Error("Unauthorized");
+        return null; // Return null instead of throwing
       }
-    } else {
-      throw new Error("Invalid thread access");
+    } else if (!thread.userId && !thread.isPublic) {
+      // No identity and no session, and not public
+      return null;
     }
 
     const message = await ctx.db
@@ -455,7 +572,7 @@ export const getMessageCount = query({
     // Check thread access
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
-      throw new Error("Thread not found");
+      return 0; // Return 0 instead of throwing
     }
 
     const identity = await ctx.auth.getUserIdentity();
@@ -463,14 +580,14 @@ export const getMessageCount = query({
     // Check access permissions
     if (thread.isAnonymous && args.sessionId) {
       if (thread.sessionId !== args.sessionId) {
-        throw new Error("Unauthorized");
+        return 0; // Return 0 instead of throwing
       }
     } else if (thread.userId) {
       if (thread.userId !== identity?.subject && !thread.isPublic) {
-        throw new Error("Unauthorized");
+        return 0; // Return 0 instead of throwing
       }
-    } else {
-      throw new Error("Invalid thread access");
+    } else if (!thread.userId && !thread.isPublic) {
+      return 0;
     }
 
     const messages = await ctx.db
@@ -577,7 +694,7 @@ export const getMessageByStreamId = query({
     // Check thread access
     const thread = await ctx.db.get(message.threadId);
     if (!thread) {
-      throw new Error("Thread not found");
+      return null; // Return null instead of throwing
     }
 
     const identity = await ctx.auth.getUserIdentity();
@@ -585,14 +702,14 @@ export const getMessageByStreamId = query({
     // Check access permissions
     if (thread.isAnonymous && args.sessionId) {
       if (thread.sessionId !== args.sessionId) {
-        throw new Error("Unauthorized");
+        return null; // Return null instead of throwing
       }
     } else if (thread.userId) {
       if (thread.userId !== identity?.subject && !thread.isPublic) {
-        throw new Error("Unauthorized");
+        return null; // Return null instead of throwing
       }
-    } else {
-      throw new Error("Invalid thread access");
+    } else if (!thread.userId && !thread.isPublic) {
+      return null;
     }
 
     return message;
@@ -622,7 +739,13 @@ export const createAnonymousMessage = mutation({
       throw new Error("Thread not found");
     }
 
-    if (!thread.isAnonymous || thread.sessionId !== args.sessionId) {
+    // Allow message creation if the original session still matches, even if the thread
+    // has already been claimed (isAnonymous now false) in a concurrent flow.
+    // This prevents a race condition where onFinish() is still persisting the final
+    // assistant chunks right as the user finishes sign-in and the claiming mutation
+    // flips `isAnonymous` to false. We purposely keep the strict sessionId match so
+    // only the rightful browser session can append messages during that short gap.
+    if (thread.sessionId !== args.sessionId) {
       throw new Error("Unauthorized or invalid session");
     }
 
@@ -788,13 +911,13 @@ export const isLatestAssistantMessage = query({
       // Check access permissions
       if (thread.isAnonymous && args.sessionId) {
         if (thread.sessionId !== args.sessionId) {
-          return false;
+          return false; // Return false instead of throwing
         }
       } else if (thread.userId) {
         if (thread.userId !== identity?.subject && !thread.isPublic) {
           return false;
         }
-      } else {
+      } else if (!thread.userId && !thread.isPublic) {
         return false;
       }
 

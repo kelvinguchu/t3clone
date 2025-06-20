@@ -21,7 +21,7 @@ export async function resolveSessionInfo(
     return { sessionId: null, remainingMessages: 10, ipHash: null };
   }
 
-  let sessionId =
+  const sessionId =
     req.headers.get("x-session-id") ??
     req.headers.get("X-Session-ID") ??
     (await cookies()).get("anon_session_id")?.value ??

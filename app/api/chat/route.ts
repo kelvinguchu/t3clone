@@ -120,6 +120,7 @@ export async function POST(req: NextRequest) {
             modelId,
             userId,
             sessionId,
+            null, // ipHash not available at this stage
             fetchOptions,
             requestId,
           ).catch(() => ({ success: false, threadId: null })) // Prevent rejection
@@ -235,6 +236,7 @@ export async function POST(req: NextRequest) {
         // Handle session management for anonymous users
         let finalThreadId = earlyThreadId ?? threadId;
         let finalSessionId = sessionId;
+        let ipHash = null;
 
         if (!userId) {
           try {
@@ -245,7 +247,7 @@ export async function POST(req: NextRequest) {
                 req.headers.get("x-forwarded-for") ??
                 req.headers.get("x-real-ip") ??
                 "unknown";
-              const ipHash = btoa(ip).slice(0, 16);
+              ipHash = btoa(ip).slice(0, 16);
 
               const sessionData = await getOrCreateAnonymousSession(
                 userAgent,
@@ -265,6 +267,7 @@ export async function POST(req: NextRequest) {
           modelId,
           userId,
           finalSessionId,
+          ipHash ?? null,
           fetchOptions,
           requestId,
         );

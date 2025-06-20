@@ -211,6 +211,130 @@ export const sessionCache = {
     const fullKey = `session:${sessionId}:${key}`;
     return kv.del(fullKey);
   },
+
+  // Transfer session data from one session to another (for background thread transfers)
+  async transferSessionData(fromSessionId: string, toSessionId: string) {
+    try {
+      // Get all keys for the source session
+      const keys: string[] = [];
+
+      // Scan for all session keys
+      for await (const key of kv.scanIterator()) {
+        if (key.startsWith(`session:${fromSessionId}:`)) {
+          keys.push(key);
+        }
+      }
+
+      if (keys.length === 0) return { transferredKeys: 0 };
+
+      // Batch fetch all source session data
+      const values = await kvPipeline.mget(keys);
+      const transferOps: Array<{ key: string; value: unknown; ttl: number }> =
+        [];
+      const deleteOps: string[] = [];
+
+      // Prepare transfer operations
+      keys.forEach((key, index) => {
+        const value = values[index];
+        if (value !== null) {
+          // Transform key from source to destination session
+          const keyPart = key.replace(`session:${fromSessionId}:`, "");
+          const newKey = `session:${toSessionId}:${keyPart}`;
+
+          transferOps.push({
+            key: newKey,
+            value,
+            ttl: 1800, // Default TTL for transferred data
+          });
+          deleteOps.push(key);
+        }
+      });
+
+      // Execute transfer operations
+      if (transferOps.length > 0) {
+        await kvPipeline.msetex(transferOps);
+        await kvPipeline.mdel(deleteOps);
+      }
+
+      console.log(
+        `[SessionCache] Transferred ${transferOps.length} keys from ${fromSessionId} to ${toSessionId}`,
+      );
+      return { transferredKeys: transferOps.length };
+    } catch (error) {
+      console.error("[SessionCache] Transfer failed:", error);
+      return { transferredKeys: 0, error };
+    }
+  },
+
+  // Merge rate limit data between sessions (add counts together, don't exceed limit)
+  async mergeRateLimitData(
+    fromSessionId: string,
+    toSessionId: string,
+    windowSeconds = 60,
+    maxLimit = 10,
+  ) {
+    try {
+      const currentWindow = Math.floor(Date.now() / 1000 / windowSeconds);
+      const fromKey = `rate:${fromSessionId}:${currentWindow}`;
+      const toKey = `rate:${toSessionId}:${currentWindow}`;
+
+      // Get current counts
+      const [fromCount, toCount] = await kvPipeline.mget([fromKey, toKey]);
+
+      const fromVal = (fromCount as number) || 0;
+      const toVal = (toCount as number) || 0;
+
+      // Add the counts together, but cap at the maximum limit to prevent abuse
+      const mergedCount = Math.min(fromVal + toVal, maxLimit);
+
+      if (mergedCount > 0) {
+        await kv.setex(toKey, windowSeconds, mergedCount);
+      }
+
+      // Always delete the old session's rate limit data
+      await kv.del(fromKey);
+
+      console.log(
+        `[SessionCache] Merged rate limits: ${fromVal} + ${toVal} = ${mergedCount} (capped at ${maxLimit})`,
+      );
+
+      return { mergedCount };
+    } catch (error) {
+      console.error("[SessionCache] Rate limit merge failed:", error);
+      return { mergedCount: 0, error };
+    }
+  },
+
+  // Completely delete all data for a session (cleanup old session)
+  async deleteAllSessionData(sessionId: string) {
+    try {
+      // Get all keys for the session
+      const keys: string[] = [];
+
+      // Scan for all session-related keys
+      for await (const key of kv.scanIterator()) {
+        if (
+          key.startsWith(`session:${sessionId}:`) ||
+          key.startsWith(`rate:${sessionId}:`)
+        ) {
+          keys.push(key);
+        }
+      }
+
+      if (keys.length === 0) return { deletedKeys: 0 };
+
+      // Delete all session data
+      await kvPipeline.mdel(keys);
+
+      console.log(
+        `[SessionCache] Deleted ${keys.length} keys for session ${sessionId}`,
+      );
+      return { deletedKeys: keys.length };
+    } catch (error) {
+      console.error("[SessionCache] Session cleanup failed:", error);
+      return { deletedKeys: 0, error };
+    }
+  },
 };
 
 // Conversation context caching for LLM quick access
@@ -240,6 +364,13 @@ export const conversationCache = {
     ttl = 7200, // 2 hours default
   ) {
     const key = `conversation:${threadId}`;
+
+    // Ensure we only store the last 10 messages to keep the cache lean.
+    if (context.messages.length > 10) {
+      context.messages = context.messages.slice(-10);
+      context.messageCount = context.messages.length;
+    }
+
     return kv.setex(key, ttl, JSON.stringify(context));
   },
 

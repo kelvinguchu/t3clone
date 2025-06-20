@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
         modelId,
         userId,
         sessionId,
+        null,
         fetchOptions,
         requestId,
       );

@@ -18,6 +18,7 @@ import { useAutoResume } from "@/lib/hooks/use-auto-resume";
 import { LiquidGlassButton } from "@/components/ui/liquid-glass-button";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useConversationContextLoader } from "@/lib/actions/chat/chat-area/conversation-context-loader";
+import { useAutoTransferOnAccess } from "@/lib/hooks/use-thread-transfer";
 import {
   useUseChatConfig,
   useAutoResumeConfig,
@@ -55,6 +56,7 @@ import { useModelStore } from "@/lib/stores/model-store";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePlanLimits } from "@/lib/hooks/use-plan-limits";
 import ErrorBoundary from "@/components/error-boundary";
+import { chatBus } from '@/lib/events/chat-bus'
 
 type DisplayMessage = {
   role: "user" | "assistant" | "system";
@@ -132,32 +134,58 @@ const ChatArea = memo(function ChatArea({
 
   // Single call to useAnonymousSession to prevent duplicate subscriptions
   const {
-    sessionId: anonSessionId,
+    sessionData,
     isAnonymous,
     canSendMessage,
     remainingMessages,
     messageCount,
   } = useAnonymousSession();
 
+  // Get session ID from session data (convert undefined to null for compatibility)
+  const anonSessionId = sessionData?.sessionId ?? null;
+
   // Plan-based rate limiting for authenticated users
   const planLimits = usePlanLimits();
+
+  // Background thread transfer hook
+  const { ensureThreadAccess } = useAutoTransferOnAccess();
+
+  // Automatically transfer thread ownership when accessing mismatched sessions
+  useEffect(() => {
+    if (initialThreadId && isAnonymous && anonSessionId) {
+      ensureThreadAccess(initialThreadId as Id<"threads">);
+    }
+  }, [initialThreadId, isAnonymous, anonSessionId, ensureThreadAccess]);
 
   // Always include anonSessionId if we have it. This allows freshly auth'd
   // users to access their just-promoted anonymous threads before the
   // migration finishes, preventing a transient 401/404 that forced a refresh.
   const historicalQueryArgs = useMemo(() => {
+    // Debug logging (can be removed in production)
+    // console.log("[ChatArea] Computing historicalQueryArgs", {
+    //   initialThreadId,
+    //   isAnonymous,
+    //   anonSessionId,
+    //   hasAnonSessionId: !!anonSessionId,
+    // });
+
     if (!initialThreadId) return "skip";
 
     if (isAnonymous) {
-      return anonSessionId
+      const result = anonSessionId
         ? {
             threadId: initialThreadId as Id<"threads">,
             sessionId: anonSessionId,
           }
         : "skip";
+
+      // console.log("[ChatArea] Anonymous query args", result);
+      return result;
     }
 
-    return { threadId: initialThreadId as Id<"threads"> };
+    const result = { threadId: initialThreadId as Id<"threads"> };
+    // console.log("[ChatArea] Authenticated query args", result);
+    return result;
   }, [initialThreadId, isAnonymous, anonSessionId]);
 
   const historicalMessages = useQuery(
@@ -167,17 +195,30 @@ const ChatArea = memo(function ChatArea({
       | "skip",
   );
 
-  // Redirect to main chat if thread is deleted
+  // Log thread access issues but don't redirect - let background transfer handle it
   useEffect(() => {
     if (
       initialThreadId &&
       historicalQueryArgs !== "skip" &&
       historicalMessages === null
     ) {
-      router.push("/chat");
-      return;
+      console.log(
+        "[ChatArea] Thread inaccessible, background transfer should handle this",
+        {
+          initialThreadId,
+          historicalQueryArgs,
+          isAnonymous,
+          anonSessionId,
+        },
+      );
     }
-  }, [initialThreadId, historicalQueryArgs, historicalMessages, router]);
+  }, [
+    initialThreadId,
+    historicalQueryArgs,
+    historicalMessages,
+    isAnonymous,
+    anonSessionId,
+  ]);
 
   // Convert historical messages to AI SDK format
   const initialMessages = useMemo(() => {
@@ -353,17 +394,30 @@ const ChatArea = memo(function ChatArea({
       | "skip",
   );
 
-  // Handle thread metadata deletion
+  // Log thread metadata issues but don't redirect - let background transfer handle it
   useEffect(() => {
     if (
       initialThreadId &&
       threadMetaQueryArgs !== "skip" &&
       threadMeta === null
     ) {
-      router.push("/chat");
-      return;
+      console.log(
+        "[ChatArea] Thread metadata inaccessible, background transfer should handle this",
+        {
+          initialThreadId,
+          threadMetaQueryArgs,
+          isAnonymous,
+          anonSessionId,
+        },
+      );
     }
-  }, [initialThreadId, threadMetaQueryArgs, threadMeta, router]);
+  }, [
+    initialThreadId,
+    threadMetaQueryArgs,
+    threadMeta,
+    isAnonymous,
+    anonSessionId,
+  ]);
 
   // Auto-set model from thread on initial load only
   const currentModelFromThread = threadMeta?.model;
@@ -567,6 +621,32 @@ const ChatArea = memo(function ChatArea({
 
     return attachments;
   }, [historicalMessages]);
+
+  const flushPendingWork = useCallback(async () => {
+    // Wait until streaming finished & partial save settled
+    const waitForIdle = async () => {
+      if (status === 'streaming' || status === 'submitted' || isSavingPartial) {
+        await new Promise<void>(resolve => {
+          const id = setInterval(() => {
+            const streamingDone = status !== 'streaming' && status !== 'submitted'
+            if (streamingDone && !isSavingPartial) {
+              clearInterval(id)
+              resolve()
+            }
+          }, 100)
+        })
+      }
+    }
+
+    await waitForIdle()
+    // ensure last partial content was persisted
+    chatBus.emit('flushComplete')
+  }, [status, isSavingPartial])
+
+  useEffect(() => {
+    chatBus.on('flushRequest', flushPendingWork)
+    return () => chatBus.off('flushRequest', flushPendingWork)
+  }, [flushPendingWork])
 
   return (
     <div

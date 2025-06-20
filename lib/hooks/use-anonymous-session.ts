@@ -98,10 +98,16 @@ export function useAnonymousSession(): UseAnonymousSessionReturn {
   const [isLoading, setIsLoading] = useState(true);
   const sessionInitialized = useRef(false);
   const [migrated, setMigrated] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // Determine authentication state
-  const isAuthenticated = userLoaded && !!user;
-  const isAnonymous = userLoaded && !user;
+  // Prevent hydration mismatches by checking if component is mounted
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Determine authentication state with hydration safety
+  const isAuthenticated = mounted && userLoaded && !!user;
+  const isAnonymous = mounted && userLoaded && !user;
 
   // Calculate derived values
   const canSendMessage = sessionData

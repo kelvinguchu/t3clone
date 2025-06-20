@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Modern AI chat interface with all models.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f3f1fe",
+    background_color: "#ffffff",
     theme_color: "#4c0fd0",
     icons: [
       {

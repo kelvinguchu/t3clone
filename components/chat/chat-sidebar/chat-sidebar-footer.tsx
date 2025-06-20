@@ -4,6 +4,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SignInButton } from "@clerk/nextjs";
 import { Crown, LogIn } from "lucide-react";
 import type { UserResource } from "@clerk/types";
+import { toast } from "sonner";
+import { chatBus } from "@/lib/events/chat-bus";
 
 export type ChatSidebarFooterProps = {
   hasMounted: boolean;
@@ -65,7 +67,27 @@ export function ChatSidebarFooter({
           forceRedirectUrl="/chat"
           signUpForceRedirectUrl="/chat"
         >
-          <Button className="w-full bg-gradient-to-r from-purple-600 to-purple-700 dark:from-dark-purple-glow dark:to-dark-purple-light hover:from-purple-700 hover:to-purple-800 dark:hover:from-dark-purple-light dark:hover:to-dark-purple-glow text-white shadow-lg shadow-purple-500/25 dark:shadow-dark-purple-glow/30">
+          <Button
+            className="w-full bg-gradient-to-r from-purple-600 to-purple-700 dark:from-dark-purple-glow dark:to-dark-purple-light hover:from-purple-700 hover:to-purple-800 dark:hover:from-dark-purple-light dark:hover:to-dark-purple-glow text-white shadow-lg shadow-purple-500/25 dark:shadow-dark-purple-glow/30"
+            onClick={async () => {
+              const id = toast.loading("Saving your chat before sign-in…");
+
+              chatBus.emit("flushRequest");
+
+              await Promise.race([
+                new Promise<void>((res) => {
+                  const handler = () => {
+                    chatBus.off("flushComplete", handler);
+                    res();
+                  };
+                  chatBus.on("flushComplete", handler);
+                }),
+                new Promise((res) => setTimeout(res, 2000)),
+              ]);
+
+              toast.success("Chat saved!", { id });
+            }}
+          >
             <LogIn className="h-4 w-4 mr-2" />
             Sign In
           </Button>

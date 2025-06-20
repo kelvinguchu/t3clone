@@ -94,7 +94,7 @@ export const getThread = query({
 
     const identity = await ctx.auth.getUserIdentity();
 
-    // --- Refactored Access Control v2 ---
+    // --- Refactored Access Control v3 with Auto-Transfer ---
 
     // 1. Authenticated owner access
     if (thread.userId && identity?.subject === thread.userId) {
@@ -106,7 +106,7 @@ export const getThread = query({
       return thread;
     }
 
-    // 3. Anonymous access
+    // 3. Anonymous access with perfect session match
     if (
       thread.isAnonymous &&
       thread.sessionId &&
@@ -118,7 +118,6 @@ export const getThread = query({
 
     // 4. Handle race condition: thread is claimed (userId is set, isAnonymous is false)
     // but identity hasn't propagated to the Convex function execution yet.
-    // We can trust the sessionId passed from the client cookie in this specific, transient case.
     if (
       thread.userId &&
       !identity?.subject &&
@@ -129,10 +128,38 @@ export const getThread = query({
       return thread;
     }
 
-    // 5. If none of the above, deny access.
-    throw new Error(
-      "Unauthorized: You do not have permission to view this thread.",
-    );
+    // 5. AUTO-TRANSFER: For anonymous threads with session mismatch,
+    // deny access and let client-side hook handle the transfer
+    if (
+      thread.isAnonymous &&
+      args.sessionId &&
+      thread.sessionId !== args.sessionId
+    ) {
+      console.log(
+        "[getThread] Session mismatch detected - denying access to trigger client-side transfer",
+        {
+          threadId: args.threadId,
+          fromSession: thread.sessionId,
+          toSession: args.sessionId,
+        },
+      );
+
+      // Return null to trigger client-side transfer logic
+      // The useAutoTransferOnAccess hook will handle the background transfer
+      return null;
+    }
+
+    // 6. If none of the above access patterns match, deny access
+    console.error("Thread access denied", {
+      threadId: args.threadId,
+      threadUserId: thread.userId,
+      threadSessionId: thread.sessionId,
+      threadIsAnonymous: thread.isAnonymous,
+      identitySubject: identity?.subject,
+      argsSessionId: args.sessionId,
+    });
+
+    return null;
   },
 });
 
@@ -813,6 +840,39 @@ export const branchThread = mutation({
   },
 });
 
+// Transfer an anonymous thread to current session (for session mismatches)
+export const transferAnonymousThread = mutation({
+  args: {
+    threadId: v.id("threads"),
+    newSessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread) {
+      throw new Error("Thread not found");
+    }
+
+    // Only allow transferring anonymous threads
+    if (!thread.isAnonymous) {
+      throw new Error("Can only transfer anonymous threads");
+    }
+
+    // Transfer the thread to the new session
+    await ctx.db.patch(args.threadId, {
+      sessionId: args.newSessionId,
+      updatedAt: Date.now(),
+    });
+
+    console.log("[transferAnonymousThread] Thread transferred successfully", {
+      threadId: args.threadId,
+      fromSession: thread.sessionId,
+      toSession: args.newSessionId,
+    });
+
+    return { success: true };
+  },
+});
+
 // Claim anonymous threads after user signs up/logs in
 export const claimAnonymousThreads = mutation({
   args: {
@@ -975,5 +1035,75 @@ export const getUserSharedThreads = query({
       const bTime = b.updatedAt ?? b._creationTime;
       return bTime - aTime;
     });
+  },
+});
+
+// Auto-transfer anonymous thread to current session (background operation)
+export const autoTransferAnonymousThread = mutation({
+  args: {
+    threadId: v.id("threads"),
+    newSessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread) {
+      return { success: false, reason: "Thread not found" };
+    }
+
+    // Only auto-transfer anonymous threads with session mismatch
+    if (!thread.isAnonymous) {
+      return { success: false, reason: "Not an anonymous thread" };
+    }
+
+    if (thread.sessionId === args.newSessionId) {
+      return { success: true, reason: "Already correct session" };
+    }
+
+    const oldSessionId = thread.sessionId;
+
+    // Perform the thread transfer silently
+    await ctx.db.patch(args.threadId, {
+      sessionId: args.newSessionId,
+      updatedAt: Date.now(),
+    });
+
+    console.log("[autoTransferAnonymousThread] Background transfer completed", {
+      threadId: args.threadId,
+      fromSession: oldSessionId,
+      toSession: args.newSessionId,
+    });
+
+    return {
+      success: true,
+      reason: "Transfer completed",
+      oldSessionId, // Return old session ID for KV cleanup
+    };
+  },
+});
+
+// Bulk transfer all threads from one anonymous session to another
+export const bulkTransferSessionThreads = mutation({
+  args: {
+    fromSessionId: v.string(),
+    toSessionId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (args.fromSessionId === args.toSessionId) {
+      return { updated: 0 };
+    }
+
+    const threadsToUpdate = await ctx.db
+      .query("threads")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.fromSessionId))
+      .collect();
+
+    for (const t of threadsToUpdate) {
+      await ctx.db.patch(t._id, {
+        sessionId: args.toSessionId,
+        updatedAt: Date.now(),
+      });
+    }
+
+    return { updated: threadsToUpdate.length };
   },
 });

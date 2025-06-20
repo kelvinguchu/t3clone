@@ -627,3 +627,78 @@ export async function getOrCreateAnonymousSession(
   // 2. If not found, create a new session
   return createAnonymousSession(userAgent, ipHash, fingerprintHash);
 }
+
+/**
+ * Merges two anonymous sessions. It transfers the usage from the `fromSessionId`
+ * to the `toSessionId`, updates the message counts, and then deletes the `fromSessionId`.
+ * @param fromSessionId The session ID to merge from (will be deleted).
+ * @param toSessionId The session ID to merge into.
+ * @returns The updated session data for the `toSessionId`, or null if the merge fails.
+ */
+export async function mergeAnonymousSessions(
+  fromSessionId: string,
+  toSessionId: string,
+): Promise<AnonymousSessionData | null> {
+  if (fromSessionId === toSessionId) {
+    return getAnonymousSession(toSessionId);
+  }
+
+  const [fromSession, toSession] = await Promise.all([
+    getAnonymousSession(fromSessionId),
+    getAnonymousSession(toSessionId),
+  ]);
+
+  // If there's no session to merge into, we can't proceed.
+  if (!toSession) {
+    console.error(
+      `[Session] Merge failed: target session ${toSessionId} not found.`,
+    );
+    return null;
+  }
+
+  // If there's no session to merge from, the target session is already correct.
+  if (!fromSession) {
+    return toSession;
+  }
+
+  // Merge logic: combine message counts and recalculate remaining messages.
+  const newMessageCount = fromSession.messageCount + toSession.messageCount;
+  const newRemainingMessages = Math.max(
+    0,
+    SESSION_CONFIG.MAX_MESSAGES_PER_SESSION - newMessageCount,
+  );
+
+  const mergedSession: AnonymousSessionData = {
+    ...toSession,
+    messageCount: newMessageCount,
+    remainingMessages: newRemainingMessages,
+    // Preserve the earliest creation date of the two sessions.
+    createdAt: Math.min(fromSession.createdAt, toSession.createdAt),
+  };
+
+  // Atomically update the target session and delete the old one.
+  await updateAnonymousSession(mergedSession);
+  await deleteAnonymousSession(fromSessionId);
+
+  // Bulk transfer all thread documents to the new session so UI sidebar updates immediately
+  try {
+    const { fetchMutation } = await import("convex/nextjs");
+    const { api } = await import("@/convex/_generated/api");
+
+    await fetchMutation(api.threads.bulkTransferSessionThreads, {
+      fromSessionId,
+      toSessionId,
+    });
+  } catch (err) {
+    console.error("[Session] Failed to bulk-transfer threads", err);
+  }
+
+  console.log(`[Session] Merged session ${fromSessionId} into ${toSessionId}`, {
+    oldMessages: fromSession.messageCount,
+    newMessages: toSession.messageCount,
+    totalMessages: newMessageCount,
+    remaining: newRemainingMessages,
+  });
+
+  return mergedSession;
+}

@@ -95,6 +95,13 @@ export function ChatMessages({
   // Anonymous session for authorization
   const { sessionId } = useAnonymousSession();
 
+  // Debug logging for session ID (can be removed in production)
+  // console.log("[ChatMessages] Session ID from hook", {
+  //   sessionId,
+  //   hasSessionId: !!sessionId,
+  //   threadId,
+  // });
+
   return (
     // Root grows to fill its parent but no artificial spacer – avoids layout shift
     <div className="flex flex-col min-h-full">

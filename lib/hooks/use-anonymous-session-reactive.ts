@@ -7,6 +7,9 @@ import { api as convexApi } from "@/convex/_generated/api";
 import {
   formatRemainingTime,
   type AnonymousSessionData,
+  getStoredSessionId,
+  storeSessionId,
+  removeStoredSessionId,
 } from "@/lib/utils/session";
 import {
   getBrowserFingerprint,
@@ -119,10 +122,28 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
   const claimThreads = useMutation(convexApi.threads.claimAnonymousThreads);
   const [migrated, setMigrated] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // Determine authentication state
-  const isAuthenticated = userLoaded && !!user;
-  const isAnonymous = userLoaded && !user;
+  // Prevent hydration mismatches
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Determine authentication state with hydration safety
+  const isAuthenticated = mounted && userLoaded && !!user;
+  const isAnonymous = mounted && userLoaded && !user;
+
+  // Debug logging for authentication state (can be removed in production)
+  // console.log("[useAnonymousSessionReactive] Auth state", {
+  //   mounted,
+  //   userLoaded,
+  //   hasUser: !!user,
+  //   isAuthenticated,
+  //   isAnonymous,
+  //   sessionId: sessionData?.sessionId,
+  //   isMigrating,
+  //   hasMigrated: migrated,
+  // });
 
   // Extract session ID for use in Convex queries
   const sessionId = sessionData?.sessionId ?? null;
@@ -148,22 +169,46 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
 
   const canSendMessage = remainingMessages > 0 && !sessionData?.isExpired;
 
-  // Initialize session for anonymous users with enhanced fingerprinting
+  // Initialize session for anonymous users with localStorage persistence
   const initializeSession = useCallback(async () => {
     if (isAuthenticated || sessionInitialized.current) {
       setIsLoading(false);
       return;
     }
 
-    try {
-      setIsLoading(true);
+    setIsLoading(true);
 
-      // Create session with fingerprint data for enhanced security
-      const session = await createSessionWithFingerprint();
+    try {
+      // 1. Attempt to restore an existing session ID from localStorage
+      const storedSessionId = getStoredSessionId();
+
+      let session: AnonymousSessionData;
+
+      if (storedSessionId) {
+        try {
+          // Try to fetch the existing session from the server
+          session = await fetchSession(storedSessionId);
+        } catch (error) {
+          // If the stored session is invalid or expired, clean it up
+          console.warn(
+            "[Session] Stored anonymous session invalid, creating new one",
+            error,
+          );
+          removeStoredSessionId();
+          session = await createSessionWithFingerprint();
+        }
+      } else {
+        // No stored session – create a new one with fingerprint data
+        session = await createSessionWithFingerprint();
+      }
+
+      // Persist the (new or restored) session ID for future reloads
+      storeSessionId(session.sessionId);
 
       setSessionData(session);
       sessionInitialized.current = true;
-    } catch {
+    } catch (error) {
+      console.error("[Session] Failed to initialize anonymous session:", error);
       setSessionData(null);
     } finally {
       setIsLoading(false);
@@ -178,14 +223,18 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
 
     try {
       const refreshedSession = await fetchSession(sessionData.sessionId);
+
+      // Update persisted session ID in case the server issued a new one
+      if (refreshedSession.sessionId !== sessionData.sessionId) {
+        storeSessionId(refreshedSession.sessionId);
+      }
+
       setSessionData(refreshedSession);
     } catch (error) {
-      // Don't clear session on temporary failures - just log and keep existing session
-      console.warn(
-        "[Session] Refresh failed, keeping existing session:",
-        error,
-      );
-      // Only clear if session is actually expired (not just network issues)
+      console.warn("[Session] Refresh failed, falling back:", error);
+
+      // If session is no longer valid, purge it so a new one can be created
+      removeStoredSessionId();
     }
   }, [isAuthenticated, sessionData]);
 
@@ -204,8 +253,9 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
       }
     }
 
-    // Clear local state
+    // Clear local state and persisted storage
     setSessionData(null);
+    removeStoredSessionId();
     sessionInitialized.current = false;
   }, [sessionData]);
 
@@ -236,14 +286,22 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
     if (userLoaded && isAnonymous && !sessionInitialized.current) {
       initializeSession();
     } else if (userLoaded && isAuthenticated) {
-      if (!migrated && sessionData?.sessionId) {
+      // Use live session ID if we still have one in state, otherwise fall back to the
+      // persisted ID from localStorage. This handles the case where the page loaded
+      // directly while authenticated (no in-memory anonymous session) but localStorage
+      // still remembers the previous anonymous ID that needs claiming.
+      const anonIdForClaim = sessionData?.sessionId || getStoredSessionId();
+
+      if (!migrated && anonIdForClaim) {
         (async () => {
           setIsMigrating(true);
           try {
             await claimThreads({
-              sessionId: sessionData.sessionId,
+              sessionId: anonIdForClaim,
               ...(sessionData?.ipHash ? { ipHash: sessionData.ipHash } : {}),
             });
+            // Once claimed, we can safely remove the stored anonymous ID.
+            removeStoredSessionId();
           } catch {
             // Failed to claim anon threads
           } finally {

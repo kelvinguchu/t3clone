@@ -114,7 +114,10 @@ export function ChatWelcomeScreen({
           </div>
 
           <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold mb-1 sm:mb-2">
-            <span className="bg-gradient-to-r from-purple-600 via-blue-600 to-purple-800 bg-clip-text text-transparent">
+            <span
+              className="bg-gradient-to-r from-purple-600 via-blue-600 to-purple-800 bg-clip-text text-transparent"
+              suppressHydrationWarning
+            >
               {getUserGreeting()}
             </span>
           </h1>
@@ -126,6 +129,7 @@ export function ChatWelcomeScreen({
                   ? "text-orange-600/80 dark:text-orange-400/80"
                   : "text-purple-600/80 dark:text-slate-400"
             }`}
+            suppressHydrationWarning
           >
             {getUserSubtext()}
           </p>
