@@ -32,6 +32,7 @@ export type DisplayMessage = {
     result?: unknown;
     state: "partial-call" | "call" | "result";
   }>;
+  actionSummary?: string;
 };
 
 // Type for historical message from database
@@ -61,6 +62,7 @@ export interface HistoricalMessageData {
     url: string;
     size: number;
   }>;
+  actionSummary?: string;
 }
 
 // Extract reasoning from AI SDK message parts
@@ -161,8 +163,13 @@ export function convertToDisplayMessages(
           result: "result" in tool ? tool.result : undefined,
           state: tool.state,
         })) || [],
+      actionSummary: historicalMessage?.actionSummary,
     };
   });
+
+  // From now on we rely on the *real* assistant message (which comes with
+  // `toolInvocations` set by AI-SDK) to show inline browsing indicators. No
+  // need for extra placeholder messages.
 
   return displayMessages;
 }

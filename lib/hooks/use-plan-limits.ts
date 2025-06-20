@@ -24,33 +24,21 @@ export function usePlanLimits(): UsePlanLimitsReturn {
   const { user, isLoaded } = useUser();
   const [error, setError] = useState<string | null>(null);
 
-  // Get user's plan from Clerk metadata
-  const getUserPlan = useCallback(() => {
-    if (!user) return "free";
-    return (user.publicMetadata?.plan as string) || "free";
-  }, [user]);
-
-  const plan = getUserPlan();
-
-  // Use Convex query to get current plan stats
+  // Fetch plan statistics from Convex – server will resolve the correct plan
   const stats = useQuery(
     api.users.getUserPlanStats,
-    user && isLoaded ? { userId: user.id, plan } : "skip",
+    user && isLoaded ? { userId: user.id } : "skip",
   );
 
-  // Use Convex mutation to increment usage
+  // Mutation to increment usage (server resolves the correct plan)
   const incrementUsageMutation = useMutation(api.users.incrementPlanUsage);
 
-  // Increment usage count
   const incrementUsage = useCallback(async (): Promise<boolean> => {
     if (!user) return false;
 
     try {
       setError(null);
-      const result = await incrementUsageMutation({
-        userId: user.id,
-        plan,
-      });
+      const result = await incrementUsageMutation({ userId: user.id });
 
       if (!result.success) {
         setError("Message limit exceeded");
@@ -58,22 +46,18 @@ export function usePlanLimits(): UsePlanLimitsReturn {
       }
 
       return true;
-    } catch (error) {
-      console.error("Error incrementing usage:", error);
-      setError(error instanceof Error ? error.message : "Unknown error");
+    } catch (err) {
+      console.error("Error incrementing usage:", err);
+      setError(err instanceof Error ? err.message : "Unknown error");
       return false;
     }
-  }, [user, plan, incrementUsageMutation]);
+  }, [user, incrementUsageMutation]);
 
-  // Refresh limits (the query will automatically refetch)
   const refreshLimits = useCallback(() => {
-    // Convex queries auto-refresh, but we can clear errors
     setError(null);
   }, []);
 
-  // Determine loading state based on user loading and stats availability
-
-  // Return combined state
+  // While Clerk or Convex data is loading, return sensible defaults
   if (!isLoaded || !user) {
     return {
       canSend: false,
@@ -94,11 +78,11 @@ export function usePlanLimits(): UsePlanLimitsReturn {
     return {
       canSend: true,
       used: 0,
-      remaining: plan === "pro" ? 1500 : 25,
-      total: plan === "pro" ? 1500 : 25,
+      remaining: 1500,
+      total: 1500,
       percentage: 0,
       resetTime: Date.now() + 24 * 60 * 60 * 1000,
-      plan,
+      plan: "free",
       isLoading: true,
       error,
       incrementUsage,

@@ -56,7 +56,7 @@ import { useModelStore } from "@/lib/stores/model-store";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePlanLimits } from "@/lib/hooks/use-plan-limits";
 import ErrorBoundary from "@/components/error-boundary";
-import { chatBus } from '@/lib/events/chat-bus'
+import { chatBus } from "@/lib/events/chat-bus";
 
 type DisplayMessage = {
   role: "user" | "assistant" | "system";
@@ -357,11 +357,53 @@ const ChatArea = memo(function ChatArea({
   const { isThinkingPhase, shouldShowThinkingDisplay, hasStartedResponding } =
     useThinkingPhase(isLoading, lastAssistantMessage, pendingThinking);
 
-  const loadingStatusText = useLoadingStatusText(
+  // Extract current search query (if any) from the last assistant message
+  const currentSearchQuery = useMemo(() => {
+    if (!lastAssistantMessage || !("toolInvocations" in lastAssistantMessage)) {
+      return null;
+    }
+
+    const inv = (
+      lastAssistantMessage as Partial<Message> & {
+        toolInvocations?: Array<{
+          state: string;
+          args?: unknown;
+        }>;
+      }
+    ).toolInvocations?.[0];
+
+    if (
+      inv &&
+      (inv.state === "partial-call" || inv.state === "call") &&
+      inv.args
+    ) {
+      // args may be an object or a JSON string
+      let parsed: { query?: string } | null = null;
+      if (typeof inv.args === "string") {
+        try {
+          parsed = JSON.parse(inv.args);
+        } catch {
+          parsed = null;
+        }
+      } else if (typeof inv.args === "object") {
+        parsed = inv.args as { query?: string };
+      }
+
+      if (parsed?.query) return parsed.query;
+    }
+
+    return null;
+  }, [lastAssistantMessage]);
+
+  let loadingStatusText = useLoadingStatusText(
     isLoading,
     isThinking && !shouldShowThinkingDisplay,
     isBrowsing,
   );
+
+  if (isBrowsing && currentSearchQuery) {
+    loadingStatusText = `Searching for "${currentSearchQuery}"`;
+  }
 
   // If a new thread is created (no initialThreadId) navigate to it
   useEffect(() => {
@@ -625,28 +667,29 @@ const ChatArea = memo(function ChatArea({
   const flushPendingWork = useCallback(async () => {
     // Wait until streaming finished & partial save settled
     const waitForIdle = async () => {
-      if (status === 'streaming' || status === 'submitted' || isSavingPartial) {
-        await new Promise<void>(resolve => {
+      if (status === "streaming" || status === "submitted" || isSavingPartial) {
+        await new Promise<void>((resolve) => {
           const id = setInterval(() => {
-            const streamingDone = status !== 'streaming' && status !== 'submitted'
+            const streamingDone =
+              status !== "streaming" && status !== "submitted";
             if (streamingDone && !isSavingPartial) {
-              clearInterval(id)
-              resolve()
+              clearInterval(id);
+              resolve();
             }
-          }, 100)
-        })
+          }, 100);
+        });
       }
-    }
+    };
 
-    await waitForIdle()
+    await waitForIdle();
     // ensure last partial content was persisted
-    chatBus.emit('flushComplete')
-  }, [status, isSavingPartial])
+    chatBus.emit("flushComplete");
+  }, [status, isSavingPartial]);
 
   useEffect(() => {
-    chatBus.on('flushRequest', flushPendingWork)
-    return () => chatBus.off('flushRequest', flushPendingWork)
-  }, [flushPendingWork])
+    chatBus.on("flushRequest", flushPendingWork);
+    return () => chatBus.off("flushRequest", flushPendingWork);
+  }, [flushPendingWork]);
 
   return (
     <div

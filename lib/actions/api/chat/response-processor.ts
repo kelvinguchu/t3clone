@@ -63,6 +63,8 @@ export async function processAIResponseMessages({
         content: string | Array<{ type: string; [key: string]: unknown }>;
       };
 
+      let localActionSummary: string | undefined;
+
       if (typedMessage.role === "assistant" || typedMessage.role === "system") {
         // Extract text content and reasoning from assistant/system messages
         let textContent = "";
@@ -106,14 +108,34 @@ export async function processAIResponseMessages({
           reasoning = extractedReasoning;
         }
 
-        // Skip assistant messages that are empty or only contain tool calls
+        // If this assistant message is *only* a tool-call placeholder (empty
+        // text) we still want to persist a readable indicator so the UI can
+        // show the query after a refresh.
+
         if (
           typedMessage.role === "assistant" &&
-          (!textContent ||
-            textContent.trim() === "" ||
-            textContent.includes("[Tool Call:"))
+          (!textContent || textContent.trim() === "")
         ) {
-          continue;
+          // Try to derive the query from the first tool-call part
+          if (Array.isArray(typedMessage.content)) {
+            const toolCallPart = typedMessage.content.find(
+              (part) => (part as { type?: string }).type === "tool-call",
+            ) as
+              | {
+                  args?: { query?: string };
+                  toolName?: string;
+                }
+              | undefined;
+
+            const q =
+              toolCallPart?.args &&
+              (toolCallPart.args as { query?: string }).query;
+            localActionSummary = q ? `Searched for "${q}"` : "Searched the web";
+            textContent = "";
+          } else {
+            localActionSummary = "Searched the web";
+            textContent = "";
+          }
         }
 
         // Save the message to Convex with tool usage information and reasoning
@@ -141,6 +163,10 @@ export async function processAIResponseMessages({
                   : undefined,
               hasToolCalls:
                 typedMessage.role === "assistant" ? hasAnyToolCalls : undefined,
+              actionSummary:
+                typedMessage.role === "assistant"
+                  ? localActionSummary
+                  : undefined,
             },
             fetchOptions,
           );
@@ -165,6 +191,10 @@ export async function processAIResponseMessages({
                 : undefined,
             hasToolCalls:
               typedMessage.role === "assistant" ? hasAnyToolCalls : undefined,
+            actionSummary:
+              typedMessage.role === "assistant"
+                ? localActionSummary
+                : undefined,
           });
         }
 

@@ -117,9 +117,22 @@ export function useMessageStateManager({
     ): boolean => {
       const currentReasoning = extractReasoning(message);
 
-      // Must have reasoning content
+      // For historical messages we still require reasoning content, but for the
+      // **currently streaming assistant message** we want to show the collapsed
+      // placeholder immediately even before any reasoning tokens arrive.
+      const currentStreamingMessage = isCurrentStreamingMessage(index);
+
       if (!currentReasoning || currentReasoning.trim().length === 0) {
-        return false;
+        // Only allow empty-reasoning display for the streaming message while
+        // the thinking phase is active.
+        if (
+          !(
+            currentStreamingMessage &&
+            (isThinkingPhase || shouldShowThinkingDisplay)
+          )
+        ) {
+          return false;
+        }
       }
 
       // If we're not currently loading/streaming, then ALL messages are historical
@@ -129,8 +142,6 @@ export function useMessageStateManager({
       }
 
       // If we ARE loading/streaming, then only the last assistant message is "current"
-      const currentStreamingMessage = isCurrentStreamingMessage(index);
-
       if (!currentStreamingMessage) {
         // Historical message during active session - always show if has reasoning
         return true;

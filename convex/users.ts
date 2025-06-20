@@ -382,7 +382,16 @@ export const incrementPlanUsage = mutation({
       throw new Error("Unauthorized");
     }
 
-    const plan = args.plan || "free";
+    // Derive the plan from the user's settings when not explicitly provided
+    let plan = args.plan;
+    if (!plan) {
+      const settings = await ctx.db
+        .query("userSettings")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .unique();
+      plan = (settings?.plan as string) || "free";
+    }
+
     const limits = getPlanLimits(plan);
 
     // For monthly limits, use month format YYYY-MM
@@ -465,7 +474,15 @@ export const getUserPlanStats = query({
       } as const;
     }
 
-    const plan = args.plan || "free";
+    // Derive the plan from the user's settings when not explicitly provided
+    let plan = args.plan;
+    if (!plan) {
+      const settings = await ctx.db
+        .query("userSettings")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .unique();
+      plan = (settings?.plan as string) || "free";
+    }
     const limits = getPlanLimits(plan);
 
     // For monthly limits, use month format YYYY-MM
@@ -661,6 +678,7 @@ export const updateUserPlan = mutation({
           });
         } else {
           await ctx.db.patch(usage._id, {
+            requestsCount: 0,
             planUpgrade: {
               paymentId: args.paymentId,
               paymentMethod: args.paymentMethod,

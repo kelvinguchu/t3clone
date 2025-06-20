@@ -1,6 +1,5 @@
 "use client";
 
-import { useUser } from "@clerk/nextjs";
 import { useEffect } from "react";
 import { FilePreview } from "./chat-input/file-preview";
 import { useFilePreview } from "@/lib/contexts/file-preview-context";
@@ -12,7 +11,6 @@ import { useDraftPersistence } from "@/lib/actions/chat/chat-input/draft-persist
 import { useFileUploadHandler } from "@/lib/actions/chat/chat-input/file-upload-handler";
 import { useSessionRateManager } from "@/lib/actions/chat/chat-input/session-rate-manager";
 import { useInputActionsHandler } from "@/lib/actions/chat/chat-input/input-actions-handler";
-import { RateLimitWarnings } from "./chat-input/rate-limit-warnings";
 import { InputControls } from "./chat-input/input-controls";
 import { TextInputArea } from "./chat-input/text-input-area";
 import { getModelInfo } from "@/lib/ai-providers";
@@ -127,7 +125,6 @@ export function ChatInput({
   isSavingPartial = false,
   threadAttachments = [],
 }: Readonly<ChatInputProps>) {
-  const { isLoaded: userIsLoaded } = useUser();
 
   // Initialize virtual keyboard handling for mobile
   useEffect(() => {
@@ -230,17 +227,6 @@ export function ChatInput({
 
   return (
     <>
-      {/* Rate limiting warnings */}
-      <RateLimitWarnings
-        isMounted={inputState.isMounted}
-        isAnonymous={sessionRate.isAnonymous}
-        isLoaded={userIsLoaded}
-        warningLevel={sessionRate.warningLevel}
-        remainingMessages={sessionRate.remainingMessages}
-        isRateLimited={sessionRate.isRateLimited}
-        canSendMessage={sessionRate.canSendMessage}
-      />
-
       {/* File Attachments Preview */}
       <FilePreview
         files={fileUpload.attachmentPreviews}

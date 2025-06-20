@@ -94,9 +94,15 @@ export default defineSchema({
     tokenCount: v.optional(v.number()),
     finishReason: v.optional(v.string()),
 
+    // Plan at time of sending (free or pro). Optional for backward compatibility.
+    plan: v.optional(v.union(v.literal("free"), v.literal("pro"))),
+
     // Tool usage tracking
     toolsUsed: v.optional(v.array(v.string())), // Array of tool names that were called (e.g., ["duckDuckGoSearch", "webBrowse"])
     hasToolCalls: v.optional(v.boolean()), // Quick flag to indicate if any tools were used
+
+    // Human-readable summary of a tool action (e.g. "Searched for \"query\"")
+    actionSummary: v.optional(v.string()),
 
     // Duplication flag (true if message was cloned during branching)
     cloned: v.optional(v.boolean()),

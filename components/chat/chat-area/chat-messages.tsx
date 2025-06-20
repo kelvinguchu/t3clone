@@ -117,8 +117,10 @@ export function ChatMessages({
             msg.role === "assistant" &&
             (msg.content ?? "").trim().length === 0 &&
             isLoading &&
-            index === messages.length - 1
+            index === messages.length - 1 &&
+            (!msg.toolInvocations || msg.toolInvocations.length === 0)
           ) {
+            // Skip only if there's truly nothing to show (no tool activity).
             return null;
           }
 
@@ -155,8 +157,8 @@ export function ChatMessages({
         })}
 
         {/* ENHANCED LOADING INDICATORS: Compact and immediate feedback */}
-        {isLoading && (
-          <CompactLoadingIndicator text={loadingStatusText ?? null} />
+        {isLoading && loadingStatusText && (
+          <CompactLoadingIndicator text={loadingStatusText} />
         )}
       </div>
     </div>

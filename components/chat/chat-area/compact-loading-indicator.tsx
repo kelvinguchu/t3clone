@@ -11,7 +11,7 @@ export interface CompactLoadingIndicatorProps {
 export function CompactLoadingIndicator({
   text,
 }: CompactLoadingIndicatorProps) {
-  const isBrowsing = text === "Browsing...";
+  const isBrowsing = text?.startsWith("Searching") || text === "Browsing...";
   const isThinking = text === "Thinking...";
   const isDefault = !text; // When text is null, show default animated dots
 

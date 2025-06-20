@@ -270,14 +270,26 @@ export function useBrowsingState(
   lastAssistantMessage: Message | null,
 ) {
   return useMemo(() => {
-    if (!pendingBrowsing || !isLoading) return false;
+    if (!isLoading) return false;
 
-    // If we don't have a last assistant message yet, we're likely browsing
-    if (!lastAssistantMessage) return true;
+    // Consider browsing active only when an assistant tool invocation is
+    // actually running. This prevents early "Searching…" indicators before
+    // the model decides to browse.
+    if (lastAssistantMessage && "toolInvocations" in lastAssistantMessage) {
+      const inv = (
+        lastAssistantMessage as Partial<Message> & {
+          toolInvocations?: Array<{ state: string }>;
+        }
+      ).toolInvocations;
+      return (
+        !!inv &&
+        inv.length > 0 &&
+        (inv[0].state === "partial-call" || inv[0].state === "call")
+      );
+    }
 
-    // If the last assistant message is empty and we're loading, we're likely browsing
-    return (lastAssistantMessage.content ?? "").trim().length === 0;
-  }, [pendingBrowsing, isLoading, lastAssistantMessage]);
+    return false;
+  }, [isLoading, lastAssistantMessage]);
 }
 
 /**
@@ -295,7 +307,7 @@ export function useLoadingStatusText(
   return useMemo(() => {
     if (!isLoading) return null;
 
-    if (isBrowsing) return "Browsing the web...";
+    if (isBrowsing) return "Searching...";
     if (isThinking) return "Thinking...";
     return "Generating...";
   }, [isLoading, isThinking, isBrowsing]);

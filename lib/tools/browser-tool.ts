@@ -175,7 +175,7 @@ export const googleSearchTool = tool({
         await page.waitForSelector(".g", { timeout: 8000 });
       } catch {
         console.warn(
-          "[googleSearchTool] .g selector did not appear – continuing with fallback scraping",
+          "[googleSearchTool] .g selector did not appear - continuing with fallback scraping",
         );
       }
 
@@ -184,14 +184,17 @@ export const googleSearchTool = tool({
         return Array.from(items).map((item: Element) => {
           const title = item.querySelector("h3")?.textContent || "";
           const description = item.querySelector(".VwiC3b")?.textContent || "";
-          return { title, description };
+          const linkEl = item.querySelector("a");
+          const url = linkEl ? (linkEl as HTMLAnchorElement).href : "";
+          const domain = url ? new URL(url).hostname.replace("www.", "") : "";
+          return { title, description, url, domain };
         });
       });
 
       const text = results
         .map(
-          (item: { title: string; description: string }) =>
-            `${item.title}\n${item.description}`,
+          (item: { title: string; description: string; url: string }) =>
+            `${item.title}\n${item.description}\nURL: ${item.url}`,
         )
         .join("\n\n");
 
@@ -201,7 +204,13 @@ export const googleSearchTool = tool({
 
       const response = await generateText({
         model,
-        prompt: `Evaluate the following web page content: ${text}`,
+        prompt: `Using the Google search snippets below, write an informative answer **in 6-8 bullet points**. Requirements:
+• Capture one key fact or finding.
+• End each bullet with the direct URL in parentheses.
+• Avoid fluff; focus on concrete data, names, dates, figures, or direct quotes.
+• Do mention that you performed a web search or but do not mention which tool/service was used.
+
+Google snippets:\n\n${text}`,
       });
 
       await browser.close();
@@ -273,7 +282,13 @@ export const duckDuckGoSearchTool = tool({
 
       const summary = await generateText({
         model,
-        prompt: `Summarise the following DuckDuckGo search results into concise bullet points. Each bullet: headline, one-sentence synopsis, source domain.\n\n${text}`,
+        prompt: `Using the DuckDuckGo top-10 search snippets below, craft a detailed answer in 6-8 bullet points. Requirements:
+• Each bullet begins with the headline, followed by a two-sentence explanation of the key information it contributes.
+• End each bullet with the direct URL in parentheses.
+• No generic filler; include dates, numbers, or named entities whenever present.
+• Do mention that you performed a web search or but do not mention which tool/service was used.
+
+DuckDuckGo snippets:\n\n${text}`,
       });
 
       await browser.close();

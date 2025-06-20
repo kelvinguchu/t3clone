@@ -158,7 +158,11 @@ function SettingsSidebarContent() {
                   variant="secondary"
                   className="mt-1 bg-purple-200 dark:bg-dark-bg-tertiary text-purple-800 dark:text-purple-200 text-xs"
                 >
-                  {(user.publicMetadata?.plan as string) || "Free Plan"}
+                  {planLimits.isLoading
+                    ? "Loading…"
+                    : planLimits.plan === "pro"
+                      ? "Pro Plan"
+                      : "Free Plan"}
                 </Badge>
               </div>
             </div>

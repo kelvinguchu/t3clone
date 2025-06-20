@@ -322,6 +322,8 @@ export const addMessage = mutation({
     model: v.optional(v.string()),
     tokenCount: v.optional(v.number()),
     finishReason: v.optional(v.string()),
+    actionSummary: v.optional(v.string()),
+    plan: v.optional(v.union(v.literal("free"), v.literal("pro"))),
     // Tool usage tracking
     toolsUsed: v.optional(v.array(v.string())),
     hasToolCalls: v.optional(v.boolean()),
@@ -383,6 +385,8 @@ export const addMessage = mutation({
       model: args.model,
       tokenCount: args.tokenCount,
       finishReason: args.finishReason,
+      actionSummary: args.actionSummary,
+      plan: args.plan,
       toolsUsed: args.toolsUsed,
       hasToolCalls: args.hasToolCalls,
       createdAt: now,
@@ -728,6 +732,9 @@ export const createAnonymousMessage = mutation({
     ),
     parentId: v.optional(v.id("messages")),
     model: v.optional(v.string()),
+    finishReason: v.optional(v.string()),
+    actionSummary: v.optional(v.string()),
+    plan: v.optional(v.union(v.literal("free"), v.literal("pro"))),
     // Tool usage tracking
     toolsUsed: v.optional(v.array(v.string())),
     hasToolCalls: v.optional(v.boolean()),
@@ -768,6 +775,9 @@ export const createAnonymousMessage = mutation({
       model: args.model,
       toolsUsed: args.toolsUsed,
       hasToolCalls: args.hasToolCalls,
+      finishReason: args.finishReason,
+      actionSummary: args.actionSummary,
+      plan: args.plan,
       createdAt: now,
       updatedAt: now,
     });

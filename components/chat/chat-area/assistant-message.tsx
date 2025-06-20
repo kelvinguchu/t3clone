@@ -64,6 +64,7 @@ type DisplayMessage = {
     result?: unknown;
     state: "partial-call" | "call" | "result";
   }>;
+  actionSummary?: string;
 };
 
 export interface AssistantMessageProps {
@@ -179,35 +180,31 @@ export function AssistantMessage({
         {/* Only show content if we have actual content or not in pure thinking phase */}
         {(msg.content.trim() || !isThinkingPhase || hasStartedResponding) && (
           <>
-            {/* Tool calls display - show only final completed state */}
-            {msg.hasToolCalls && (
-              <div className="mb-4">
-                <div className="flex items-start gap-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                  <Globe className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 bg-emerald-600 rounded-full" />
-                      <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                        ✅ Web browsing completed
-                      </span>
-                    </div>
-                    <div className="text-xs text-emerald-600 dark:text-emerald-400 ml-4 mt-1">
-                      Data retrieved successfully
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div className="whitespace-pre-wrap break-words text-gray-900 dark:text-gray-100 text-sm sm:text-base">
               <Markdown content={msg.content} />
-              {/* Show streaming cursor for the last assistant message during streaming */}
-              {isLoading &&
-                msg.role === "assistant" &&
-                index === messagesLength - 1 &&
-                !isThinkingPhase && ( // Don't show cursor during thinking phase
-                  <span className="inline-block w-1.5 sm:w-2 h-4 sm:h-5 bg-purple-500 animate-pulse ml-1" />
-                )}
+              {/* Show streaming cursor for the last assistant message while
+                 streaming – but hide it if the assistant is currently
+                 executing a tool invocation (web-search, etc.) */}
+              {(() => {
+                const activeToolCallRunning =
+                  msg.toolInvocations &&
+                  msg.toolInvocations.length > 0 &&
+                  (msg.toolInvocations[0].state === "partial-call" ||
+                    msg.toolInvocations[0].state === "call");
+
+                if (
+                  isLoading &&
+                  msg.role === "assistant" &&
+                  index === messagesLength - 1 &&
+                  !isThinkingPhase &&
+                  !activeToolCallRunning
+                ) {
+                  return (
+                    <span className="inline-block w-1.5 sm:w-2 h-4 sm:h-5 bg-purple-500 animate-pulse ml-1" />
+                  );
+                }
+                return null;
+              })()}
             </div>
           </>
         )}
@@ -218,6 +215,46 @@ export function AssistantMessage({
             attachments={msg.attachments}
             maxHeight={250}
           />
+        )}
+
+        {/* Inline Tool Invocation indicator */}
+        {msg.toolInvocations &&
+          msg.toolInvocations.length > 0 &&
+          (() => {
+            const first = msg.toolInvocations![0];
+            if (first.state === "partial-call" || first.state === "call") {
+              const q = (first.args as { query?: string })?.query || "";
+              return (
+                <div className="mb-3 flex items-start gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+                  <Globe className="h-4 w-4 flex-shrink-0" />
+                  <span>
+                    Searching for
+                    {q ? <span className="italic mx-1">“{q}”</span> : " …"}
+                    <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-pulse ml-1" />
+                  </span>
+                </div>
+              );
+            } else if (first.state === "result") {
+              const q = (first.args as { query?: string })?.query || "";
+              return (
+                <div className="mb-3 flex items-start gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+                  <Globe className="h-4 w-4 flex-shrink-0" />
+                  <span>
+                    ✅ Searched for
+                    {q ? <span className="italic mx-1">“{q}”</span> : ""}
+                  </span>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
+        {/* Persisted action summary (e.g., Searched for "query") */}
+        {msg.actionSummary && (
+          <div className="mt-2 flex items-start gap-2 text-sm text-emerald-700 dark:text-emerald-300">
+            <Globe className="h-4 w-4 flex-shrink-0" />
+            <span>{msg.actionSummary}</span>
+          </div>
         )}
 
         {/* Action buttons (copy / retry / branch) – only once streaming is finished */}

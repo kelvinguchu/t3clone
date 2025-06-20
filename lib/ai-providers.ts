@@ -361,7 +361,7 @@ export function validateProviderKeys() {
 
 export const PROVIDER_CONFIGS = {
   groq: {
-    defaultTemperature: 0.7,
+    defaultTemperature: 1.0,
     supportsStreaming: true,
     supportsToolCalls: true,
     maxRetries: 3,
@@ -369,7 +369,7 @@ export const PROVIDER_CONFIGS = {
     flushOnEveryToken: true,
   },
   google: {
-    defaultTemperature: 0.7,
+    defaultTemperature: 1.0,
     supportsStreaming: true,
     supportsToolCalls: true,
     supportsVision: true,
