@@ -41,7 +41,7 @@ export function getUserGreeting({
 }: UserDisplayInfoParams): string {
   if (isAnonymous) {
     return remainingMessages > 0
-      ? "Welcome to Anonymous Chat"
+      ? "Hello, Sign in for higher limits"
       : "Message Limit Reached";
   }
   return user?.firstName ? `Hello, ${user.firstName}` : "Welcome Back";

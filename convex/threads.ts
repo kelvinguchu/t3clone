@@ -9,8 +9,12 @@ export const getUserThreads = query({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
+    // If the user is not authenticated or the ID does not match, we silently
+    // return an empty list instead of throwing. This prevents noisy
+    // "Unauthorized" errors in the server logs that can occur during sign-out
+    // when React components briefly re-fetch with stale userIds.
     if (!identity || identity.subject !== args.userId) {
-      throw new Error("Unauthorized");
+      return [];
     }
 
     const threads = await ctx.db

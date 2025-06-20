@@ -2,9 +2,17 @@
 
 import { AuthenticateWithRedirectCallback } from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
 
 export default function OAuthCallbackPage() {
+  return (
+    <Suspense>
+      <OAuthCallbackInner />
+    </Suspense>
+  );
+}
+
+function OAuthCallbackInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 

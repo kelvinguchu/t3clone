@@ -455,7 +455,14 @@ export const getUserPlanStats = query({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity || identity.subject !== args.userId) {
-      throw new Error("Unauthorized");
+      return {
+        used: 0,
+        remaining: 0,
+        total: 0,
+        resetTime: Date.now(),
+        percentage: 0,
+        plan: args.plan || "free",
+      } as const;
     }
 
     const plan = args.plan || "free";
@@ -575,7 +582,7 @@ export const updateUserPlan = mutation({
     const now = Date.now();
 
     // Get or create user settings
-    let userSettings = await ctx.db
+    const userSettings = await ctx.db
       .query("userSettings")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .unique();
@@ -628,7 +635,7 @@ export const updateUserPlan = mutation({
         const currentMonth = new Date().toISOString().slice(0, 7);
 
         // Get or create usage record for current month
-        let usage = await ctx.db
+        const usage = await ctx.db
           .query("usage")
           .withIndex("by_user_month", (q) =>
             q.eq("userId", args.userId).eq("month", currentMonth),
@@ -802,7 +809,13 @@ export const getUserDataSummary = query({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity || identity.subject !== args.userId) {
-      throw new Error("Unauthorized");
+      return {
+        threads: 0,
+        messages: 0,
+        attachments: 0,
+        apiKeys: 0,
+        hasData: false,
+      } as const;
     }
 
     // Count user's data across all tables
