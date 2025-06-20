@@ -68,7 +68,7 @@ export function ChatSidebarFooter({
           signUpForceRedirectUrl="/chat"
         >
           <Button
-            className="w-full bg-gradient-to-r from-purple-600 to-purple-700 dark:from-dark-purple-glow dark:to-dark-purple-light hover:from-purple-700 hover:to-purple-800 dark:hover:from-dark-purple-light dark:hover:to-dark-purple-glow text-white shadow-lg shadow-purple-500/25 dark:shadow-dark-purple-glow/30"
+            className="w-full bg-gradient-to-r mb-4 md:mb-0 from-purple-600 to-purple-700 dark:from-dark-purple-glow dark:to-dark-purple-light hover:from-purple-700 hover:to-purple-800 dark:hover:from-dark-purple-light dark:hover:to-dark-purple-glow text-white shadow-lg shadow-purple-500/25 dark:shadow-dark-purple-glow/30"
             onClick={async () => {
               const id = toast.loading("Saving your chat before sign-in…");
 

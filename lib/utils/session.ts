@@ -222,19 +222,27 @@ export function analyzeBehaviorPattern(pattern: BehaviorPattern): string[] {
   return suspicious;
 }
 
-// Helper to generate the lookup key
-function fingerprintKey(fingerprintHash: string) {
-  return `${SESSION_CONFIG.KV_PREFIX_FINGERPRINT}${fingerprintHash}`;
+// Generate a KV key for a fingerprint scoped to an (optionally hashed) IP address.
+// This prevents different devices on separate networks from sharing the same
+// anonymous session just because their high-level fingerprint happens to match.
+// The key format is: anon_fp:<ipHash>:<fingerprintHash>
+// If ipHash is not provided we fall back to the old behaviour (single segment).
+function fingerprintKey(fingerprintHash: string, ipHash?: string) {
+  const scopedIpHash = ipHash ? hashIP(ipHash) : null;
+  return scopedIpHash
+    ? `${SESSION_CONFIG.KV_PREFIX_FINGERPRINT}${scopedIpHash}:${fingerprintHash}`
+    : `${SESSION_CONFIG.KV_PREFIX_FINGERPRINT}${fingerprintHash}`;
 }
 
 // Find existing session by comprehensive fingerprint
 export async function findSessionByFingerprint(
   fingerprintHash: string,
+  ipHash?: string,
 ): Promise<AnonymousSessionData | null> {
   if (!fingerprintHash) return null;
   try {
     const existingSessionId = await kv.get<string>(
-      fingerprintKey(fingerprintHash),
+      fingerprintKey(fingerprintHash, ipHash),
     );
 
     if (!existingSessionId) return null;
@@ -286,7 +294,7 @@ export async function createAnonymousSession(
   try {
     // Use a transaction to ensure atomicity if fingerprint is present
     if (fingerprintHash) {
-      const key = fingerprintKey(fingerprintHash);
+      const key = fingerprintKey(fingerprintHash, ipHash);
       // SETNX: Set if not exists. If it returns 0, a session already exists.
       const wasSet = await kv.set(key, sessionId, {
         nx: true,
@@ -618,7 +626,10 @@ export async function getOrCreateAnonymousSession(
 ): Promise<AnonymousSessionData> {
   // 1. Try to find session by fingerprint first
   if (fingerprintHash) {
-    const existingSession = await findSessionByFingerprint(fingerprintHash);
+    const existingSession = await findSessionByFingerprint(
+      fingerprintHash,
+      ipHash,
+    );
     if (existingSession) {
       return existingSession;
     }
