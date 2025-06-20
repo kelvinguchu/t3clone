@@ -36,10 +36,10 @@ export function SharedThreadViewer({ shareToken }: Props) {
 
   // Get messages for the shared thread
   const messages = useQuery(
-    api.messages.getThreadMessagesWithAttachments,
+    api.messages.getSharedThreadMessagesWithAttachments,
     sharedThread
       ? {
-          threadId: sharedThread._id,
+          shareToken,
         }
       : "skip",
   );

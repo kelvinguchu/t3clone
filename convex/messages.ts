@@ -943,3 +943,55 @@ export const isLatestAssistantMessage = query({
     }
   },
 });
+
+// Get messages for a PUBLIC shared thread by its shareToken (no auth required)
+export const getSharedThreadMessagesWithAttachments = query({
+  args: {
+    shareToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Locate the thread via its share token
+    const thread = await ctx.db
+      .query("threads")
+      .withIndex("by_share_token", (q) => q.eq("shareToken", args.shareToken))
+      .unique();
+
+    if (!thread || !thread.isPublic) {
+      return null; // Not found or no longer public
+    }
+
+    // If the share has expired, treat as not found
+    if (thread.shareExpiresAt && thread.shareExpiresAt < Date.now()) {
+      return null;
+    }
+
+    // Fetch all messages + attachments (same as private path)
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_thread", (q) => q.eq("threadId", thread._id))
+      .order("asc")
+      .collect();
+
+    const messagesWithAttachments = await Promise.all(
+      messages.map(async (message) => {
+        const attachments = await ctx.db
+          .query("attachments")
+          .withIndex("by_message", (q) => q.eq("messageId", message._id))
+          .collect();
+
+        return {
+          ...message,
+          attachments: attachments.map((att) => ({
+            id: att._id,
+            name: att.fileName,
+            contentType: att.mimeType,
+            url: att.fileUrl,
+            size: att.fileSize,
+          })),
+        };
+      }),
+    );
+
+    return messagesWithAttachments;
+  },
+});
