@@ -50,9 +50,24 @@ export async function processAIResponseMessages({
 
   let processedCount = 0;
 
+  // --- Aggregation helpers for assistant messages ---
+  let aggregatedAssistantText = "";
+  let aggregatedAssistantReasoning: string | undefined;
+  let aggregatedAssistantActionSummary: string | undefined;
+
+  const lastAssistantIndex = (() => {
+    for (let i = responseMessages.length - 1; i >= 0; i--) {
+      if (responseMessages[i].role === "assistant") return i;
+    }
+    return -1;
+  })();
+  // --- End helpers ---
+
   try {
-    for (const message of responseMessages) {
-      // Skip tool messages - they are internal to AI SDK and not supported by Convex schema
+    // Iterate with index so we know when we're at the final assistant message
+    for (let idx = 0; idx < responseMessages.length; idx++) {
+      const message = responseMessages[idx];
+      // Skip tool messages – they are internal and not supported by Convex schema
       if (message.role === "tool") {
         continue;
       }
@@ -108,24 +123,15 @@ export async function processAIResponseMessages({
           reasoning = extractedReasoning;
         }
 
-        // If this assistant message is *only* a tool-call placeholder (empty
-        // text) we still want to persist a readable indicator so the UI can
-        // show the query after a refresh.
-
+        // If this assistant message is only a tool-call placeholder we derive an action summary
         if (
           typedMessage.role === "assistant" &&
           (!textContent || textContent.trim() === "")
         ) {
-          // Try to derive the query from the first tool-call part
           if (Array.isArray(typedMessage.content)) {
             const toolCallPart = typedMessage.content.find(
               (part) => (part as { type?: string }).type === "tool-call",
-            ) as
-              | {
-                  args?: { query?: string };
-                  toolName?: string;
-                }
-              | undefined;
+            ) as { args?: { query?: string }; toolName?: string } | undefined;
 
             const q =
               toolCallPart?.args &&
@@ -138,24 +144,83 @@ export async function processAIResponseMessages({
           }
         }
 
+        if (typedMessage.role === "assistant") {
+          // Aggregate assistant parts – combine greeting, action, and final answer
+          if (textContent) {
+            aggregatedAssistantText += aggregatedAssistantText
+              ? `\n\n${textContent}`
+              : textContent;
+          }
+          if (reasoning) {
+            aggregatedAssistantReasoning = aggregatedAssistantReasoning
+              ? `${aggregatedAssistantReasoning}\n${reasoning}`
+              : reasoning;
+          }
+          if (!aggregatedAssistantActionSummary && localActionSummary) {
+            aggregatedAssistantActionSummary = localActionSummary;
+          }
+
+          // If this is NOT the last assistant message, continue without saving yet
+          if (idx !== lastAssistantIndex) {
+            continue;
+          }
+
+          // Replace local variables with aggregated values for final save
+          textContent = aggregatedAssistantText;
+          reasoning = aggregatedAssistantReasoning;
+          localActionSummary = aggregatedAssistantActionSummary;
+        }
+
         // Save the message to Convex with tool usage information and reasoning
-        if (userId) {
-          await fetchMutation(
-            api.messages.addMessage,
-            {
+        if (
+          typedMessage.role === "assistant" ||
+          typedMessage.role === "system"
+        ) {
+          if (userId) {
+            await fetchMutation(
+              api.messages.addMessage,
+              {
+                threadId: finalThreadId as Id<"threads">,
+                content: textContent,
+                reasoning:
+                  typedMessage.role === "assistant" ? reasoning : undefined,
+                role: typedMessage.role as "user" | "assistant" | "system",
+                model: typedMessage.role === "assistant" ? modelId : undefined,
+                tokenCount:
+                  typedMessage.role === "assistant"
+                    ? usage?.totalTokens
+                    : undefined,
+                finishReason:
+                  typedMessage.role === "assistant" ? finishReason : undefined,
+                toolsUsed:
+                  typedMessage.role === "assistant" &&
+                  toolsUsedInResponse.length > 0
+                    ? toolsUsedInResponse
+                    : undefined,
+                hasToolCalls:
+                  typedMessage.role === "assistant"
+                    ? hasAnyToolCalls
+                    : undefined,
+                actionSummary:
+                  typedMessage.role === "assistant"
+                    ? localActionSummary
+                    : undefined,
+              },
+              fetchOptions,
+            );
+          } else {
+            if (!finalSessionId) {
+              throw new Error("Session ID required for anonymous message");
+            }
+
+            await fetchMutation(api.messages.createAnonymousMessage, {
               threadId: finalThreadId as Id<"threads">,
+              sessionId: finalSessionId,
               content: textContent,
               reasoning:
                 typedMessage.role === "assistant" ? reasoning : undefined,
               role: typedMessage.role as "user" | "assistant" | "system",
               model: typedMessage.role === "assistant" ? modelId : undefined,
-              tokenCount:
-                typedMessage.role === "assistant"
-                  ? usage?.totalTokens
-                  : undefined,
-              finishReason:
-                typedMessage.role === "assistant" ? finishReason : undefined,
-              // Add tool usage information for assistant messages
               toolsUsed:
                 typedMessage.role === "assistant" &&
                 toolsUsedInResponse.length > 0
@@ -167,38 +232,10 @@ export async function processAIResponseMessages({
                 typedMessage.role === "assistant"
                   ? localActionSummary
                   : undefined,
-            },
-            fetchOptions,
-          );
-        } else {
-          if (!finalSessionId) {
-            throw new Error("Session ID required for anonymous message");
+            });
           }
-
-          await fetchMutation(api.messages.createAnonymousMessage, {
-            threadId: finalThreadId as Id<"threads">,
-            sessionId: finalSessionId,
-            content: textContent,
-            reasoning:
-              typedMessage.role === "assistant" ? reasoning : undefined,
-            role: typedMessage.role as "user" | "assistant" | "system",
-            model: typedMessage.role === "assistant" ? modelId : undefined,
-            // Add tool usage information for assistant messages
-            toolsUsed:
-              typedMessage.role === "assistant" &&
-              toolsUsedInResponse.length > 0
-                ? toolsUsedInResponse
-                : undefined,
-            hasToolCalls:
-              typedMessage.role === "assistant" ? hasAnyToolCalls : undefined,
-            actionSummary:
-              typedMessage.role === "assistant"
-                ? localActionSummary
-                : undefined,
-          });
+          processedCount++;
         }
-
-        processedCount++;
       }
     }
 

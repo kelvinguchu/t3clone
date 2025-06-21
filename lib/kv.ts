@@ -7,13 +7,10 @@ export const kvPipeline = {
     operations: Array<() => Promise<unknown>>,
   ): Promise<T> {
     // Use Promise.all for concurrent execution (simulates pipelining behavior)
-    // Vercel KV doesn't expose direct pipeline API, but concurrent requests
-    // are automatically optimized by the underlying Redis connection
     try {
       const results = await Promise.all(operations.map((op) => op()));
       return results as unknown as T;
     } catch (error) {
-      console.error("Pipeline execution failed:", error);
       throw error;
     }
   },
@@ -256,12 +253,8 @@ export const sessionCache = {
         await kvPipeline.mdel(deleteOps);
       }
 
-      console.log(
-        `[SessionCache] Transferred ${transferOps.length} keys from ${fromSessionId} to ${toSessionId}`,
-      );
       return { transferredKeys: transferOps.length };
     } catch (error) {
-      console.error("[SessionCache] Transfer failed:", error);
       return { transferredKeys: 0, error };
     }
   },
@@ -294,13 +287,8 @@ export const sessionCache = {
       // Always delete the old session's rate limit data
       await kv.del(fromKey);
 
-      console.log(
-        `[SessionCache] Merged rate limits: ${fromVal} + ${toVal} = ${mergedCount} (capped at ${maxLimit})`,
-      );
-
       return { mergedCount };
     } catch (error) {
-      console.error("[SessionCache] Rate limit merge failed:", error);
       return { mergedCount: 0, error };
     }
   },
@@ -326,12 +314,8 @@ export const sessionCache = {
       // Delete all session data
       await kvPipeline.mdel(keys);
 
-      console.log(
-        `[SessionCache] Deleted ${keys.length} keys for session ${sessionId}`,
-      );
       return { deletedKeys: keys.length };
     } catch (error) {
-      console.error("[SessionCache] Session cleanup failed:", error);
       return { deletedKeys: 0, error };
     }
   },
@@ -365,7 +349,7 @@ export const conversationCache = {
   ) {
     const key = `conversation:${threadId}`;
 
-    // Ensure we only store the last 10 messages to keep the cache lean.
+    // Ensure we only store the last 10 messages to keep the cache lean
     if (context.messages.length > 10) {
       context.messages = context.messages.slice(-10);
       context.messageCount = context.messages.length;
@@ -385,10 +369,6 @@ export const conversationCache = {
       try {
         return JSON.parse(cached);
       } catch (error) {
-        console.error(
-          `Failed to parse conversation context for ${threadId}:`,
-          error,
-        );
         return null;
       }
     } else if (typeof cached === "object") {
@@ -509,10 +489,6 @@ export const conversationCache = {
           try {
             results[threadId] = JSON.parse(cached);
           } catch (error) {
-            console.error(
-              `Failed to parse conversation context for ${threadId}:`,
-              error,
-            );
             results[threadId] = null;
           }
         } else if (typeof cached === "object") {
@@ -523,7 +499,6 @@ export const conversationCache = {
         }
       });
     } catch (error) {
-      console.error("Batch conversation fetch failed:", error);
       // Fallback to individual requests one by one
       for (const threadId of threadIds) {
         try {
@@ -584,7 +559,6 @@ export const conversationCache = {
 
       return keysToDelete.length;
     } catch (error) {
-      console.error("Cleanup failed:", error);
       return 0;
     }
   },

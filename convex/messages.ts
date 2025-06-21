@@ -8,7 +8,7 @@ export const getThreadMessages = query({
     sessionId: v.optional(v.string()), // For anonymous access
   },
   handler: async (ctx, args) => {
-    // First check if user has access to this thread
+    // Check if user has access to this thread
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
       return null;
@@ -19,18 +19,10 @@ export const getThreadMessages = query({
     // Check access permissions
     if (thread.userId) {
       if (thread.userId !== identity?.subject) {
-        console.error("Unauthorized: User mismatch", {
-          threadUserId: thread.userId,
-          identitySubject: identity?.subject,
-        });
         return null; // Return null instead of throwing
       }
     } else if (thread.isAnonymous && thread.sessionId) {
       if (thread.sessionId !== args.sessionId) {
-        console.warn("Unauthorized: Session mismatch", {
-          threadSessionId: thread.sessionId,
-          argsSessionId: args.sessionId,
-        });
         return null; // Return null to trigger client-side transfer
       }
     } else if (!thread.userId) {
@@ -54,7 +46,7 @@ export const getRecentThreadMessages = query({
     limit: v.optional(v.number()), // Default to 10 messages
   },
   handler: async (ctx, args) => {
-    // First check if user has access to this thread
+    // Check if user has access to this thread
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
       return null;
@@ -94,36 +86,13 @@ export const getThreadMessagesWithAttachments = query({
     sessionId: v.optional(v.string()), // For anonymous access
   },
   handler: async (ctx, args) => {
-    console.log("[getThreadMessagesWithAttachments] Starting query", {
-      threadId: args.threadId,
-      sessionId: args.sessionId,
-      hasSessionId: !!args.sessionId,
-    });
-
-    // First check if user has access to this thread
+    // Check if user has access to this thread
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
-      console.log("[getThreadMessagesWithAttachments] Thread not found", {
-        threadId: args.threadId,
-      });
-      // Return null instead of throwing error to handle race conditions
-      // when thread is deleted while query is executing
-      return null;
+      return null; // Return null instead of throwing for race conditions
     }
 
     const identity = await ctx.auth.getUserIdentity();
-    console.log(
-      "[getThreadMessagesWithAttachments] Thread and identity loaded",
-      {
-        threadId: args.threadId,
-        threadUserId: thread.userId,
-        threadSessionId: thread.sessionId,
-        threadIsAnonymous: thread.isAnonymous,
-        identitySubject: identity?.subject,
-        argsSessionId: args.sessionId,
-        hasIdentity: !!identity,
-      },
-    );
 
     // Enhanced access control with proper migration handling
     // Priority order:
@@ -133,25 +102,9 @@ export const getThreadMessagesWithAttachments = query({
 
     if (thread.userId && identity?.subject) {
       // Case 1: Both thread and user are authenticated
-      console.log(
-        "[getThreadMessagesWithAttachments] Checking authenticated user access",
-        {
-          threadUserId: thread.userId,
-          identitySubject: identity.subject,
-          match: thread.userId === identity.subject,
-        },
-      );
-
       if (thread.userId === identity.subject) {
         // Perfect match - authenticated user accessing their thread
-        console.log(
-          "[getThreadMessagesWithAttachments] Authenticated access granted",
-        );
       } else {
-        console.error("[getThreadMessagesWithAttachments] User mismatch", {
-          threadUserId: thread.userId,
-          identitySubject: identity.subject,
-        });
         throw new Error("Unauthorized: User mismatch");
       }
     } else if (
@@ -161,70 +114,19 @@ export const getThreadMessagesWithAttachments = query({
     ) {
       // Case 2: Claimed thread but user identity hasn't propagated yet
       // This handles the race condition during claiming
-      console.warn(
-        "[getThreadMessagesWithAttachments] Claimed thread access during identity propagation",
-        {
-          threadUserId: thread.userId,
-          threadSessionId: thread.sessionId,
-          argsSessionId: args.sessionId,
-        },
-      );
-      // Allow access - this is the race condition fix from the threads.ts getThread query
     } else if (thread.sessionId && args.sessionId) {
       // Case 3: Anonymous session access
-      console.log(
-        "[getThreadMessagesWithAttachments] Checking session access",
-        {
-          threadSessionId: thread.sessionId,
-          argsSessionId: args.sessionId,
-          threadIsAnonymous: thread.isAnonymous,
-          hasIdentity: !!identity,
-          sessionMatch: thread.sessionId === args.sessionId,
-        },
-      );
-
       if (thread.sessionId === args.sessionId) {
-        console.log(
-          "[getThreadMessagesWithAttachments] Session access granted",
-        );
+        // Session access granted
       } else {
-        console.warn(
-          "[getThreadMessagesWithAttachments] Anonymous session mismatch detected",
-          {
-            threadSessionId: thread.sessionId,
-            argsSessionId: args.sessionId,
-            threadIsAnonymous: thread.isAnonymous,
-            hasIdentity: !!identity,
-          },
-        );
-
         // For anonymous threads with session mismatch, deny access to trigger client-side transfer
         if (thread.isAnonymous && args.sessionId) {
-          console.warn(
-            "[getThreadMessagesWithAttachments] Session mismatch - denying access to trigger transfer",
-            {
-              threadSessionId: thread.sessionId,
-              argsSessionId: args.sessionId,
-            },
-          );
           return null; // Deny access to trigger background transfer
         } else {
-          console.error(
-            "[getThreadMessagesWithAttachments] Cannot provide access to thread",
-          );
           return null;
         }
       }
     } else {
-      console.log(
-        "[getThreadMessagesWithAttachments] Thread has no valid access path, returning empty array",
-        {
-          hasThreadUserId: !!thread.userId,
-          hasThreadSessionId: !!thread.sessionId,
-          hasIdentity: !!identity,
-          hasArgsSessionId: !!args.sessionId,
-        },
-      );
       // Thread is likely being created, return empty array to prevent crash
       return [];
     }
@@ -268,7 +170,7 @@ export const getBranchMessages = query({
     sessionId: v.optional(v.string()), // For anonymous access
   },
   handler: async (ctx, args) => {
-    // First check if user has access to this thread
+    // Check if user has access to this thread
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
       return null; // Return null instead of throwing
@@ -427,7 +329,7 @@ export const updateMessage = mutation({
 
     const identity = await ctx.auth.getUserIdentity();
 
-    // Seamless promotion of anonymous threads once the user authenticates.
+    // Seamless promotion of anonymous threads once the user authenticates
     if (
       thread.isAnonymous &&
       identity &&
@@ -791,10 +693,7 @@ export const createAnonymousMessage = mutation({
   },
 });
 
-// -------------------------------------------------------------------
-// INTERNAL: create a placeholder assistant message marked as streaming
-// -------------------------------------------------------------------
-
+// Create a placeholder assistant message marked as streaming (internal use)
 export const createStreamingAssistant = internalMutation({
   args: {
     threadId: v.id("threads"),
@@ -948,7 +847,6 @@ export const isLatestAssistantMessage = query({
       return latestAssistantMessage?._id === args.messageId;
     } catch (error) {
       // Log error for debugging but don't throw to avoid breaking the UI
-      console.error("Error checking if message is latest assistant:", error);
       return false;
     }
   },

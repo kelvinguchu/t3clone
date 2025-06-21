@@ -9,10 +9,7 @@ export const getUserThreads = query({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    // If the user is not authenticated or the ID does not match, we silently
-    // return an empty list instead of throwing. This prevents noisy
-    // "Unauthorized" errors in the server logs that can occur during sign-out
-    // when React components briefly re-fetch with stale userIds.
+    // Silently return empty list instead of throwing to prevent noisy errors during sign-out
     if (!identity || identity.subject !== args.userId) {
       return [];
     }
@@ -30,8 +27,7 @@ export const getUserThreads = query({
       // Check if multiple threads have the same updatedAt (bulk update indicator)
       const timeDiff = Math.abs(aTime - bTime);
       if (timeDiff < 1000) {
-        // Within 1 second = likely bulk update
-        // For bulk updates, sort by creation time to maintain natural order
+        // Within 1 second = likely bulk update, sort by creation time to maintain natural order
         return b._creationTime - a._creationTime;
       }
 
@@ -66,8 +62,7 @@ export const getAnonymousThreads = query({
       // Check if multiple threads have the same updatedAt (bulk update indicator)
       const timeDiff = Math.abs(aTime - bTime);
       if (timeDiff < 1000) {
-        // Within 1 second = likely bulk update
-        // For bulk updates, sort by creation time to maintain natural order
+        // Within 1 second = likely bulk update, sort by creation time to maintain natural order
         return b._creationTime - a._creationTime;
       }
 
@@ -91,14 +86,12 @@ export const getThread = query({
   handler: async (ctx, args) => {
     const thread = await ctx.db.get(args.threadId);
     if (!thread) {
-      // Return null instead of throwing error to handle race conditions
-      // when thread is deleted while query is executing
-      return null;
+      return null; // Return null instead of throwing for race conditions
     }
 
     const identity = await ctx.auth.getUserIdentity();
 
-    // --- Refactored Access Control v3 with Auto-Transfer ---
+    // Refactored Access Control with Auto-Transfer
 
     // 1. Authenticated owner access
     if (thread.userId && identity?.subject === thread.userId) {
@@ -120,8 +113,7 @@ export const getThread = query({
       return thread;
     }
 
-    // 4. Handle race condition: thread is claimed (userId is set, isAnonymous is false)
-    // but identity hasn't propagated to the Convex function execution yet.
+    // 4. Handle race condition: thread is claimed but identity hasn't propagated yet
     if (
       thread.userId &&
       !identity?.subject &&
@@ -132,37 +124,16 @@ export const getThread = query({
       return thread;
     }
 
-    // 5. AUTO-TRANSFER: For anonymous threads with session mismatch,
-    // deny access and let client-side hook handle the transfer
+    // 5. Auto-transfer: For anonymous threads with session mismatch, deny access
     if (
       thread.isAnonymous &&
       args.sessionId &&
       thread.sessionId !== args.sessionId
     ) {
-      console.log(
-        "[getThread] Session mismatch detected - denying access to trigger client-side transfer",
-        {
-          threadId: args.threadId,
-          fromSession: thread.sessionId,
-          toSession: args.sessionId,
-        },
-      );
-
-      // Return null to trigger client-side transfer logic
-      // The useAutoTransferOnAccess hook will handle the background transfer
-      return null;
+      return null; // Return null to trigger client-side transfer logic
     }
 
     // 6. If none of the above access patterns match, deny access
-    console.error("Thread access denied", {
-      threadId: args.threadId,
-      threadUserId: thread.userId,
-      threadSessionId: thread.sessionId,
-      threadIsAnonymous: thread.isAnonymous,
-      identitySubject: identity?.subject,
-      argsSessionId: args.sessionId,
-    });
-
     return null;
   },
 });
@@ -313,7 +284,7 @@ export const toggleThreadShare = mutation({
     threadId: v.id("threads"),
     isPublic: v.boolean(),
     expiresInHours: v.optional(v.number()),
-    allowCloning: v.optional(v.boolean()), // New parameter for cloning control
+    allowCloning: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -482,7 +453,7 @@ export const cloneSharedThread = mutation({
   args: {
     shareToken: v.string(),
     newTitle: v.optional(v.string()),
-    idempotencyKey: v.optional(v.string()), // Optional idempotency key for request deduplication
+    idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -839,7 +810,6 @@ export const branchThread = mutation({
       });
     }
 
-    // Return new thread ID to client
     return newThreadId;
   },
 });
@@ -865,12 +835,6 @@ export const transferAnonymousThread = mutation({
     await ctx.db.patch(args.threadId, {
       sessionId: args.newSessionId,
       updatedAt: Date.now(),
-    });
-
-    console.log("[transferAnonymousThread] Thread transferred successfully", {
-      threadId: args.threadId,
-      fromSession: thread.sessionId,
-      toSession: args.newSessionId,
     });
 
     return { success: true };
@@ -909,10 +873,8 @@ export const claimAnonymousThreads = mutation({
         userId: identity.subject,
         isAnonymous: false,
         // Keep sessionId so anonymous session stats retain message count across sign-in/out
-        // sessionId: undefined,
         ipHash: undefined,
         // Don't update updatedAt during migration to preserve natural order
-        // updatedAt: Date.now(),
       });
     }
 
@@ -921,8 +883,6 @@ export const claimAnonymousThreads = mutation({
     return { migrated: uniqueCount };
   },
 });
-
-// PAGINATED VERSIONS FOR INFINITE SCROLLING
 
 // Get paginated threads for a user (authenticated users only)
 export const getUserThreadsPaginated = query({
@@ -951,8 +911,7 @@ export const getUserThreadsPaginated = query({
       // Check if multiple threads have the same updatedAt (bulk update indicator)
       const timeDiff = Math.abs(aTime - bTime);
       if (timeDiff < 1000) {
-        // Within 1 second = likely bulk update
-        // For bulk updates, sort by creation time to maintain natural order
+        // Within 1 second = likely bulk update, sort by creation time to maintain natural order
         return b._creationTime - a._creationTime;
       }
 
@@ -995,8 +954,7 @@ export const getAnonymousThreadsPaginated = query({
       // Check if multiple threads have the same updatedAt (bulk update indicator)
       const timeDiff = Math.abs(aTime - bTime);
       if (timeDiff < 1000) {
-        // Within 1 second = likely bulk update
-        // For bulk updates, sort by creation time to maintain natural order
+        // Within 1 second = likely bulk update, sort by creation time to maintain natural order
         return b._creationTime - a._creationTime;
       }
 
@@ -1069,12 +1027,6 @@ export const autoTransferAnonymousThread = mutation({
     await ctx.db.patch(args.threadId, {
       sessionId: args.newSessionId,
       updatedAt: Date.now(),
-    });
-
-    console.log("[autoTransferAnonymousThread] Background transfer completed", {
-      threadId: args.threadId,
-      fromSession: oldSessionId,
-      toSession: args.newSessionId,
     });
 
     return {

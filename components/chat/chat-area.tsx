@@ -161,14 +161,6 @@ const ChatArea = memo(function ChatArea({
   // users to access their just-promoted anonymous threads before the
   // migration finishes, preventing a transient 401/404 that forced a refresh.
   const historicalQueryArgs = useMemo(() => {
-    // Debug logging (can be removed in production)
-    // console.log("[ChatArea] Computing historicalQueryArgs", {
-    //   initialThreadId,
-    //   isAnonymous,
-    //   anonSessionId,
-    //   hasAnonSessionId: !!anonSessionId,
-    // });
-
     if (!initialThreadId) return "skip";
 
     if (isAnonymous) {
@@ -179,12 +171,10 @@ const ChatArea = memo(function ChatArea({
           }
         : "skip";
 
-      // console.log("[ChatArea] Anonymous query args", result);
       return result;
     }
 
     const result = { threadId: initialThreadId as Id<"threads"> };
-    // console.log("[ChatArea] Authenticated query args", result);
     return result;
   }, [initialThreadId, isAnonymous, anonSessionId]);
 
@@ -194,31 +184,6 @@ const ChatArea = memo(function ChatArea({
       | { threadId: Id<"threads">; sessionId?: string }
       | "skip",
   );
-
-  // Log thread access issues but don't redirect - let background transfer handle it
-  useEffect(() => {
-    if (
-      initialThreadId &&
-      historicalQueryArgs !== "skip" &&
-      historicalMessages === null
-    ) {
-      console.log(
-        "[ChatArea] Thread inaccessible, background transfer should handle this",
-        {
-          initialThreadId,
-          historicalQueryArgs,
-          isAnonymous,
-          anonSessionId,
-        },
-      );
-    }
-  }, [
-    initialThreadId,
-    historicalQueryArgs,
-    historicalMessages,
-    isAnonymous,
-    anonSessionId,
-  ]);
 
   // Convert historical messages to AI SDK format
   const initialMessages = useMemo(() => {
@@ -405,12 +370,12 @@ const ChatArea = memo(function ChatArea({
     loadingStatusText = `Searching for "${currentSearchQuery}"`;
   }
 
-  // If a new thread is created (no initialThreadId) navigate to it
+  // If a new thread is created (no initialThreadId) navigate to it AFTER first response arrives
   useEffect(() => {
-    if (!initialThreadId && threadId) {
+    if (!initialThreadId && threadId && !isLoading) {
       router.push(`/chat/${threadId}`);
     }
-  }, [threadId, initialThreadId, router]);
+  }, [threadId, initialThreadId, router, isLoading]);
 
   // Memoize thread metadata query args
   const threadMetaQueryArgs = useMemo(() => {
@@ -436,35 +401,18 @@ const ChatArea = memo(function ChatArea({
       | "skip",
   );
 
-  // Log thread metadata issues but don't redirect - let background transfer handle it
-  useEffect(() => {
-    if (
-      initialThreadId &&
-      threadMetaQueryArgs !== "skip" &&
-      threadMeta === null
-    ) {
-      console.log(
-        "[ChatArea] Thread metadata inaccessible, background transfer should handle this",
-        {
-          initialThreadId,
-          threadMetaQueryArgs,
-          isAnonymous,
-          anonSessionId,
-        },
-      );
-    }
-  }, [
-    initialThreadId,
-    threadMetaQueryArgs,
-    threadMeta,
-    isAnonymous,
-    anonSessionId,
-  ]);
-
   // Auto-set model from thread on initial load only
   const currentModelFromThread = threadMeta?.model;
   const hasLoadedThreadModel = useRef(false);
+  // Track if user manually changed model to avoid later overrides
+  const initialSelectedModelRef = useRef<ModelId>(selectedModel);
+  useEffect(() => {
+    if (selectedModel !== initialSelectedModelRef.current) {
+      hasLoadedThreadModel.current = true;
+    }
+  }, [selectedModel]);
 
+  // Automatically sync model to thread metadata on first load only
   useEffect(() => {
     if (
       currentModelFromThread &&
@@ -495,7 +443,10 @@ const ChatArea = memo(function ChatArea({
     );
   }, [effectiveMessages, selectedModel, historicalMessages]);
 
-  const hasMessages = displayMessages.length > 0;
+  // Throttle message updates to reduce re-render frequency when streaming
+  const throttledDisplayMessages = displayMessages;
+
+  const hasMessages = throttledDisplayMessages.length > 0;
 
   // Stable user display functions for welcome screen
   const getUserGreetingMemo = useCallback(
@@ -691,6 +642,13 @@ const ChatArea = memo(function ChatArea({
     return () => chatBus.off("flushRequest", flushPendingWork);
   }, [flushPendingWork]);
 
+  // const showChatMessages = hasMessages || isLoading;
+  const showChatMessages =
+    status === "submitted" ||
+    status === "streaming" ||
+    hasMessages ||
+    isLoading;
+
   return (
     <div
       className={`flex-1 flex flex-col h-full min-h-0 bg-purple-50 dark:bg-dark-bg duration-1000 transition-all ${modelThemeClasses} relative ${
@@ -720,9 +678,9 @@ const ChatArea = memo(function ChatArea({
             </div>
           )}
         >
-          {hasMessages ? (
+          {showChatMessages ? (
             <ChatMessages
-              messages={displayMessages}
+              messages={throttledDisplayMessages}
               isLoading={isLoading}
               loadingStatusText={loadingStatusText}
               threadId={initialThreadId}

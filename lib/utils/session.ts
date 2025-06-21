@@ -222,11 +222,7 @@ export function analyzeBehaviorPattern(pattern: BehaviorPattern): string[] {
   return suspicious;
 }
 
-// Generate a KV key for a fingerprint scoped to an (optionally hashed) IP address.
-// This prevents different devices on separate networks from sharing the same
-// anonymous session just because their high-level fingerprint happens to match.
-// The key format is: anon_fp:<ipHash>:<fingerprintHash>
-// If ipHash is not provided we fall back to the old behaviour (single segment).
+// Generate a KV key for a fingerprint scoped to an (optionally hashed) IP address
 function fingerprintKey(fingerprintHash: string, ipHash?: string) {
   const scopedIpHash = ipHash ? hashIP(ipHash) : null;
   return scopedIpHash
@@ -253,7 +249,6 @@ export async function findSessionByFingerprint(
     }
     return null;
   } catch (error) {
-    console.error("Error finding session by fingerprint:", error);
     return null;
   }
 }
@@ -321,7 +316,6 @@ export async function createAnonymousSession(
     );
     return newSession;
   } catch (error) {
-    console.error("Error creating anonymous session:", error);
     // In case of error, return a transient session object to avoid breaking the app
     return { ...newSession, sessionId: `error_${uuidv4()}` };
   }
@@ -355,7 +349,6 @@ export async function getAnonymousSession(
       isExpired: false,
     };
   } catch (error) {
-    console.error("Error fetching anonymous session:", error);
     return null;
   }
 }
@@ -369,16 +362,13 @@ export async function updateAnonymousSession(
     // Check if the session still exists before updating
     const sessionExists = await kv.exists(key);
     if (!sessionExists) {
-      console.warn(
-        `Attempted to update a non-existent or expired session: ${sessionData.sessionId}`,
-      );
       return;
     }
     await kv.set(key, JSON.stringify(sessionData), {
       ex: SESSION_CONFIG.EXPIRY_SECONDS,
     });
   } catch (error) {
-    console.error("Error updating anonymous session:", error);
+    // Session update failed
   }
 }
 
@@ -444,7 +434,7 @@ export async function updateBehaviorPattern(
 
     await kv.set(key, pattern, { ex: SESSION_CONFIG.EXPIRY_SECONDS });
   } catch (error) {
-    console.error("Error updating behavior pattern:", error);
+    // Behavior pattern update failed
   }
 }
 
@@ -481,7 +471,7 @@ export async function updateTrustScore(
       behaviorScore: trustScore.factors.behavior,
     });
   } catch (error) {
-    console.error("Error updating trust score:", error);
+    // Trust score update failed
   }
 }
 
@@ -495,7 +485,6 @@ export async function incrementSessionMessageCount(
     if (!session) return null;
 
     if (session.remainingMessages <= 0) {
-      console.warn(`Session ${sessionId} has no remaining messages.`);
       return session; // No change if limit is reached
     }
 
@@ -514,7 +503,6 @@ export async function incrementSessionMessageCount(
 
     return updatedSession;
   } catch (error) {
-    console.error("Error incrementing message count:", error);
     return null;
   }
 }
@@ -527,7 +515,7 @@ export async function deleteAnonymousSession(sessionId: string): Promise<void> {
     await kv.del(`${SESSION_CONFIG.KV_PREFIX_BEHAVIOR}${sessionId}`);
     await kv.del(`${SESSION_CONFIG.KV_PREFIX_TRUST}${sessionId}`);
   } catch (error) {
-    console.error("Error deleting anonymous session:", error);
+    // Session deletion failed
   }
 }
 
@@ -558,7 +546,6 @@ export async function checkRateLimit(sessionId: string): Promise<{
 
     return { allowed: true, trustLevel };
   } catch (error) {
-    console.error("Error checking rate limit:", error);
     return {
       allowed: false,
       reason: "Rate limit check failed",
@@ -584,7 +571,7 @@ export function storeSessionId(sessionId: string): void {
   try {
     localStorage.setItem("anonymous_session_id", sessionId);
   } catch {
-    console.error("Local storage is not available.");
+    // Local storage is not available
   }
 }
 
@@ -594,7 +581,7 @@ export function removeStoredSessionId(): void {
   try {
     localStorage.removeItem("anonymous_session_id");
   } catch {
-    console.error("Local storage is not available.");
+    // Local storage is not available
   }
 }
 
@@ -639,13 +626,7 @@ export async function getOrCreateAnonymousSession(
   return createAnonymousSession(userAgent, ipHash, fingerprintHash);
 }
 
-/**
- * Merges two anonymous sessions. It transfers the usage from the `fromSessionId`
- * to the `toSessionId`, updates the message counts, and then deletes the `fromSessionId`.
- * @param fromSessionId The session ID to merge from (will be deleted).
- * @param toSessionId The session ID to merge into.
- * @returns The updated session data for the `toSessionId`, or null if the merge fails.
- */
+// Merges two anonymous sessions
 export async function mergeAnonymousSessions(
   fromSessionId: string,
   toSessionId: string,
@@ -659,20 +640,17 @@ export async function mergeAnonymousSessions(
     getAnonymousSession(toSessionId),
   ]);
 
-  // If there's no session to merge into, we can't proceed.
+  // If there's no session to merge into, we can't proceed
   if (!toSession) {
-    console.error(
-      `[Session] Merge failed: target session ${toSessionId} not found.`,
-    );
     return null;
   }
 
-  // If there's no session to merge from, the target session is already correct.
+  // If there's no session to merge from, the target session is already correct
   if (!fromSession) {
     return toSession;
   }
 
-  // Merge logic: combine message counts and recalculate remaining messages.
+  // Merge logic: combine message counts and recalculate remaining messages
   const newMessageCount = fromSession.messageCount + toSession.messageCount;
   const newRemainingMessages = Math.max(
     0,
@@ -683,11 +661,11 @@ export async function mergeAnonymousSessions(
     ...toSession,
     messageCount: newMessageCount,
     remainingMessages: newRemainingMessages,
-    // Preserve the earliest creation date of the two sessions.
+    // Preserve the earliest creation date of the two sessions
     createdAt: Math.min(fromSession.createdAt, toSession.createdAt),
   };
 
-  // Atomically update the target session and delete the old one.
+  // Atomically update the target session and delete the old one
   await updateAnonymousSession(mergedSession);
   await deleteAnonymousSession(fromSessionId);
 
@@ -701,15 +679,8 @@ export async function mergeAnonymousSessions(
       toSessionId,
     });
   } catch (err) {
-    console.error("[Session] Failed to bulk-transfer threads", err);
+    // Failed to bulk-transfer threads
   }
-
-  console.log(`[Session] Merged session ${fromSessionId} into ${toSessionId}`, {
-    oldMessages: fromSession.messageCount,
-    newMessages: toSession.messageCount,
-    totalMessages: newMessageCount,
-    remaining: newRemainingMessages,
-  });
 
   return mergedSession;
 }

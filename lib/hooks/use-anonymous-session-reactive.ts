@@ -103,10 +103,6 @@ async function createSessionWithFingerprint(
 
     return response.json();
   } catch (error) {
-    console.warn(
-      "Failed to create session with fingerprint, falling back to basic session:",
-      error,
-    );
     // Fallback to basic session creation
     return fetchSession(sessionId);
   }
@@ -133,22 +129,9 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
   const isAuthenticated = mounted && userLoaded && !!user;
   const isAnonymous = mounted && userLoaded && !user;
 
-  // Debug logging for authentication state (can be removed in production)
-  // console.log("[useAnonymousSessionReactive] Auth state", {
-  //   mounted,
-  //   userLoaded,
-  //   hasUser: !!user,
-  //   isAuthenticated,
-  //   isAnonymous,
-  //   sessionId: sessionData?.sessionId,
-  //   isMigrating,
-  //   hasMigrated: migrated,
-  // });
-
   // Extract session ID for use in Convex queries
   const sessionId = sessionData?.sessionId ?? null;
 
-  // --- Convex reactive stats -------------------------------------------------
   // Live stats for the current anonymous session (threads / messages / remaining)
   const sessionStats = useQuery(
     convexApi.sessionStats.getAnonymousSessionStats,
@@ -190,10 +173,6 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
           session = await fetchSession(storedSessionId);
         } catch (error) {
           // If the stored session is invalid or expired, clean it up
-          console.warn(
-            "[Session] Stored anonymous session invalid, creating new one",
-            error,
-          );
           removeStoredSessionId();
           session = await createSessionWithFingerprint();
         }
@@ -208,7 +187,6 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
       setSessionData(session);
       sessionInitialized.current = true;
     } catch (error) {
-      console.error("[Session] Failed to initialize anonymous session:", error);
       setSessionData(null);
     } finally {
       setIsLoading(false);
@@ -231,8 +209,6 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
 
       setSessionData(refreshedSession);
     } catch (error) {
-      console.warn("[Session] Refresh failed, falling back:", error);
-
       // If session is no longer valid, purge it so a new one can be created
       removeStoredSessionId();
     }
@@ -300,7 +276,7 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
               sessionId: anonIdForClaim,
               ...(sessionData?.ipHash ? { ipHash: sessionData.ipHash } : {}),
             });
-            // Once claimed, we can safely remove the stored anonymous ID.
+            // Once claimed, we can safely remove the stored anonymous ID
             removeStoredSessionId();
           } catch {
             // Failed to claim anon threads

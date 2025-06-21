@@ -272,20 +272,36 @@ export function useBrowsingState(
   return useMemo(() => {
     if (!isLoading) return false;
 
-    // Consider browsing active only when an assistant tool invocation is
-    // actually running. This prevents early "Searching…" indicators before
-    // the model decides to browse.
+    // -----------------------------------------------------
+    // Preferred detection – AI-SDK v1 shape (toolInvocations)
+    // -----------------------------------------------------
     if (lastAssistantMessage && "toolInvocations" in lastAssistantMessage) {
       const inv = (
         lastAssistantMessage as Partial<Message> & {
           toolInvocations?: Array<{ state: string }>;
         }
       ).toolInvocations;
-      return (
+      if (
         !!inv &&
         inv.length > 0 &&
         (inv[0].state === "partial-call" || inv[0].state === "call")
-      );
+      ) {
+        return true;
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Fallback detection – AI-SDK v2 shape using `parts` ToolCallPart(s)
+    // ------------------------------------------------------------------
+    if (lastAssistantMessage && "parts" in lastAssistantMessage) {
+      const parts = (
+        lastAssistantMessage as Partial<Message> & {
+          parts?: Array<{ type: string; [key: string]: unknown }>;
+        }
+      ).parts;
+      if (parts && parts.some((p) => p.type === "tool-invocation")) {
+        return true;
+      }
     }
 
     return false;
