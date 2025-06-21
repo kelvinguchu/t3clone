@@ -74,7 +74,18 @@ export function BranchingPopover({
               return (
                 <button
                   key={mId}
-                  onClick={async () => {
+                  /*
+                   * NOTE: We use `onPointerDown` instead of `onClick` here.
+                   * On some mobile browsers (particularly iOS Safari) Radix
+                   * closes the Popover on `pointerdown` which prevents the
+                   * subsequent `click` event from firing. By handling the
+                   * action in `pointerdown` *and* stopping propagation we
+                   * ensure the handler always runs before the popover unmounts.
+                   */
+                  onPointerDown={async (e) => {
+                    // Prevent the popover from treating this as an outside click
+                    e.stopPropagation();
+
                     if (!threadId || !messageId) return;
 
                     try {
