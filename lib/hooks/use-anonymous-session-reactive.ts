@@ -102,7 +102,7 @@ async function createSessionWithFingerprint(
     }
 
     return response.json();
-  } catch (error) {
+  } catch {
     // Fallback to basic session creation
     return fetchSession(sessionId);
   }
@@ -171,7 +171,7 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
         try {
           // Try to fetch the existing session from the server
           session = await fetchSession(storedSessionId);
-        } catch (error) {
+        } catch {
           // If the stored session is invalid or expired, clean it up
           removeStoredSessionId();
           session = await createSessionWithFingerprint();
@@ -186,7 +186,7 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
 
       setSessionData(session);
       sessionInitialized.current = true;
-    } catch (error) {
+    } catch {
       setSessionData(null);
     } finally {
       setIsLoading(false);
@@ -208,7 +208,7 @@ export function useAnonymousSessionReactive(): UseAnonymousSessionReactiveReturn
       }
 
       setSessionData(refreshedSession);
-    } catch (error) {
+    } catch {
       // If session is no longer valid, purge it so a new one can be created
       removeStoredSessionId();
     }

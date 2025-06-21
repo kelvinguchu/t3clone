@@ -368,7 +368,7 @@ export const conversationCache = {
     if (typeof cached === "string") {
       try {
         return JSON.parse(cached);
-      } catch (error) {
+      } catch {
         return null;
       }
     } else if (typeof cached === "object") {
@@ -488,7 +488,7 @@ export const conversationCache = {
         if (typeof cached === "string") {
           try {
             results[threadId] = JSON.parse(cached);
-          } catch (error) {
+          } catch {
             results[threadId] = null;
           }
         } else if (typeof cached === "object") {
@@ -498,7 +498,7 @@ export const conversationCache = {
           results[threadId] = null;
         }
       });
-    } catch (error) {
+    } catch {
       // Fallback to individual requests one by one
       for (const threadId of threadIds) {
         try {
@@ -558,7 +558,7 @@ export const conversationCache = {
       }
 
       return keysToDelete.length;
-    } catch (error) {
+    } catch {
       return 0;
     }
   },
