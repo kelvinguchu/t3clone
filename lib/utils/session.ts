@@ -249,6 +249,7 @@ export async function findSessionByFingerprint(
     }
     return null;
   } catch (error) {
+    void error;
     return null;
   }
 }
@@ -316,6 +317,7 @@ export async function createAnonymousSession(
     );
     return newSession;
   } catch (error) {
+    void error;
     // In case of error, return a transient session object to avoid breaking the app
     return { ...newSession, sessionId: `error_${uuidv4()}` };
   }
@@ -349,6 +351,7 @@ export async function getAnonymousSession(
       isExpired: false,
     };
   } catch (error) {
+    void error;
     return null;
   }
 }
@@ -368,6 +371,7 @@ export async function updateAnonymousSession(
       ex: SESSION_CONFIG.EXPIRY_SECONDS,
     });
   } catch (error) {
+    void error;
     // Session update failed
   }
 }
@@ -434,6 +438,7 @@ export async function updateBehaviorPattern(
 
     await kv.set(key, pattern, { ex: SESSION_CONFIG.EXPIRY_SECONDS });
   } catch (error) {
+    void error;
     // Behavior pattern update failed
   }
 }
@@ -471,6 +476,7 @@ export async function updateTrustScore(
       behaviorScore: trustScore.factors.behavior,
     });
   } catch (error) {
+    void error;
     // Trust score update failed
   }
 }
@@ -503,6 +509,7 @@ export async function incrementSessionMessageCount(
 
     return updatedSession;
   } catch (error) {
+    void error;
     return null;
   }
 }
@@ -515,6 +522,7 @@ export async function deleteAnonymousSession(sessionId: string): Promise<void> {
     await kv.del(`${SESSION_CONFIG.KV_PREFIX_BEHAVIOR}${sessionId}`);
     await kv.del(`${SESSION_CONFIG.KV_PREFIX_TRUST}${sessionId}`);
   } catch (error) {
+    void error;
     // Session deletion failed
   }
 }
@@ -546,6 +554,7 @@ export async function checkRateLimit(sessionId: string): Promise<{
 
     return { allowed: true, trustLevel };
   } catch (error) {
+    void error;
     return {
       allowed: false,
       reason: "Rate limit check failed",
@@ -678,7 +687,8 @@ export async function mergeAnonymousSessions(
       fromSessionId,
       toSessionId,
     });
-  } catch (err) {
+  } catch (error) {
+    void error;
     // Failed to bulk-transfer threads
   }
 

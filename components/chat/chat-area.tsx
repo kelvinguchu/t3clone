@@ -567,17 +567,13 @@ const ChatArea = memo(function ChatArea({
 
   const initialScrollDone = useRef(false);
 
-  // When historical messages load for the first time, scroll to the bottom.
+  // Ensure initial scroll to bottom once messages (including initialMessages) rendered
   useEffect(() => {
-    if (historicalMessages && !initialScrollDone.current) {
+    if (displayMessages.length > 0 && !initialScrollDone.current) {
       scrollToBottom("auto");
       initialScrollDone.current = true;
     }
-    // Reset when navigating to a new thread
-    if (!initialThreadId) {
-      initialScrollDone.current = false;
-    }
-  }, [historicalMessages, initialThreadId, scrollToBottom]);
+  }, [displayMessages.length, scrollToBottom]);
 
   // Track chat input height for dynamic scroll button positioning
   const [inputHeight, setInputHeight] = useState(140);
